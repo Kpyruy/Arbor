@@ -8,14 +8,16 @@ No export step. No separate canvas file. No sidecar database.
 
 ![Arbor hero screenshot](assets/hero.png)
 
-The idea is simple:
+![Arbor workflow preview](assets/preview.gif)
+
+The core idea:
 
 - write in short blocks instead of one long wall of text
 - see the current branch, nearby alternatives, and next steps at the same time
 - reorganize ideas without copy-paste chaos
 - stay inside one note instead of splitting thoughts across many files
 
-Arbor is desktop-only and currently targets Obsidian `>= 1.5.12`.
+Arbor is desktop-only. It currently requires Obsidian `>= 1.5.12` and was tested on Obsidian `1.12.4`.
 
 ## Why Arbor
 
@@ -67,23 +69,6 @@ npm run build
 4. Open Obsidian.
 5. Go to `Settings -> Community plugins`.
 6. Enable `Arbor`.
-
-### Development install
-
-Use the same plugin folder location inside a test vault:
-
-```text
-<vault>/.obsidian/plugins/arbor
-```
-
-Then run:
-
-```bash
-npm install
-npm run dev
-```
-
-Keep Obsidian open and reload the app after changes when needed.
 
 ## Quick Start
 
@@ -262,38 +247,23 @@ You can also generate the bundled demo from the command palette with:
 
 ## Development
 
-### Local workflow
+For local plugin work:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Use `npm run dev` during active plugin work. It rebuilds the plugin bundle as you iterate.
-
-### Production build
+For a clean production bundle:
 
 ```bash
 npm run build
-```
-
-### Tests
-
-```bash
 npm test
 ```
 
-Automated tests cover the data model and storage path. For interaction-heavy changes, run the manual checklist in:
+Manual interaction checks live in:
 
 - `docs/manual-qa.md`
-
-### Recommended development loop
-
-1. Run `npm run dev`.
-2. Reload Obsidian.
-3. Test with the bundled demo note and at least one real note.
-4. Run `npm test`.
-5. Run the relevant sections of `docs/manual-qa.md` before release.
 
 ## Release Checklist
 
@@ -316,6 +286,7 @@ Expected release assets:
 
 - Desktop only
 - Obsidian `>= 1.5.12`
+- Tested on Obsidian `1.12.4`
 - Plugin ID: `arbor`
 - Current version: `0.1.0`
 
