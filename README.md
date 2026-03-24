@@ -230,6 +230,8 @@ Important behavior:
 - Arbor keeps stable block IDs in the hidden metadata
 - if you edit the note in normal Markdown mode, Arbor will safely rebuild the tree from the visible body instead of silently dropping content
 
+Beautiful blocks in the `> [!note]` style are still normal Markdown callouts. In the screenshots and demo notes, that styling comes from [Callout Manager](https://github.com/eth-p/obsidian-callout-manager).
+
 ## Demo Notes
 
 Bundled demo note inside the plugin:
