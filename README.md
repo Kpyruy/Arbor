@@ -50,8 +50,6 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 
 ## Install
 
-### Manual install
-
 1. Download or clone this repository.
 2. Place it in your vault at:
 
@@ -79,6 +77,12 @@ npm run build
 5. Use `Ctrl/Cmd + Arrow` to grow the structure.
 6. Use the right-click menu to duplicate, move, delete, or continue a branch.
 7. Turn on `Selected Block` from the Arbor menu if you want a focused preview/editor panel.
+
+## Support
+
+If Arbor is useful to you, you can support development here:
+
+- [Buy Me a Coffee](https://buymeacoffee.com/kpyr)
 
 ## Built-In View Shortcuts
 
@@ -247,43 +251,6 @@ You can also generate the bundled demo from the command palette with:
 
 - `Create Arbor demo note`
 
-## Development
-
-For local plugin work:
-
-```bash
-npm install
-npm run dev
-```
-
-For a clean production bundle:
-
-```bash
-npm run build
-npm test
-```
-
-Manual interaction checks live in:
-
-- `docs/manual-qa.md`
-
-## Release Checklist
-
-Before publishing a release:
-
-1. Run `npm run build`
-2. Run `npm test`
-3. Smoke-test Arbor in Obsidian
-4. Confirm `manifest.json`, `main.js`, `styles.css`, and `versions.json` are up to date
-5. Update `CHANGELOG.md`
-6. Push a version tag to publish the GitHub release workflow
-
-Expected release assets:
-
-- `manifest.json`
-- `main.js`
-- `styles.css`
-
 ## Compatibility
 
 - Desktop only
@@ -305,6 +272,26 @@ Expected release assets:
 - stronger conflict handling when Arbor view and plain Markdown both change the same note
 - richer release packaging and community-plugin polish
 - more refinement for very large note trees
+
+## Development
+
+Local workflow:
+
+```bash
+npm install
+npm run dev
+```
+
+Production checks:
+
+```bash
+npm run build
+npm test
+```
+
+Manual interaction checks live in:
+
+- `docs/manual-qa.md`
 
 ## Repository Layout
 
