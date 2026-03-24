@@ -1,0 +1,10 @@
+{
+  "id": "arbor",
+  "name": "Arbor",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.12",
+  "description": "Write notes as branching markdown cards while keeping a normal Obsidian note as the source of truth.",
+  "author": "Kpyruy",
+  "authorUrl": "https://github.com/Kpyruy",
+  "isDesktopOnly": true
+}

@@ -1,0 +1,38 @@
+{
+  "name": "obsidian-arbor",
+  "version": "0.1.0",
+  "description": "Writing-first branching editor for Obsidian notes with safe in-note metadata.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "test": "vitest run",
+    "version": "node version-bump.mjs && git add package.json manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "arbor",
+    "writing",
+    "branching"
+  ],
+  "author": "Kpyruy",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kpyruy/Arbor.git"
+  },
+  "homepage": "https://github.com/Kpyruy/Arbor#readme",
+  "bugs": {
+    "url": "https://github.com/Kpyruy/Arbor/issues"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.17",
+    "builtin-modules": "3.3.0",
+    "esbuild": "0.24.2",
+    "obsidian": "latest",
+    "tslib": "2.8.1",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.4"
+  }
+}
