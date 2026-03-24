@@ -31,7 +31,7 @@ export class ArborSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Arbor" });
+    new Setting(containerEl).setName("Arbor").setHeading();
 
     new Setting(containerEl)
       .setName("Split direction")
@@ -138,7 +138,7 @@ export class ArborSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Selected Block panel")
+      .setName("Selected block panel")
       .setDesc("Show the focused selected-block panel alongside the branching editor.")
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.liveLinearPreview).onChange(async (value) => {

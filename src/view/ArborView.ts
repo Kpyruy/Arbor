@@ -877,7 +877,7 @@ export class ArborView extends FileView {
       cls: "arbor-zoom-indicator",
       attr: {
         type: "button",
-        "aria-label": "Reset Arbor zoom to 100%"
+        "aria-label": "Reset zoom to 100%"
       }
     });
     this.zoomIndicatorEl.addEventListener("click", () => this.updateZoomLevel(1));
@@ -886,7 +886,7 @@ export class ArborView extends FileView {
       cls: "arbor-view-menu-button",
       attr: {
         type: "button",
-        "aria-label": "Open Arbor view menu"
+        "aria-label": "Open view menu"
       }
     });
     setIcon(this.viewMenuButtonEl, "sliders-horizontal");
@@ -1187,7 +1187,7 @@ export class ArborView extends FileView {
         text: "Clear",
         attr: {
           type: "button",
-          "aria-label": "Clear Arbor search"
+          "aria-label": "Clear search"
         }
       });
       this.searchClearEl.addEventListener("click", () => {
@@ -1958,7 +1958,7 @@ export class ArborView extends FileView {
       item.setTitle("Reset zoom to 100%").setIcon("maximize").onClick(() => this.updateZoomLevel(1))
     );
     menu.addItem((item) =>
-      item.setTitle("Open Arbor settings").setIcon("settings-2").onClick(() => this.openArborSettings())
+      item.setTitle("Open settings").setIcon("settings-2").onClick(() => this.openArborSettings())
     );
 
     const anchor = this.viewMenuButtonEl;

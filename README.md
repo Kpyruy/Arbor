@@ -71,7 +71,7 @@ npm run build
 ## Quick Start
 
 1. Open any Markdown note.
-2. Run `Open Arbor view for current note`.
+2. Run `Open view for current note`.
 3. Create a root block.
 4. Press `Enter` on a selected card to edit it.
 5. Use `Ctrl/Cmd + Arrow` to grow the structure.
@@ -141,10 +141,10 @@ All of these are exposed as normal Obsidian commands. By default, they have no b
 
 | Command | ID | Scope | Default hotkey |
 | --- | --- | --- | --- |
-| Open Arbor view for current note | `open-arbor-view` | Global | None |
-| Create new Arbor note | `create-arbor-note` | Global | None |
-| Create new Arbor note in markdown editor | `create-arbor-note-markdown` | Global | None |
-| Create Arbor demo note | `create-arbor-demo-note` | Global | None |
+| Open view for current note | `open-arbor-view` | Global | None |
+| Create new note | `create-arbor-note` | Global | None |
+| Create new note in markdown editor | `create-arbor-note-markdown` | Global | None |
+| Create demo note | `create-arbor-demo-note` | Global | None |
 | Open block actions menu | `open-block-actions-menu` | Arbor view | None |
 | Create new root block | `new-root-block` | Arbor view | None |
 | Create sibling above | `create-sibling-above` | Arbor view | None |
@@ -203,7 +203,7 @@ Current menu actions:
 | Show breadcrumb flow | `On` | Show subtle connectors between breadcrumb items |
 | Preferred breadcrumb line prefix | `#` | Prefer the first non-empty line that starts with `#` when generating breadcrumb labels |
 | Breadcrumb fallback | `First non-empty line` | What Arbor uses when no preferred-prefix line exists |
-| Selected Block | `Off` | Show the focused preview/editor panel for the selected block |
+| Selected block panel | `Off` | Show the focused preview/editor panel for the selected block |
 | Managed metadata block style | `Multiline` | Store hidden Arbor metadata as a multiline or compact HTML comment |
 
 ## How Notes Stay Normal Markdown
@@ -236,6 +236,16 @@ Important behavior:
 
 Beautiful blocks in the `> [!note]` style are still normal Markdown callouts. In the screenshots and demo notes, that styling comes from [Callout Manager](https://github.com/eth-p/obsidian-callout-manager).
 
+## Privacy and disclosures
+
+- No account is required.
+- No telemetry is collected.
+- No ads are shown.
+- Arbor does not make network requests for its core functionality.
+- Arbor stores plugin settings with Obsidian's plugin data system.
+- Arbor stores branch structure inside the note itself as hidden metadata comments.
+- If you paste an image into a block, Arbor writes that image into your vault as a normal attachment.
+
 ## Demo Notes
 
 Bundled demo note inside the plugin:
@@ -249,7 +259,7 @@ Vault demo notes used during development:
 
 You can also generate the bundled demo from the command palette with:
 
-- `Create Arbor demo note`
+- `Create demo note`
 
 ## Compatibility
 

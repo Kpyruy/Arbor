@@ -127,7 +127,7 @@ export default class ArborPlugin extends Plugin {
   private registerCommands(): void {
     this.addCommand({
       id: COMMANDS.openView,
-      name: "Open Arbor view for current note",
+      name: "Open view for current note",
       checkCallback: (checking) => {
         const file = this.getActiveMarkdownFile();
         if (!file) {
@@ -142,19 +142,19 @@ export default class ArborPlugin extends Plugin {
 
     this.addCommand({
       id: COMMANDS.createNote,
-      name: "Create new Arbor note",
+      name: "Create new note",
       callback: () => void this.createArborNote(true)
     });
 
     this.addCommand({
       id: COMMANDS.createNoteMarkdown,
-      name: "Create new Arbor note in markdown editor",
+      name: "Create new note in markdown editor",
       callback: () => void this.createArborNote(false)
     });
 
     this.addCommand({
       id: COMMANDS.createDemo,
-      name: "Create Arbor demo note",
+      name: "Create demo note",
       callback: () => void this.createDemoNote()
     });
 

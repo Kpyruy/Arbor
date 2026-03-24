@@ -1,5 +1,6 @@
 node_modules/
 data.json
+main.js
 *.log
 coverage/
 .DS_Store
