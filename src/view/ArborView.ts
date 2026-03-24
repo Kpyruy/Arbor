@@ -2923,7 +2923,7 @@ export class ArborView extends FileView {
     this.isPersisting = true;
     try {
       this.plugin.markOwnWrite(this.file.path);
-      await this.app.vault.modify(this.file, document);
+      await this.app.vault.process(this.file, () => document);
       this.plugin.rememberManagedNote(this.file.path);
     } catch (error) {
       console.error(`[Arbor] Failed to persist state after ${reason}`, error);

@@ -1,6 +1,6 @@
 {
   "name": "obsidian-arbor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Writing-first branching editor for Obsidian notes with safe in-note metadata.",
   "main": "main.js",
   "scripts": {

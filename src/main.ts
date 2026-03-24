@@ -1,5 +1,6 @@
-import { MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { MarkdownView, normalizePath, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { COMMANDS, METADATA_MARKER, VIEW_TYPE_ARBOR } from "./constants";
+import { ARBOR_DEMO_NOTE } from "./demoNote";
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { parseBranchDocument } from "./storage/document";
 import { ArborSettings } from "./types";
@@ -283,28 +284,19 @@ export default class ArborPlugin extends Plugin {
   }
 
   async createDemoNote(): Promise<TFile | null> {
-    const sourcePath = `.obsidian/plugins/${this.manifest.id}/demo/Arbor Demo.md`;
-    const targetPath = "40 Resources/Obsidian/Arbor Demo.md";
-
+    const folderPath = this.getCreationFolderPath();
+    const targetPath = normalizePath(this.buildAvailableNotePath(folderPath, "Arbor Demo"));
     const existing = this.app.vault.getAbstractFileByPath(targetPath);
     if (existing instanceof TFile) {
       await this.openBranchViewForFile(existing);
       return existing;
     }
 
-    const sourceExists = await this.app.vault.adapter.exists(sourcePath);
-    if (!sourceExists) {
-      new Notice("The bundled Arbor demo note could not be found.");
-      return null;
-    }
-
-    const folderPath = "40 Resources/Obsidian";
-    if (!this.app.vault.getAbstractFileByPath(folderPath)) {
+    if (folderPath && !this.app.vault.getAbstractFileByPath(folderPath)) {
       await this.app.vault.createFolder(folderPath);
     }
 
-    const demoContent = await this.app.vault.adapter.read(sourcePath);
-    const file = await this.app.vault.create(targetPath, demoContent);
+    const file = await this.app.vault.create(targetPath, ARBOR_DEMO_NOTE);
     await this.openBranchViewForFile(file);
     return file;
   }

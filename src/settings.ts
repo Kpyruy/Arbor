@@ -31,8 +31,6 @@ export class ArborSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    new Setting(containerEl).setName("Arbor").setHeading();
-
     new Setting(containerEl)
       .setName("Split direction")
       .setDesc("Where the Arbor view opens relative to the current note.")

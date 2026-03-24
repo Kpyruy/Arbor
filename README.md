@@ -50,20 +50,27 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 
 ## Install
 
-1. Download or clone this repository.
-2. Place it in your vault at:
+### Community Plugins
+
+Once Arbor is approved in the Obsidian community catalog:
+
+1. Open `Settings -> Community plugins -> Browse`.
+2. Search for `Arbor`.
+3. Install it.
+4. Enable it.
+
+### Manual install
+
+If you want to install Arbor before it appears in the community catalog:
+
+1. Download `manifest.json`, `main.js`, and `styles.css` from the latest [GitHub release](https://github.com/Kpyruy/Arbor/releases).
+2. Create this folder in your vault:
 
 ```text
 .obsidian/plugins/arbor
 ```
 
-3. In that folder run:
-
-```bash
-npm install
-npm run build
-```
-
+3. Place those three files inside it.
 4. Open Obsidian.
 5. Go to `Settings -> Community plugins`.
 6. Enable `Arbor`.
@@ -76,7 +83,7 @@ npm run build
 4. Press `Enter` on a selected card to edit it.
 5. Use `Ctrl/Cmd + Arrow` to grow the structure.
 6. Use the right-click menu to duplicate, move, delete, or continue a branch.
-7. Turn on `Selected Block` from the Arbor menu if you want a focused preview/editor panel.
+7. Turn on `Selected block panel` from the Arbor menu if you want a focused preview/editor panel.
 
 ## Support
 
@@ -178,7 +185,7 @@ Arbor includes a compact view menu in the top-right corner of the editor.
 
 Current menu actions:
 
-- toggle `Selected Block`
+- toggle `Selected block panel`
 - toggle breadcrumb path
 - toggle breadcrumb flow
 - toggle `Ctrl/Cmd + wheel` zoom
@@ -248,18 +255,13 @@ Beautiful blocks in the `> [!note]` style are still normal Markdown callouts. In
 
 ## Demo Notes
 
-Bundled demo note inside the plugin:
+Arbor ships with a built-in demo note generator.
 
-- `demo/Arbor Demo.md`
-
-Vault demo notes used during development:
-
-- `40 Resources/Obsidian/Arbor Demo.md`
-- `40 Resources/Obsidian/Arbor Workflow Demo.md`
-
-You can also generate the bundled demo from the command palette with:
+Use the command palette action:
 
 - `Create demo note`
+
+The command creates a new Arbor-managed demo note in the current note folder, or in the vault root if there is no active note.
 
 ## Compatibility
 
@@ -267,7 +269,7 @@ You can also generate the bundled demo from the command palette with:
 - Obsidian `>= 1.5.12`
 - Tested on Obsidian `1.12.4`
 - Plugin ID: `arbor`
-- Current version: `0.1.0`
+- Current version: `0.1.1`
 
 ## Known Limitations
 
@@ -280,19 +282,18 @@ You can also generate the bundled demo from the command palette with:
 
 - richer block search navigation
 - stronger conflict handling when Arbor view and plain Markdown both change the same note
-- richer release packaging and community-plugin polish
 - more refinement for very large note trees
 
 ## Development
 
-Local workflow:
+Contributor workflow:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Production checks:
+Release checks:
 
 ```bash
 npm run build
@@ -318,5 +319,4 @@ arbor/
   manifest.json
   package.json
   styles.css
-  main.js
 ```

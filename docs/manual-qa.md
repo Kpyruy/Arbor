@@ -3,7 +3,7 @@
 ## Core Rendering
 
 - Open a note with hidden Arbor metadata.
-- Run `Open Arbor view for current note`.
+- Run `Open view for current note`.
 - Confirm root blocks appear in the left column.
 - Click a root card and confirm its children open in the next column.
 - Click a child card and confirm only the active path is expanded.
@@ -14,11 +14,11 @@
 
 - Double click a card and confirm inline edit mode starts.
 - Press `Esc` and confirm the edit is canceled.
-- Edit again and press `Ctrl/Cmd+Enter`; confirm content saves.
+- Edit again and press `Enter`; confirm content saves and edit mode closes.
 - Paste an image from clipboard while editing and confirm it is saved into the vault and inserted as an embed.
 - Drag an image file onto the textarea and confirm it is inserted into the block.
-- Run `Create new Arbor note` and confirm a new `.md` note is created next to the active note and opens in Arbor view.
-- Run `Create new Arbor note in markdown editor` and confirm the new note opens as a normal markdown note.
+- Run `Create new note` and confirm a new `.md` note is created next to the active note and opens in Arbor view.
+- Run `Create new note in markdown editor` and confirm the new note opens as a normal markdown note.
 - Create a new root block and confirm the new card autofocuses.
 - Create sibling above, below, and child-right and confirm correct placement.
 
