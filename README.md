@@ -269,7 +269,7 @@ The command creates a new Arbor-managed demo note in the current note folder, or
 - Obsidian `>= 1.5.12`
 - Tested on Obsidian `1.12.4`
 - Plugin ID: `arbor`
-- Current version: `0.1.4`
+- Current version: `0.1.5`
 
 ## Known Limitations
 
