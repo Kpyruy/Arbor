@@ -1,7 +1,6 @@
 import { DEFAULT_BLOCK_SEPARATOR, METADATA_MARKER } from "../constants";
 import {
   BlockLocation,
-  BranchBlock,
   BranchBlockId,
   BranchTreeMetadata,
   LinearizedBranchDocument,

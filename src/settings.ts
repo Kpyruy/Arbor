@@ -183,7 +183,8 @@ export class ArborSettingTab extends PluginSettingTab {
           .setDynamicTooltip()
           .setValue(key === "zoomLevel" ? Math.round(this.plugin.settings[key] * 100) : this.plugin.settings[key])
           .onChange(async (value) => {
-            this.plugin.settings[key] = (key === "zoomLevel" ? value / 100 : value) as ArborSettings[typeof key];
+            const nextValue = key === "zoomLevel" ? value / 100 : value;
+            this.plugin.settings[key] = nextValue;
             await this.plugin.saveSettings();
             this.plugin.refreshAllBranchViews();
           })

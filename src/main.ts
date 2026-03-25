@@ -31,7 +31,9 @@ export default class ArborPlugin extends Plugin {
       if (this.managedNotePaths.has(file.path)) {
         void this.refreshManagedStatus(file);
       }
-      void Promise.all(this.getBranchViews().map((view) => view.handleFileModified(file)));
+      this.getBranchViews().forEach((view) => {
+        void view.handleFileModified(file);
+      });
     }));
     this.registerEvent(this.app.workspace.on("file-open", (file) => {
       void this.handleFileOpen(file);
@@ -43,8 +45,10 @@ export default class ArborPlugin extends Plugin {
     this.registerCommands();
   }
 
-  async onunload(): Promise<void> {
-    await Promise.all(this.app.workspace.getLeavesOfType(VIEW_TYPE_ARBOR).map((leaf) => leaf.detach()));
+  override onunload(): void {
+    this.app.workspace.getLeavesOfType(VIEW_TYPE_ARBOR).forEach((leaf) => {
+      void leaf.detach();
+    });
   }
 
   async loadSettings(): Promise<void> {
@@ -149,7 +153,7 @@ export default class ArborPlugin extends Plugin {
 
     this.addCommand({
       id: COMMANDS.createNoteMarkdown,
-      name: "Create new note in markdown editor",
+      name: "Create new note in Markdown editor",
       callback: () => void this.createArborNote(false)
     });
 
@@ -205,8 +209,8 @@ export default class ArborPlugin extends Plugin {
       view.toggleEditMode();
       return Promise.resolve();
     });
-    this.addBranchCommand(COMMANDS.revealInMarkdown, "Reveal current block in linear markdown", (view) => view.revealCurrentBlockInMarkdown());
-    this.addBranchCommand(COMMANDS.rebuildMarkdown, "Rebuild linear markdown from tree", (view) => view.rebuildLinearMarkdownFromTree());
+    this.addBranchCommand(COMMANDS.revealInMarkdown, "Reveal current block in linear Markdown", (view) => view.revealCurrentBlockInMarkdown());
+    this.addBranchCommand(COMMANDS.rebuildMarkdown, "Rebuild linear Markdown from tree", (view) => view.rebuildLinearMarkdownFromTree());
     this.addBranchCommand(COMMANDS.rebuildTree, "Rebuild tree from metadata", (view) => view.rebuildTreeFromMetadata());
     this.addBranchCommand(COMMANDS.undo, "Undo branch action", (view) => view.undo());
     this.addBranchCommand(COMMANDS.redo, "Redo branch action", (view) => view.redo());
@@ -233,7 +237,7 @@ export default class ArborPlugin extends Plugin {
   private async withBranchView(callback: (view: ArborView) => Promise<void>): Promise<void> {
     const view = await this.ensureBranchViewForCurrentNote();
     if (!view) {
-      new Notice("Open a markdown note first to use Arbor.");
+      new Notice("Open a Markdown note first to use Arbor.");
       return;
     }
 
@@ -279,7 +283,7 @@ export default class ArborPlugin extends Plugin {
         file: file.path
       }
     });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
     return leaf.view instanceof ArborView ? leaf.view : null;
   }
 
@@ -311,7 +315,7 @@ export default class ArborPlugin extends Plugin {
     } else {
       const leaf = this.app.workspace.getLeaf(false);
       await leaf.openFile(file);
-      this.app.workspace.revealLeaf(leaf);
+      await this.app.workspace.revealLeaf(leaf);
     }
 
     return file;
@@ -395,7 +399,7 @@ export default class ArborPlugin extends Plugin {
             file: file.path
           }
         });
-        this.app.workspace.revealLeaf(leaf);
+        await this.app.workspace.revealLeaf(leaf);
         return;
       }
 
@@ -428,9 +432,9 @@ export default class ArborPlugin extends Plugin {
       return preferredLeaf;
     }
 
-    const activeLeaf = this.app.workspace.activeLeaf;
-    if (activeLeaf?.view instanceof MarkdownView && activeLeaf.view.file?.path === file.path) {
-      return activeLeaf;
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (activeView?.file?.path === file.path) {
+      return activeView.leaf;
     }
 
     return this.app.workspace.getLeavesOfType("markdown").find((leaf) => {

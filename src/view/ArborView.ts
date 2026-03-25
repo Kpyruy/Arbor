@@ -44,7 +44,7 @@ import {
   toggleBlockCollapsed,
   updateBlockContent
 } from "../model/tree";
-import { DEFAULT_BLOCK_SEPARATOR, ROOT_COLUMN_LABEL, VIEW_TYPE_ARBOR } from "../constants";
+import { VIEW_TYPE_ARBOR } from "../constants";
 import {
   BranchBlock,
   BranchBlockId,
@@ -263,7 +263,7 @@ export class ArborView extends FileView {
     this.plugin.rememberManagedNote(file.path);
 
     if (loaded.origin === "reconciled") {
-      new Notice("Arbor rebuilt the tree from the visible markdown body to avoid losing plain-editor changes.");
+      new Notice("Arbor rebuilt the tree from the visible Markdown body to avoid losing plain editor changes.");
     }
 
     this.history.clear();
@@ -731,12 +731,12 @@ export class ArborView extends FileView {
       markdownView.editor.setCursor({ line: location.line, ch: 0 });
       markdownView.editor.focus();
     }
-    this.app.workspace.setActiveLeaf(existingLeaf, true, true);
+    this.app.workspace.setActiveLeaf(existingLeaf, { focus: true });
   }
 
   async rebuildLinearMarkdownFromTree(): Promise<void> {
     await this.commitEditIfNeeded();
-    await this.persistState("Rebuild linear markdown from tree");
+    await this.persistState("Rebuild linear Markdown from tree");
   }
 
   async rebuildTreeFromMetadata(): Promise<void> {
@@ -831,7 +831,7 @@ export class ArborView extends FileView {
     if (!this.file || !this.state) {
       this.viewContext = null;
       this.teardownShell();
-      contentEl.createDiv({ cls: "arbor-empty", text: "Open a markdown note to use Arbor." });
+      contentEl.createDiv({ cls: "arbor-empty", text: "Open a Markdown note to use Arbor." });
       return;
     }
 
@@ -955,7 +955,7 @@ export class ArborView extends FileView {
       return;
     }
 
-    this.breadcrumbsEl.style.display = this.plugin.settings.showBreadcrumb ? "" : "none";
+    this.breadcrumbsEl.setCssStyles({ display: this.plugin.settings.showBreadcrumb ? "" : "none" });
     if (!this.plugin.settings.showBreadcrumb) {
       return;
     }
@@ -986,12 +986,12 @@ export class ArborView extends FileView {
         cls: index === path.length - 1 ? "is-active" : "",
         text: this.getBreadcrumbLabel(block.content)
       });
-      button.style.setProperty("--bw-crumb-index", String(index));
+      button.setCssProps({ "--bw-crumb-index": String(index) });
       button.addEventListener("click", () => this.selectBlock(block.id, { focus: true }));
 
       if (this.plugin.settings.showBreadcrumbFlow && index < path.length - 1) {
         const connector = container.createSpan({ cls: "arbor-breadcrumb-connector" });
-        connector.style.setProperty("--bw-crumb-index", String(index + 0.45));
+        connector.setCssProps({ "--bw-crumb-index": String(index + 0.45) });
       }
     });
   }
@@ -1053,11 +1053,11 @@ export class ArborView extends FileView {
     }
 
     const showBanner = this.state.origin === "reconciled";
-    this.bannerEl.style.display = showBanner ? "" : "none";
+    this.bannerEl.setCssStyles({ display: showBanner ? "" : "none" });
     if (showBanner) {
       this.bannerEl.empty();
       this.bannerEl.createSpan({
-        text: "This note changed in plain markdown mode. The branch tree was rebuilt from the visible note body."
+      text: "This note changed in plain Markdown mode. The branch tree was rebuilt from the visible note body."
       });
     }
   }
@@ -1293,7 +1293,7 @@ export class ArborView extends FileView {
 
     if (parentChanged) {
       cardsEl.addClass("is-rebinding");
-      cardsEl.style.transform = "";
+      cardsEl.setCssProps({ "--arbor-card-list-offset-y": "0px" });
     }
 
     if (column.collapsedBlockId) {
@@ -1466,7 +1466,7 @@ export class ArborView extends FileView {
 
     if (this.editingSession?.blockId === block.id && this.editingSession.origin === "card") {
       card.addClass("is-editing");
-      await this.syncEditorNode(card, block);
+      this.syncEditorNode(card, block);
       return;
     }
 
@@ -1535,7 +1535,7 @@ export class ArborView extends FileView {
     });
   }
 
-  private async syncEditorNode(card: HTMLElement, block: BranchBlock): Promise<void> {
+  private syncEditorNode(card: HTMLElement, block: BranchBlock): void {
     let editor = card.querySelector<HTMLTextAreaElement>("textarea.arbor-editor");
     if (!editor) {
       card.empty();
@@ -1551,14 +1551,15 @@ export class ArborView extends FileView {
     card.dataset.renderMode = "editing";
 
     if (this.editingSession?.autofocus && this.editingSession.origin === "card") {
-      window.setTimeout(() => {
-        editor!.focus();
-        editor!.setSelectionRange(editor!.value.length, editor!.value.length);
-        this.resizeEditor(editor!);
+      const editorEl = editor;
+      window.requestAnimationFrame(() => {
+        editorEl.focus();
+        editorEl.setSelectionRange(editorEl.value.length, editorEl.value.length);
+        this.resizeEditor(editorEl);
         if (this.editingSession) {
           this.editingSession.autofocus = false;
         }
-      }, 0);
+      });
     }
   }
 
@@ -1600,7 +1601,7 @@ export class ArborView extends FileView {
 
     if (!this.previewPaneEl) {
       this.previewPaneEl = this.bodyEl.createDiv({ cls: "arbor-preview-pane" });
-      this.previewPaneEl.createEl("div", { cls: "arbor-preview-title", text: "Selected Block" });
+      this.previewPaneEl.createEl("div", { cls: "arbor-preview-title", text: "Selected block" });
       this.previewMiniMapEl = this.previewPaneEl.createDiv({ cls: "arbor-preview-minimap" });
       this.previewContentEl = this.previewPaneEl.createDiv({ cls: "arbor-preview-content markdown-rendered" });
     }
@@ -1646,10 +1647,10 @@ export class ArborView extends FileView {
       return;
     }
 
-    for (const [index, item] of previewItems.entries()) {
+    for (const item of previewItems) {
       if (item.type === "summary") {
         const summaryEl = container.createDiv({ cls: "arbor-preview-summary" });
-        summaryEl.style.setProperty("--bw-preview-depth", String(item.depth));
+        summaryEl.setCssProps({ "--bw-preview-depth": String(item.depth) });
         summaryEl.createDiv({
           cls: "arbor-preview-summary-title",
           text: `${item.count} hidden block${item.count === 1 ? "" : "s"}`
@@ -1670,7 +1671,7 @@ export class ArborView extends FileView {
       const { block, depth } = item;
       const previewBlockEl = container.createDiv({ cls: "arbor-preview-block" });
       previewBlockEl.dataset.blockId = block.id;
-      previewBlockEl.style.setProperty("--bw-preview-depth", String(depth));
+      previewBlockEl.setCssProps({ "--bw-preview-depth": String(depth) });
       previewBlockEl.toggleClass("is-active", this.state.selectedBlockId === block.id);
       previewBlockEl.toggleClass("is-on-path", context.activePathIds.has(block.id));
       previewBlockEl.toggleClass("is-direct-child", block.parentId === this.state.selectedBlockId);
@@ -1844,7 +1845,7 @@ export class ArborView extends FileView {
         attr: { type: "button" }
       });
       rowEl.dataset.blockId = node.id;
-      rowEl.style.setProperty("--bw-preview-depth", String(node.depth));
+      rowEl.setCssProps({ "--bw-preview-depth": String(node.depth) });
       rowEl.toggleClass("is-active", node.isSelected);
       rowEl.toggleClass("is-on-path", node.isOnActivePath);
       rowEl.toggleClass("is-selectable", node.isSelectable);
@@ -2680,13 +2681,16 @@ export class ArborView extends FileView {
     preview.dataset.blockId = blockId;
     preview.setAttribute("aria-hidden", "true");
     preview.querySelectorAll<HTMLElement>("[tabindex]").forEach((element) => element.removeAttribute("tabindex"));
-    preview.style.width = `${card.offsetWidth}px`;
+    preview.setCssProps({ "--arbor-drag-preview-width": `${card.offsetWidth}px` });
 
     const rect = card.getBoundingClientRect();
     const stageRect = this.columnsStageEl.getBoundingClientRect();
     const initialLeft = rect.left - stageRect.left;
     const initialTop = rect.top - stageRect.top;
-    preview.style.transform = `translate3d(${Math.round(initialLeft)}px, ${Math.round(initialTop)}px, 0)`;
+    preview.setCssProps({
+      "--arbor-drag-preview-x": `${Math.round(initialLeft)}px`,
+      "--arbor-drag-preview-y": `${Math.round(initialTop)}px`
+    });
 
     const rememberedPointer =
       this.lastCardPointerPosition?.blockId === blockId
@@ -2751,7 +2755,10 @@ export class ArborView extends FileView {
     const stageRect = this.columnsStageEl.getBoundingClientRect();
     const left = this.dragPreviewPoint.x - stageRect.left - this.dragPreviewOffset.x;
     const top = this.dragPreviewPoint.y - stageRect.top - this.dragPreviewOffset.y;
-    this.dragPreviewEl.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
+    this.dragPreviewEl.setCssProps({
+      "--arbor-drag-preview-x": `${Math.round(left)}px`,
+      "--arbor-drag-preview-y": `${Math.round(top)}px`
+    });
   }
 
   private cleanupDragPreview(): void {
@@ -2934,12 +2941,14 @@ export class ArborView extends FileView {
   }
 
   private applyCssVars(root: HTMLElement): void {
-    root.style.setProperty("--bw-card-width", `${this.plugin.settings.cardWidth}px`);
-    root.style.setProperty("--bw-card-min-height", `${this.plugin.settings.cardMinHeight}px`);
-    root.style.setProperty("--bw-column-gap", `${this.plugin.settings.horizontalSpacing}px`);
-    root.style.setProperty("--bw-card-gap", `${this.plugin.settings.verticalSpacing}px`);
-    root.style.setProperty("--bw-zoom", `${this.plugin.settings.zoomLevel}`);
-    root.style.setProperty("--bw-content-zoom", `${this.plugin.settings.zoomLevel}`);
+    root.setCssProps({
+      "--bw-card-width": `${this.plugin.settings.cardWidth}px`,
+      "--bw-card-min-height": `${this.plugin.settings.cardMinHeight}px`,
+      "--bw-column-gap": `${this.plugin.settings.horizontalSpacing}px`,
+      "--bw-card-gap": `${this.plugin.settings.verticalSpacing}px`,
+      "--bw-zoom": `${this.plugin.settings.zoomLevel}`,
+      "--bw-content-zoom": `${this.plugin.settings.zoomLevel}`
+    });
     this.syncZoomIndicator();
   }
 
@@ -3013,7 +3022,7 @@ export class ArborView extends FileView {
         item.setTitle("Duplicate subtree").setIcon("copy-plus").onClick(() => void this.runWithSelectedBlock(blockId, () => this.duplicateSelectedSubtree()))
       )
       .addItem((item) =>
-        item.setTitle("Reveal in markdown").setIcon("file-text").onClick(() => void this.runWithSelectedBlock(blockId, () => this.revealCurrentBlockInMarkdown()))
+        item.setTitle("Reveal in Markdown").setIcon("file-text").onClick(() => void this.runWithSelectedBlock(blockId, () => this.revealCurrentBlockInMarkdown()))
       )
       .addSeparator()
       .addItem((item) =>
@@ -3085,8 +3094,8 @@ export class ArborView extends FileView {
   }
 
   private resizeEditor(textarea: HTMLTextAreaElement): void {
-    textarea.style.height = "0px";
-    textarea.style.height = `${Math.max(textarea.scrollHeight, 180)}px`;
+    textarea.setCssProps({ "--arbor-editor-height": "0px" });
+    textarea.setCssProps({ "--arbor-editor-height": `${Math.max(textarea.scrollHeight, 180)}px` });
   }
 
   private handleViewportWheel(event: WheelEvent, viewport: HTMLElement): void {
@@ -3317,13 +3326,13 @@ export class ArborView extends FileView {
     }
 
     const preservedSceneWidth = Math.max(this.columnsEl.scrollWidth, this.columnsViewportEl.clientWidth);
-    this.columnsEl.style.minWidth = `${preservedSceneWidth}px`;
+    this.columnsEl.setCssProps({ "--arbor-columns-min-width": `${preservedSceneWidth}px` });
     return preservedSceneWidth;
   }
 
   private releasePreservedSceneWidth(): void {
     if (this.columnsEl) {
-      this.columnsEl.style.minWidth = "";
+      this.columnsEl.setCssProps({ "--arbor-columns-min-width": "max-content" });
     }
   }
 
@@ -3402,7 +3411,9 @@ export class ArborView extends FileView {
     }
 
     if (preservedSceneWidth > 0 && this.columnsEl) {
-      this.columnsEl.style.minWidth = `${Math.max(preservedSceneWidth, viewport.clientWidth)}px`;
+      this.columnsEl.setCssProps({
+        "--arbor-columns-min-width": `${Math.max(preservedSceneWidth, viewport.clientWidth)}px`
+      });
     }
 
     const cardCenter =
@@ -3484,9 +3495,9 @@ export class ArborView extends FileView {
       const shift = anchorCenterY - naturalCenterY;
 
       if (Math.abs(shift) < 0.25) {
-        listEl.style.transform = "";
+        listEl.setCssProps({ "--arbor-card-list-offset-y": "0px" });
       } else {
-        listEl.style.transform = `translate3d(0, ${shift}px, 0)`;
+        listEl.setCssProps({ "--arbor-card-list-offset-y": `${shift}px` });
       }
 
       if (listEl.hasClass("is-rebinding")) {
