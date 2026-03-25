@@ -5,10 +5,10 @@ export const ROOT_COLUMN_LABEL = "Root";
 export const HISTORY_LIMIT = 200;
 
 export const COMMANDS = {
-  openView: "open-arbor-view",
-  createNote: "create-arbor-note",
-  createNoteMarkdown: "create-arbor-note-markdown",
-  createDemo: "create-arbor-demo-note",
+  openView: "open-view",
+  createNote: "create-note",
+  createNoteMarkdown: "create-note-markdown",
+  createDemo: "create-demo-note",
   newRoot: "new-root-block",
   siblingAbove: "create-sibling-above",
   siblingBelow: "create-sibling-below",

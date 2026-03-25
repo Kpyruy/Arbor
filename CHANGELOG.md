@@ -2,6 +2,14 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.1.3 - 2026-03-25
+
+Command ID cleanup before review.
+
+### Changed
+
+- removed the plugin name from the command IDs reviewers are likely to inspect
+
 ## 0.1.2 - 2026-03-25
 
 Validation follow-up release.

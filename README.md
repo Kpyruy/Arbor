@@ -148,10 +148,10 @@ All of these are exposed as normal Obsidian commands. By default, they have no b
 
 | Command | ID | Scope | Default hotkey |
 | --- | --- | --- | --- |
-| Open view for current note | `open-arbor-view` | Global | None |
-| Create new note | `create-arbor-note` | Global | None |
-| Create new note in markdown editor | `create-arbor-note-markdown` | Global | None |
-| Create demo note | `create-arbor-demo-note` | Global | None |
+| Open view for current note | `open-view` | Global | None |
+| Create new note | `create-note` | Global | None |
+| Create new note in markdown editor | `create-note-markdown` | Global | None |
+| Create demo note | `create-demo-note` | Global | None |
 | Open block actions menu | `open-block-actions-menu` | Arbor view | None |
 | Create new root block | `new-root-block` | Arbor view | None |
 | Create sibling above | `create-sibling-above` | Arbor view | None |
@@ -269,7 +269,7 @@ The command creates a new Arbor-managed demo note in the current note folder, or
 - Obsidian `>= 1.5.12`
 - Tested on Obsidian `1.12.4`
 - Plugin ID: `arbor`
-- Current version: `0.1.2`
+- Current version: `0.1.3`
 
 ## Known Limitations
 
