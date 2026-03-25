@@ -2,6 +2,14 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.1.2 - 2026-03-25
+
+Validation follow-up release.
+
+### Changed
+
+- removed `Obsidian` from the public plugin description to match submission rules
+
 ## 0.1.1 - 2026-03-24
 
 Submission polish and release fixes.
