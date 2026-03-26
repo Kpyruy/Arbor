@@ -204,7 +204,7 @@ Current menu actions:
 | Default zoom | `100%` | Initial scene scale when Arbor opens |
 | Preview snippet length | `220` chars | Maximum preview text for compact card snippets |
 | Drag and drop | `On` | Enable drag reorder and reparent |
-| Ctrl+wheel zoom | `On` | Allow scene zoom with `Ctrl/Cmd + mouse wheel` |
+| Ctrl/Cmd + wheel zoom | `On` | Allow scene zoom with `Ctrl/Cmd + mouse wheel` |
 | Auto-open managed notes | `On` | Open Arbor-managed notes directly in Arbor view |
 | Show breadcrumb path | `On` | Show the active path strip at the top |
 | Show breadcrumb flow | `On` | Show subtle connectors between breadcrumb items |
@@ -269,7 +269,7 @@ The command creates a new Arbor-managed demo note in the current note folder, or
 - Obsidian `>= 1.5.12`
 - Tested on Obsidian `1.12.4`
 - Plugin ID: `arbor`
-- Current version: `0.1.7`
+- Current version: `0.1.8`
 
 ## Known Limitations
 

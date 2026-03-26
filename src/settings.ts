@@ -64,7 +64,7 @@ export class ArborSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Ctrl+wheel zoom")
+      .setName("Ctrl/Cmd + wheel zoom")
       .setDesc("Zoom the branching scene with Ctrl/Cmd + mouse wheel.")
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.enableCtrlWheelZoom).onChange(async (value) => {

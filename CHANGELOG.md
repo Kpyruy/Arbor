@@ -2,6 +2,14 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.1.8 - 2026-03-26
+
+Final wording alignment after reviewer follow-up.
+
+### Changed
+
+- aligned the Ctrl/Cmd wheel zoom label across settings, menu UI, and README
+
 ## 0.1.7 - 2026-03-26
 
 Reviewer-bot Markdown sentence-case follow-up.
