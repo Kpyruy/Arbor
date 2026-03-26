@@ -2,6 +2,15 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.1.7 - 2026-03-26
+
+Reviewer-bot Markdown sentence-case follow-up.
+
+### Changed
+
+- normalized the remaining reviewer-visible `Markdown` UI strings in commands, notices, menus, and banners
+- aligned README and manual QA command labels with the updated UI wording
+
 ## 0.1.6 - 2026-03-26
 
 Review-bot sentence-case cleanup.

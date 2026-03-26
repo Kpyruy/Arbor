@@ -18,7 +18,7 @@
 - Paste an image from clipboard while editing and confirm it is saved into the vault and inserted as an embed.
 - Drag an image file onto the textarea and confirm it is inserted into the block.
 - Run `Create new note` and confirm a new `.md` note is created next to the active note and opens in Arbor view.
-- Run `Create new note in markdown editor` and confirm the new note opens as a normal Markdown note.
+- Run `Create new note in Markdown editor` and confirm the new note opens as a normal Markdown note.
 - Create a new root block and confirm the new card autofocuses.
 - Create sibling above, below, and child-right and confirm correct placement.
 

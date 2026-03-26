@@ -263,7 +263,7 @@ export class ArborView extends FileView {
     this.plugin.rememberManagedNote(file.path);
 
     if (loaded.origin === "reconciled") {
-      new Notice("The tree was rebuilt from the visible markdown body to avoid losing plain editor changes.");
+      new Notice("The tree was rebuilt from the visible Markdown body to avoid losing plain editor changes.");
     }
 
     this.history.clear();
@@ -736,7 +736,7 @@ export class ArborView extends FileView {
 
   async rebuildLinearMarkdownFromTree(): Promise<void> {
     await this.commitEditIfNeeded();
-    await this.persistState("Rebuild linear markdown from tree");
+      await this.persistState("Rebuild linear Markdown from tree");
   }
 
   async rebuildTreeFromMetadata(): Promise<void> {
@@ -831,7 +831,7 @@ export class ArborView extends FileView {
     if (!this.file || !this.state) {
       this.viewContext = null;
       this.teardownShell();
-      contentEl.createDiv({ cls: "arbor-empty", text: "Open a markdown note to use this view." });
+      contentEl.createDiv({ cls: "arbor-empty", text: "Open a Markdown note to use this view." });
       return;
     }
 
@@ -1057,7 +1057,7 @@ export class ArborView extends FileView {
     if (showBanner) {
       this.bannerEl.empty();
       this.bannerEl.createSpan({
-        text: "This note changed in plain markdown mode. The branch tree was rebuilt from the visible note body."
+        text: "This note changed in plain Markdown mode. The branch tree was rebuilt from the visible note body."
       });
     }
   }
@@ -3022,7 +3022,7 @@ export class ArborView extends FileView {
         item.setTitle("Duplicate subtree").setIcon("copy-plus").onClick(() => void this.runWithSelectedBlock(blockId, () => this.duplicateSelectedSubtree()))
       )
       .addItem((item) =>
-        item.setTitle("Reveal in markdown").setIcon("file-text").onClick(() => void this.runWithSelectedBlock(blockId, () => this.revealCurrentBlockInMarkdown()))
+        item.setTitle("Reveal in Markdown").setIcon("file-text").onClick(() => void this.runWithSelectedBlock(blockId, () => this.revealCurrentBlockInMarkdown()))
       )
       .addSeparator()
       .addItem((item) =>

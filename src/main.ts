@@ -153,7 +153,7 @@ export default class ArborPlugin extends Plugin {
 
     this.addCommand({
       id: COMMANDS.createNoteMarkdown,
-      name: "Create new note in markdown editor",
+      name: "Create new note in Markdown editor",
       callback: () => void this.createArborNote(false)
     });
 
@@ -209,8 +209,8 @@ export default class ArborPlugin extends Plugin {
       view.toggleEditMode();
       return Promise.resolve();
     });
-    this.addBranchCommand(COMMANDS.revealInMarkdown, "Reveal current block in linear markdown", (view) => view.revealCurrentBlockInMarkdown());
-    this.addBranchCommand(COMMANDS.rebuildMarkdown, "Rebuild linear markdown from tree", (view) => view.rebuildLinearMarkdownFromTree());
+    this.addBranchCommand(COMMANDS.revealInMarkdown, "Reveal current block in linear Markdown", (view) => view.revealCurrentBlockInMarkdown());
+    this.addBranchCommand(COMMANDS.rebuildMarkdown, "Rebuild linear Markdown from tree", (view) => view.rebuildLinearMarkdownFromTree());
     this.addBranchCommand(COMMANDS.rebuildTree, "Rebuild tree from metadata", (view) => view.rebuildTreeFromMetadata());
     this.addBranchCommand(COMMANDS.undo, "Undo branch action", (view) => view.undo());
     this.addBranchCommand(COMMANDS.redo, "Redo branch action", (view) => view.redo());
@@ -237,7 +237,7 @@ export default class ArborPlugin extends Plugin {
   private async withBranchView(callback: (view: ArborView) => Promise<void>): Promise<void> {
     const view = await this.ensureBranchViewForCurrentNote();
     if (!view) {
-      new Notice("Open a markdown note first to use this view.");
+      new Notice("Open a Markdown note first to use this view.");
       return;
     }
 
