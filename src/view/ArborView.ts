@@ -1385,7 +1385,8 @@ export class ArborView extends FileView {
       return existing;
     }
 
-    const indicator = createDiv({ cls: "arbor-drop-indicator" });
+    const indicator = document.createElement("div");
+    indicator.addClass("arbor-drop-indicator");
     indicator.dataset.nodeKey = key;
     return indicator;
   }
@@ -1398,7 +1399,8 @@ export class ArborView extends FileView {
       return existing;
     }
 
-    const card = createDiv({ cls: "arbor-card" });
+    const card = document.createElement("div");
+    card.addClass("arbor-card");
     card.tabIndex = 0;
     card.dataset.nodeKey = key;
     card.addEventListener("pointerdown", (event) => this.rememberCardPointerPosition(blockId, event.clientX, event.clientY));

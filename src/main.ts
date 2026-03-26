@@ -52,7 +52,7 @@ export default class ArborPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const raw = await this.loadData();
+    const raw: unknown = await this.loadData();
     const payload = this.normalizePluginData(raw);
     this.settings = { ...DEFAULT_SETTINGS, ...payload.settings };
     this.managedNotePaths.clear();

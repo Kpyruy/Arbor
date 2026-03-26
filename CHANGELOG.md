@@ -2,6 +2,16 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.1.9 - 2026-03-26
+
+Local reviewer-check setup.
+
+### Changed
+
+- added local ESLint review checks with `eslint-plugin-obsidianmd`
+- replaced `builtin-modules` with Node's built-in `node:module` list in the build config
+- fixed local lint findings around globals and unsafe `loadData()` typing
+
 ## 0.1.8 - 2026-03-26
 
 Final wording alignment after reviewer follow-up.
