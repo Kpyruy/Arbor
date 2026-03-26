@@ -150,7 +150,7 @@ All of these are exposed as normal Obsidian commands. By default, they have no b
 | --- | --- | --- | --- |
 | Open view for current note | `open-view` | Global | None |
 | Create new note | `create-note` | Global | None |
-| Create new note in Markdown editor | `create-note-markdown` | Global | None |
+| Create new note in markdown editor | `create-note-markdown` | Global | None |
 | Create demo note | `create-demo-note` | Global | None |
 | Open block actions menu | `open-block-actions-menu` | Arbor view | None |
 | Create new root block | `new-root-block` | Arbor view | None |
@@ -173,8 +173,8 @@ All of these are exposed as normal Obsidian commands. By default, they have no b
 | Duplicate block | `duplicate-block` | Arbor view | None |
 | Duplicate subtree | `duplicate-subtree` | Arbor view | None |
 | Toggle edit mode | `toggle-edit-mode` | Arbor view | None |
-| Reveal current block in linear Markdown | `reveal-current-block-in-linear-markdown` | Arbor view | None |
-| Rebuild linear Markdown from tree | `rebuild-linear-markdown-from-tree` | Arbor view | None |
+| Reveal current block in linear markdown | `reveal-current-block-in-linear-markdown` | Arbor view | None |
+| Rebuild linear markdown from tree | `rebuild-linear-markdown-from-tree` | Arbor view | None |
 | Rebuild tree from metadata | `rebuild-tree-from-metadata` | Arbor view | None |
 | Undo branch action | `undo-branch-action` | Arbor view | None |
 | Redo branch action | `redo-branch-action` | Arbor view | None |
@@ -269,7 +269,7 @@ The command creates a new Arbor-managed demo note in the current note folder, or
 - Obsidian `>= 1.5.12`
 - Tested on Obsidian `1.12.4`
 - Plugin ID: `arbor`
-- Current version: `0.1.5`
+- Current version: `0.1.6`
 
 ## Known Limitations
 

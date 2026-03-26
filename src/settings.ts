@@ -33,7 +33,7 @@ export class ArborSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Split direction")
-      .setDesc("Where the Arbor view opens relative to the current note.")
+      .setDesc("Choose where the branch view opens relative to the current note.")
       .addDropdown((dropdown) =>
         dropdown
           .addOption("vertical", "Vertical split")
@@ -75,7 +75,7 @@ export class ArborSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Auto-open managed notes")
-      .setDesc("Open notes with Arbor metadata directly in the Arbor view when you open them normally.")
+      .setDesc("Open managed notes directly in the branch view when you open them normally.")
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.autoOpenManagedNotes).onChange(async (value) => {
           this.plugin.settings.autoOpenManagedNotes = value;

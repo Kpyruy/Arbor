@@ -2,6 +2,15 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.1.6 - 2026-03-26
+
+Review-bot sentence-case cleanup.
+
+### Changed
+
+- rewrote the remaining reviewer-flagged UI strings to sentence case
+- removed extra product naming from notices and setting descriptions where it was not needed
+
 ## 0.1.5 - 2026-03-25
 
 Submission rescan follow-up.
