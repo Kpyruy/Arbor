@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractPathLabel } from "../src/utils";
+import { extractPathLabel, getNextNumberedName } from "../src/utils";
 
 describe("path label extraction", () => {
   it("prefers heading-style lines with the configured prefix", () => {
@@ -15,5 +15,19 @@ describe("path label extraction", () => {
   it("can disable fallback and return the empty label placeholder", () => {
     const markdown = "Plain intro line\nAnother line";
     expect(extractPathLabel(markdown, { preferredPrefix: "#", fallback: "none" })).toBe("Empty block");
+  });
+});
+
+describe("numbered note names", () => {
+  it("returns the base name when no matching notes exist", () => {
+    expect(getNextNumberedName(["Arbor demo", "Something else"], "Untitled")).toBe("Untitled");
+  });
+
+  it("increments from the highest numbered matching note", () => {
+    expect(getNextNumberedName(["Untitled", "Untitled 2", "Untitled 6"], "Untitled")).toBe("Untitled 7");
+  });
+
+  it("starts at 1 when the plain base name already exists", () => {
+    expect(getNextNumberedName(["Untitled"], "Untitled")).toBe("Untitled 1");
   });
 });

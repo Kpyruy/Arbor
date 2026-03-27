@@ -38,7 +38,7 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Left-to-right branching editor for one Markdown note
 - Stable block tree with inline editing
 - Normal readable Markdown body as the source document
-- Hidden in-note metadata for structure, IDs, and ordering
+- Visible block markers plus hidden in-note metadata for exact recovery
 - Selected block panel with focused preview and inline editing
 - Context-aware dimming so the active branch stays readable
 - Drag-and-drop reorder and reparent
@@ -220,11 +220,13 @@ Arbor does not move your note into a database or sidecar file.
 Each Arbor note contains:
 
 - the visible Markdown body
+- machine-written block markers before each block in the visible body
 - one hidden metadata block at the end of the same note
 
 Example shape:
 
 ```md
+<!-- arbor:block:v1 id="root-1" parent="" order="0" -->
 # A visible markdown note
 
 This text is still readable in normal Obsidian.
@@ -238,8 +240,10 @@ Important behavior:
 
 - frontmatter is preserved
 - the visible body stays readable if the plugin is disabled
-- Arbor keeps stable block IDs in the hidden metadata
-- if you edit the note in normal Markdown mode, Arbor will safely rebuild the tree from the visible body instead of silently dropping content
+- Arbor keeps stable block IDs in both visible markers and hidden metadata
+- if hidden metadata is stale, Arbor can recover the exact block tree from the visible markers
+- if you open an older Arbor note without visible markers, Arbor upgrades it automatically to the precise marker format
+- if you edit the note in normal Markdown mode, Arbor will safely rebuild the tree from the visible note body instead of silently dropping content
 
 Beautiful blocks in the `> [!note]` style are still normal Markdown callouts. In the screenshots and demo notes, that styling comes from [Callout Manager](https://github.com/eth-p/obsidian-callout-manager).
 

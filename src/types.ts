@@ -28,8 +28,9 @@ export interface ParsedBranchDocument {
 
 export interface ImportedBranchDocument {
   metadata: BranchTreeMetadata;
-  origin: "metadata" | "imported" | "reconciled";
+  origin: "metadata" | "markers" | "legacy" | "imported" | "reconciled";
   staleMetadata: BranchTreeMetadata | null;
+  needsVisibleMarkerMigration?: boolean;
 }
 
 export interface BlockLocation {

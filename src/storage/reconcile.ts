@@ -1,9 +1,10 @@
+import { diffChars } from "diff";
 import { DEFAULT_BLOCK_SEPARATOR } from "../constants";
-import { createEmptyTree, getRootBlocks } from "../model/tree";
+import { buildLinearOrder, createEmptyTree, getRootBlocks } from "../model/tree";
 import { ImportedBranchDocument, BranchBlock, BranchTreeMetadata } from "../types";
-import { nowIso } from "../utils";
+import { normalizeNewlines, nowIso } from "../utils";
 import { parseBranchDocument } from "./document";
-import { applyBodyHash, computeBodyHash, linearizeTree } from "./serializer";
+import { applyBodyHash, computeBodyHash, linearizeTree, linearizeTreeLegacy, normalizeMetadata, parseVisibleBlockMetadata } from "./serializer";
 
 function buildImportedBlock(content: string, order: number): BranchBlock {
   const timestamp = nowIso();
@@ -87,29 +88,161 @@ function importBodyToMetadata(body: string): BranchTreeMetadata {
   return applyBodyHash(tree);
 }
 
+function splitChunkContentAndAfter(chunk: string): { content: string; after: string } {
+  const trailingNewlines = chunk.match(/\n*$/)?.[0] ?? "";
+  return {
+    content: trailingNewlines.length > 0 ? chunk.slice(0, chunk.length - trailingNewlines.length) : chunk,
+    after: trailingNewlines
+  };
+}
+
+function translateLegacyBoundaryIndex(
+  diffParts: ReturnType<typeof diffChars>,
+  originalIndex: number
+): number {
+  let oldPosition = 0;
+  let newPosition = 0;
+
+  for (const part of diffParts) {
+    const length = part.value.length;
+    if (part.added) {
+      newPosition += length;
+      continue;
+    }
+
+    if (part.removed) {
+      if (originalIndex <= oldPosition + length) {
+        return newPosition;
+      }
+
+      oldPosition += length;
+      continue;
+    }
+
+    if (originalIndex <= oldPosition + length) {
+      return newPosition + (originalIndex - oldPosition);
+    }
+
+    oldPosition += length;
+    newPosition += length;
+  }
+
+  return newPosition;
+}
+
+function translateLegacyBodyToMetadata(body: string, storedMetadata: BranchTreeMetadata): BranchTreeMetadata {
+  const normalizedBody = normalizeNewlines(body);
+  const normalizedMetadata = normalizeMetadata(storedMetadata);
+  const legacyLinearized = linearizeTreeLegacy(normalizedMetadata);
+  const diffParts = diffChars(legacyLinearized.body, normalizedBody);
+  const ordered = buildLinearOrder(normalizedMetadata);
+  const prefixEnd = translateLegacyBoundaryIndex(diffParts, normalizedMetadata.prefix.length);
+  let oldCursor = normalizedMetadata.prefix.length;
+
+  return applyBodyHash({
+    ...normalizedMetadata,
+    prefix: normalizedBody.slice(0, prefixEnd),
+    blocks: ordered.map((block) => {
+      const oldChunkStart = oldCursor;
+      const oldChunkEnd = oldChunkStart + block.content.length + block.after.length;
+      const newChunkStart = translateLegacyBoundaryIndex(diffParts, oldChunkStart);
+      const newChunkEnd = translateLegacyBoundaryIndex(diffParts, oldChunkEnd);
+      const chunk = normalizedBody.slice(newChunkStart, newChunkEnd);
+      const { content, after } = splitChunkContentAndAfter(chunk);
+      oldCursor = oldChunkEnd;
+      return {
+        ...block,
+        content,
+        after
+      };
+    })
+  });
+}
+
+function mergeMarkerMetadataWithStoredExtras(
+  markerMetadata: BranchTreeMetadata,
+  storedMetadata: BranchTreeMetadata | null
+): BranchTreeMetadata {
+  if (!storedMetadata) {
+    return markerMetadata;
+  }
+
+  const storedById = new Map(storedMetadata.blocks.map((block) => [block.id, block]));
+  return {
+    ...markerMetadata,
+    blocks: markerMetadata.blocks.map((block) => {
+      const stored = storedById.get(block.id);
+      if (!stored) {
+        return block;
+      }
+
+      return {
+        ...block,
+        createdAt: stored.createdAt ?? block.createdAt,
+        updatedAt: stored.updatedAt ?? block.updatedAt,
+        collapsed: stored.collapsed
+      };
+    })
+  };
+}
+
 export function loadImportedBranchDocument(text: string): ImportedBranchDocument {
   const parsed = parseBranchDocument(text);
+  const visibleMarkerMetadata = parseVisibleBlockMetadata(parsed.body);
+  const hasStoredMetadataBlock = parsed.metadataRaw.length > 0;
 
-  if (parsed.metadata) {
-    const linearized = linearizeTree(parsed.metadata);
-    if (computeBodyHash(parsed.body) === computeBodyHash(linearized.body)) {
+  if (hasStoredMetadataBlock && visibleMarkerMetadata) {
+    const markerMetadata = applyBodyHash(mergeMarkerMetadataWithStoredExtras(visibleMarkerMetadata, parsed.metadata));
+    if (parsed.metadata) {
+      const linearized = linearizeTree(parsed.metadata);
+      if (computeBodyHash(parsed.body) === computeBodyHash(linearized.body)) {
+        return {
+          metadata: applyBodyHash(parsed.metadata),
+          origin: "metadata",
+          staleMetadata: null
+        };
+      }
+    }
+
+    return {
+      metadata: markerMetadata,
+      origin: "markers",
+      staleMetadata: parsed.metadata,
+      needsVisibleMarkerMigration: false
+    };
+  }
+
+  if (visibleMarkerMetadata) {
+    if (visibleMarkerMetadata.prefix.trim().length > 0) {
+      const importedMetadata = importBodyToMetadata(parsed.body);
       return {
-        metadata: applyBodyHash(parsed.metadata),
-        origin: "metadata",
+        metadata: importedMetadata,
+        origin: getRootBlocks(importedMetadata).length > 0 ? "imported" : "metadata",
         staleMetadata: null
       };
     }
 
     return {
-      metadata: importBodyToMetadata(parsed.body),
-      origin: "reconciled",
-      staleMetadata: parsed.metadata
+      metadata: applyBodyHash(visibleMarkerMetadata),
+      origin: "markers",
+      staleMetadata: null,
+      needsVisibleMarkerMigration: false
+    };
+  }
+
+  if (parsed.metadata) {
+    return {
+      metadata: translateLegacyBodyToMetadata(parsed.body, parsed.metadata),
+      origin: "legacy",
+      staleMetadata: null,
+      needsVisibleMarkerMigration: true
     };
   }
 
   return {
     metadata: importBodyToMetadata(parsed.body),
     origin: getRootBlocks(importBodyToMetadata(parsed.body)).length > 0 ? "imported" : "metadata",
-    staleMetadata: null
+    staleMetadata: null,
+    needsVisibleMarkerMigration: false
   };
 }

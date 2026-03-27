@@ -41,6 +41,7 @@
 
 - Open the same note in normal markdown view.
 - Confirm the note body reads like normal markdown.
+- Confirm each block starts with an `<!-- arbor:block:v1 ... -->` marker in source mode.
 - Confirm YAML frontmatter remains untouched.
 - Confirm hidden metadata sits at the end of the note.
 - Disable the plugin and confirm the note is still readable as markdown.
@@ -57,8 +58,16 @@
 - Edit the body directly.
 - Reopen Arbor.
 - Confirm the plugin does not silently lose content.
+- Confirm exact block recovery uses visible block markers when available.
 - Confirm the reconcile banner appears when fallback rebuild was used.
 - Run `Rebuild tree from metadata` and confirm the last saved branch structure can be restored.
+
+## Legacy Migration
+
+- Open an older Arbor note that still uses hidden metadata without visible block markers.
+- Confirm Arbor shows a short upgrade overlay.
+- Confirm the note is rewritten with visible `arbor:block:v1` markers.
+- Reopen the same note and confirm it no longer triggers another migration.
 
 ## Undo / Redo
 

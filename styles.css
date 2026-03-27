@@ -12,12 +12,71 @@
   color: var(--text-normal);
 }
 
+.arbor-loading-view {
+  height: 100%;
+  padding: 10px 14px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at top center, color-mix(in srgb, var(--interactive-accent) 8%, transparent), transparent 36%),
+    var(--background-primary);
+}
+
+.arbor-loading-view-panel {
+  width: min(420px, calc(100vw - 64px));
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 18%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--background-secondary) 94%, black 6%);
+  border-radius: 18px;
+  padding: 18px 20px 16px;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.28);
+  animation: arbor-loading-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transition: opacity 110ms ease, transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), filter 140ms ease;
+}
+
+.arbor-loading-view.is-resolving .arbor-loading-view-panel {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.985);
+  filter: blur(2px);
+}
+
+.arbor-loading-view-title {
+  margin: 0;
+  color: var(--text-normal);
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.arbor-loading-view-description {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+@keyframes arbor-loading-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .arbor-frame {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
   height: 100%;
+}
+
+.is-arbor-auto-opening-source {
+  opacity: 0 !important;
+  transition: none !important;
+  pointer-events: none !important;
 }
 
 .arbor-breadcrumbs {
@@ -169,6 +228,40 @@
   color: var(--text-muted);
   border-radius: 12px;
   padding: 10px 12px;
+}
+
+.arbor-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--background-primary) 68%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.arbor-loading-overlay-panel {
+  width: min(420px, calc(100vw - 64px));
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 18%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--background-secondary) 94%, black 6%);
+  border-radius: 18px;
+  padding: 18px 20px 16px;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.28);
+}
+
+.arbor-loading-overlay-title {
+  margin: 0;
+  color: var(--text-normal);
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.arbor-loading-overlay-description {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
 .arbor-search-overlay {

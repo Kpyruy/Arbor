@@ -1,9 +1,14 @@
-import { MarkdownView, normalizePath, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
-import { COMMANDS, METADATA_MARKER, VIEW_TYPE_ARBOR } from "./constants";
+import { MarkdownView, Menu, normalizePath, Notice, Platform, Plugin, TAbstractFile, TFile, TFolder, WorkspaceLeaf } from "obsidian";
+import { COMMANDS, VIEW_TYPE_ARBOR, VIEW_TYPE_ARBOR_LOADING } from "./constants";
 import { ARBOR_DEMO_NOTE } from "./demoNote";
+import { createEmptyTree } from "./model/tree";
+import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
-import { parseBranchDocument } from "./storage/document";
+import { buildBranchDocument } from "./storage/document";
+import { applyBodyHash } from "./storage/serializer";
 import { ArborSettings } from "./types";
+import { getNextNumberedName } from "./utils";
+import { ArborLoadingView } from "./view/ArborLoadingView";
 import { ArborView } from "./view/ArborView";
 
 interface ArborPluginData {
@@ -16,11 +21,15 @@ export default class ArborPlugin extends Plugin {
   private readonly ownWrites = new Map<string, number>();
   private readonly suppressedAutoOpen = new Map<string, number>();
   private readonly managedNotePaths = new Set<string>();
+  private readonly explicitArborOpenPaths = new Map<string, number>();
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    await this.pruneManagedNoteCache();
 
     this.registerView(VIEW_TYPE_ARBOR, (leaf) => new ArborView(leaf, this));
+    this.registerView(VIEW_TYPE_ARBOR_LOADING, (leaf) => new ArborLoadingView(leaf, this));
+    this.installLeafOpenInterception();
     this.addSettingTab(new ArborSettingTab(this.app, this));
 
     this.registerEvent(this.app.vault.on("modify", (file) => {
@@ -35,19 +44,33 @@ export default class ArborPlugin extends Plugin {
         void view.handleFileModified(file);
       });
     }));
+    this.registerEvent(this.app.vault.on("delete", (file) => {
+      this.handleVaultDelete(file);
+    }));
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+      this.handleVaultRename(file, oldPath);
+    }));
     this.registerEvent(this.app.workspace.on("file-open", (file) => {
       void this.handleFileOpen(file);
     }));
     this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
       void this.handleActiveLeafChange(leaf);
     }));
+    this.registerEvent(this.app.workspace.on("file-menu", (menu, file, source) => {
+      this.handleFileMenu(menu, file, source);
+    }));
+    this.registerEvent(this.app.workspace.on("files-menu", (menu, files, source) => {
+      this.handleFilesMenu(menu, files, source);
+    }));
 
     this.registerCommands();
   }
 
   override onunload(): void {
-    this.app.workspace.getLeavesOfType(VIEW_TYPE_ARBOR).forEach((leaf) => {
-      void leaf.detach();
+    [VIEW_TYPE_ARBOR, VIEW_TYPE_ARBOR_LOADING].forEach((viewType) => {
+      this.app.workspace.getLeavesOfType(viewType).forEach((leaf) => {
+        void leaf.detach();
+      });
     });
   }
 
@@ -115,6 +138,24 @@ export default class ArborPlugin extends Plugin {
     void this.savePluginData();
   }
 
+  expectExplicitArborOpen(path: string): void {
+    this.explicitArborOpenPaths.set(path, (this.explicitArborOpenPaths.get(path) ?? 0) + 1);
+  }
+
+  consumeExplicitArborOpen(path: string): boolean {
+    const count = this.explicitArborOpenPaths.get(path) ?? 0;
+    if (count <= 0) {
+      return false;
+    }
+
+    if (count === 1) {
+      this.explicitArborOpenPaths.delete(path);
+    } else {
+      this.explicitArborOpenPaths.set(path, count - 1);
+    }
+    return true;
+  }
+
   private consumeSuppressedAutoOpen(path: string): boolean {
     const count = this.suppressedAutoOpen.get(path) ?? 0;
     if (count <= 0) {
@@ -127,6 +168,98 @@ export default class ArborPlugin extends Plugin {
       this.suppressedAutoOpen.set(path, count - 1);
     }
     return true;
+  }
+
+  async resolveLoadingLeafOpen(
+    file: TFile,
+    leaf: WorkspaceLeaf,
+    options?: {
+      beforeSwap?: () => Promise<void> | void;
+    }
+  ): Promise<void> {
+    if (leaf.view.getViewType() !== VIEW_TYPE_ARBOR_LOADING) {
+      return;
+    }
+
+    const inspection = await this.inspectManagedBranchNote(file);
+    const explicitArborOpen = this.consumeExplicitArborOpen(file.path);
+    const beforeSwap = options?.beforeSwap;
+    if (resolveLoadingViewTarget(inspection, explicitArborOpen) === "arbor") {
+      await beforeSwap?.();
+      await leaf.setViewState({
+        type: VIEW_TYPE_ARBOR,
+        active: true,
+        state: {
+          file: file.path
+        }
+      });
+      await this.app.workspace.revealLeaf(leaf);
+      return;
+    }
+
+    this.suppressAutoOpenOnce(file.path);
+    await beforeSwap?.();
+    await leaf.setViewState({
+      type: "markdown",
+      active: true,
+      state: {
+        file: file.path
+      }
+    });
+    await this.app.workspace.revealLeaf(leaf);
+  }
+
+  private installLeafOpenInterception(): void {
+    const descriptor = Object.getOwnPropertyDescriptor(WorkspaceLeaf.prototype, "setViewState");
+    const original = descriptor?.value as typeof WorkspaceLeaf.prototype.setViewState | undefined;
+    if (typeof original !== "function") {
+      return;
+    }
+
+    const rewriteViewStateForManagedOpen = this.rewriteViewStateForManagedOpen.bind(this);
+    const patched: typeof WorkspaceLeaf.prototype.setViewState = function (this: WorkspaceLeaf, state, ...args) {
+      return Reflect.apply(original, this, [rewriteViewStateForManagedOpen(state), ...args]);
+    };
+
+    WorkspaceLeaf.prototype.setViewState = patched;
+    this.register(() => {
+      if (WorkspaceLeaf.prototype.setViewState === patched) {
+        WorkspaceLeaf.prototype.setViewState = original;
+      }
+    });
+  }
+
+  private rewriteViewStateForManagedOpen(state: Parameters<WorkspaceLeaf["setViewState"]>[0]): Parameters<WorkspaceLeaf["setViewState"]>[0] {
+    const requestedViewType = typeof state?.type === "string" ? state.type : "";
+    const filePath = typeof state?.state?.file === "string" ? state.state.file : null;
+    const isSuppressed = filePath ? this.consumeSuppressedAutoOpen(filePath) : false;
+    if (!shouldRouteMarkdownOpenToLoadingView({
+      requestedViewType,
+      filePath,
+      autoOpenManagedNotes: this.settings.autoOpenManagedNotes,
+      isMobile: Platform.isMobileApp,
+      isSuppressed,
+      managedPathHint: filePath ? this.managedNotePaths.has(filePath) : false
+    })) {
+      return state;
+    }
+
+    const file = filePath ? this.app.vault.getAbstractFileByPath(filePath) : null;
+    if (!(file instanceof TFile) || file.extension !== "md") {
+      if (filePath) {
+        this.forgetManagedNote(filePath);
+      }
+      return state;
+    }
+
+    return {
+      ...state,
+      type: VIEW_TYPE_ARBOR_LOADING,
+      state: {
+        ...state.state,
+        file: file.path
+      }
+    };
   }
 
   private registerCommands(): void {
@@ -268,14 +401,25 @@ export default class ArborPlugin extends Plugin {
     return this.openBranchViewForFile(file);
   }
 
-  async openBranchViewForFile(file: TFile): Promise<ArborView | null> {
+  async openBranchViewForFile(
+    file: TFile,
+    options?: {
+      preferredLeaf?: WorkspaceLeaf | null;
+      splitIfNeeded?: boolean;
+    }
+  ): Promise<ArborView | null> {
     if (Platform.isMobileApp) {
       new Notice("Arbor is desktop-first. Mobile support is intentionally limited.");
       return null;
     }
 
-    const existingLeaf = this.findLeafForFile(file);
-    const leaf = existingLeaf ?? this.app.workspace.getLeaf("split", this.settings.splitDirection);
+    const existingLeaf = this.findManagedLeafForFile(file);
+    const leaf = existingLeaf
+      ?? options?.preferredLeaf
+      ?? (options?.splitIfNeeded === false
+        ? this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf(false)
+        : this.app.workspace.getLeaf("split", this.settings.splitDirection));
+    this.expectExplicitArborOpen(file.path);
     await leaf.setViewState({
       type: VIEW_TYPE_ARBOR,
       active: true,
@@ -307,11 +451,35 @@ export default class ArborPlugin extends Plugin {
 
   async createArborNote(openInBranchView: boolean): Promise<TFile | null> {
     const folderPath = this.getCreationFolderPath();
-    const filePath = this.buildAvailableNotePath(folderPath, "Arbor note");
-    const file = await this.app.vault.create(filePath, "");
+    const filePath = this.buildAvailableUntitledNotePath(folderPath);
+    const file = await this.app.vault.create(filePath, this.buildInitialArborNoteDocument());
+    this.rememberManagedNote(file.path);
 
     if (openInBranchView) {
-      await this.openBranchViewForFile(file);
+      await this.openBranchViewForFile(file, {
+        preferredLeaf: this.app.workspace.getMostRecentLeaf(),
+        splitIfNeeded: false
+      });
+    } else {
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(file);
+      await this.app.workspace.revealLeaf(leaf);
+    }
+
+    return file;
+  }
+
+  async createArborNoteNear(target: TAbstractFile | null, openInBranchView = true): Promise<TFile | null> {
+    const folderPath = this.resolveCreationFolderPath(target);
+    const filePath = this.buildAvailableUntitledNotePath(folderPath);
+    const file = await this.app.vault.create(filePath, this.buildInitialArborNoteDocument());
+    this.rememberManagedNote(file.path);
+
+    if (openInBranchView) {
+      await this.openBranchViewForFile(file, {
+        preferredLeaf: this.app.workspace.getMostRecentLeaf(),
+        splitIfNeeded: false
+      });
     } else {
       const leaf = this.app.workspace.getLeaf(false);
       await leaf.openFile(file);
@@ -323,7 +491,24 @@ export default class ArborPlugin extends Plugin {
 
   private getCreationFolderPath(): string {
     const sourceFile = this.getActiveMarkdownFile() ?? this.getActiveBranchView()?.file ?? null;
-    const folderPath = sourceFile?.parent?.path ?? "";
+    return this.resolveCreationFolderPath(sourceFile);
+  }
+
+  private buildInitialArborNoteDocument(): string {
+    return buildBranchDocument(
+      "",
+      "",
+      applyBodyHash(createEmptyTree()),
+      this.settings.metadataBlockStyle
+    );
+  }
+
+  private resolveCreationFolderPath(target: TAbstractFile | null): string {
+    const folderPath = target instanceof TFolder
+      ? target.path
+      : target instanceof TFile
+        ? target.parent?.path ?? ""
+        : "";
     return folderPath === "/" ? "" : folderPath;
   }
 
@@ -340,10 +525,26 @@ export default class ArborPlugin extends Plugin {
     }
   }
 
-  private findLeafForFile(file: TFile): WorkspaceLeaf | null {
+  private buildAvailableUntitledNotePath(folderPath: string): string {
+    const folder = folderPath
+      ? this.app.vault.getAbstractFileByPath(folderPath)
+      : this.app.vault.getRoot();
+    const existingNames = folder instanceof TFolder
+      ? folder.children
+          .filter((child): child is TFile => child instanceof TFile && child.extension === "md")
+          .map((child) => child.basename)
+      : [];
+    const nextName = getNextNumberedName(existingNames, "Untitled");
+    return normalizePath(folderPath ? `${folderPath}/${nextName}.md` : `${nextName}.md`);
+  }
+
+  private findManagedLeafForFile(file: TFile): WorkspaceLeaf | null {
     return this.app.workspace.getLeavesOfType(VIEW_TYPE_ARBOR).find((leaf) => {
       const view = leaf.view;
       return view instanceof ArborView && view.file?.path === file.path;
+    }) ?? this.app.workspace.getLeavesOfType(VIEW_TYPE_ARBOR_LOADING).find((leaf) => {
+      const view = leaf.view;
+      return view instanceof ArborLoadingView && view.file?.path === file.path;
     }) ?? null;
   }
 
@@ -352,15 +553,30 @@ export default class ArborPlugin extends Plugin {
       return;
     }
 
+    if (this.findManagedLeafForFile(file)) {
+      return;
+    }
+
     if (this.consumeSuppressedAutoOpen(file.path)) {
       return;
     }
 
-    if (!(await this.isManagedBranchNote(file))) {
+    const releaseMask = this.managedNotePaths.has(file.path)
+      ? this.maskLeafForManagedFile(file)
+      : null;
+
+    if (this.managedNotePaths.has(file.path)) {
+      await this.autoOpenManagedNote(file, null, releaseMask);
+      void this.refreshManagedStatus(file);
       return;
     }
 
-    await this.autoOpenManagedNote(file);
+    if (!(await this.isManagedBranchNote(file))) {
+      releaseMask?.();
+      return;
+    }
+
+    await this.autoOpenManagedNote(file, null, releaseMask);
   }
 
   private async handleActiveLeafChange(leaf: WorkspaceLeaf | null): Promise<void> {
@@ -368,7 +584,7 @@ export default class ArborPlugin extends Plugin {
       return;
     }
 
-    if (leaf.view instanceof ArborView) {
+    if (leaf.view instanceof ArborView || leaf.view instanceof ArborLoadingView) {
       return;
     }
 
@@ -381,50 +597,74 @@ export default class ArborPlugin extends Plugin {
       return;
     }
 
-    if (!(await this.isManagedBranchNote(view.file))) {
+    const releaseMask = this.managedNotePaths.has(view.file.path)
+      ? this.maskLeafDuringAutoOpen(leaf)
+      : null;
+
+    if (this.findManagedLeafForFile(view.file)) {
+      releaseMask?.();
       return;
     }
 
-    await this.autoOpenManagedNote(view.file, leaf);
+    if (this.managedNotePaths.has(view.file.path)) {
+      await this.autoOpenManagedNote(view.file, leaf, releaseMask);
+      void this.refreshManagedStatus(view.file);
+      return;
+    }
+
+    if (!(await this.isManagedBranchNote(view.file))) {
+      releaseMask?.();
+      return;
+    }
+
+    await this.autoOpenManagedNote(view.file, leaf, releaseMask);
   }
 
-  private async autoOpenManagedNote(file: TFile, preferredLeaf?: WorkspaceLeaf | null): Promise<void> {
+  private async autoOpenManagedNote(
+    file: TFile,
+    preferredLeaf?: WorkspaceLeaf | null,
+    existingReleaseMask?: (() => void) | null
+  ): Promise<void> {
     for (let attempt = 0; attempt < 4; attempt += 1) {
+      const managedLeaf = this.findManagedLeafForFile(file);
+      if (managedLeaf) {
+        existingReleaseMask?.();
+        return;
+      }
+
       const leaf = this.findMarkdownLeafForFile(file, preferredLeaf);
       if (leaf) {
-        await leaf.setViewState({
-          type: VIEW_TYPE_ARBOR,
-          active: true,
-          state: {
-            file: file.path
-          }
-        });
-        await this.app.workspace.revealLeaf(leaf);
+        const releaseMask = existingReleaseMask ?? this.maskLeafDuringAutoOpen(leaf);
+        try {
+          await leaf.setViewState({
+            type: VIEW_TYPE_ARBOR_LOADING,
+            active: true,
+            state: {
+              file: file.path
+            }
+          });
+          await this.app.workspace.revealLeaf(leaf);
+        } finally {
+          window.setTimeout(releaseMask, 180);
+        }
         return;
       }
 
       await this.wait(40 * (attempt + 1));
     }
+
+    existingReleaseMask?.();
   }
 
   private async isManagedBranchNote(file: TFile): Promise<boolean> {
-    if (this.managedNotePaths.has(file.path)) {
-      return true;
-    }
-
-    const text = await this.app.vault.cachedRead(file);
-    if (!this.containsMetadataMarker(text)) {
+    const inspection = await this.inspectManagedBranchNote(file);
+    if (!inspection.autoManaged) {
       this.forgetManagedNote(file.path);
       return false;
     }
 
-    const managed = Boolean(parseBranchDocument(text).metadata);
-    if (managed) {
-      this.rememberManagedNote(file.path);
-    } else {
-      this.forgetManagedNote(file.path);
-    }
-    return managed;
+    this.rememberManagedNote(file.path);
+    return true;
   }
 
   private findMarkdownLeafForFile(file: TFile, preferredLeaf?: WorkspaceLeaf | null): WorkspaceLeaf | null {
@@ -477,16 +717,140 @@ export default class ArborPlugin extends Plugin {
   }
 
   private async refreshManagedStatus(file: TFile): Promise<void> {
-    const text = await this.app.vault.cachedRead(file);
-    const managed = this.containsMetadataMarker(text) && Boolean(parseBranchDocument(text).metadata);
-    if (managed) {
+    const inspection = await this.inspectManagedBranchNote(file);
+    if (inspection.autoManaged) {
       this.rememberManagedNote(file.path);
     } else {
       this.forgetManagedNote(file.path);
     }
   }
 
-  private containsMetadataMarker(text: string): boolean {
-    return text.includes(METADATA_MARKER);
+  private async pruneManagedNoteCache(): Promise<void> {
+    if (this.managedNotePaths.size === 0) {
+      return;
+    }
+
+    let changed = false;
+    for (const path of [...this.managedNotePaths]) {
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (!(file instanceof TFile) || file.extension !== "md") {
+        this.managedNotePaths.delete(path);
+        changed = true;
+        continue;
+      }
+
+      const inspection = await this.inspectManagedBranchNote(file);
+      if (!inspection.autoManaged) {
+        this.managedNotePaths.delete(path);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await this.savePluginData();
+    }
+  }
+
+  private handleVaultDelete(file: TAbstractFile): void {
+    if (file instanceof TFile) {
+      this.forgetManagedNote(file.path);
+      return;
+    }
+
+    this.forgetManagedPathsUnder(file.path);
+  }
+
+  private handleVaultRename(file: TAbstractFile, oldPath: string): void {
+    if (file instanceof TFile) {
+      if (!this.managedNotePaths.has(oldPath)) {
+        return;
+      }
+
+      this.managedNotePaths.delete(oldPath);
+      this.managedNotePaths.add(file.path);
+      void this.savePluginData();
+      return;
+    }
+
+    this.moveManagedPathsUnder(oldPath, file.path);
+  }
+
+  private handleFileMenu(menu: Menu, file: TAbstractFile, source: string): void {
+    if (Platform.isMobileApp) {
+      return;
+    }
+
+    this.addNewArborMenuItem(menu, file, source);
+  }
+
+  private handleFilesMenu(menu: Menu, files: TAbstractFile[], source: string): void {
+    if (Platform.isMobileApp || files.length !== 1) {
+      return;
+    }
+
+    this.addNewArborMenuItem(menu, files[0], source);
+  }
+
+  private addNewArborMenuItem(menu: Menu, file: TAbstractFile, source: string): void {
+    if (source === "link-context-menu") {
+      return;
+    }
+
+    menu.addItem((item) => {
+      item
+        .setTitle("New arbor note")
+        .setIcon("git-fork")
+        .setSection("new")
+        .onClick(() => void this.createArborNoteNear(file, true));
+    });
+  }
+
+  private forgetManagedPathsUnder(folderPath: string): void {
+    const prefix = `${folderPath}/`;
+    let changed = false;
+    for (const path of [...this.managedNotePaths]) {
+      if (path === folderPath || path.startsWith(prefix)) {
+        this.managedNotePaths.delete(path);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      void this.savePluginData();
+    }
+  }
+
+  private moveManagedPathsUnder(oldFolderPath: string, newFolderPath: string): void {
+    const prefix = `${oldFolderPath}/`;
+    let changed = false;
+    for (const path of [...this.managedNotePaths]) {
+      if (path === oldFolderPath || path.startsWith(prefix)) {
+        this.managedNotePaths.delete(path);
+        const suffix = path.slice(oldFolderPath.length);
+        this.managedNotePaths.add(`${newFolderPath}${suffix}`);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      void this.savePluginData();
+    }
+  }
+
+  private maskLeafForManagedFile(file: TFile, preferredLeaf?: WorkspaceLeaf | null): (() => void) | null {
+    const leaf = this.findMarkdownLeafForFile(file, preferredLeaf);
+    return leaf ? this.maskLeafDuringAutoOpen(leaf) : null;
+  }
+
+  private async inspectManagedBranchNote(file: TFile): Promise<ReturnType<typeof inspectManagedBranchDocumentText>> {
+    const text = await this.app.vault.cachedRead(file);
+    return inspectManagedBranchDocumentText(text);
+  }
+
+  private maskLeafDuringAutoOpen(leaf: WorkspaceLeaf): () => void {
+    const shell = leaf.view.containerEl.closest(".workspace-leaf");
+    const target = shell instanceof HTMLElement ? shell : leaf.view.containerEl;
+    target.addClass("is-arbor-auto-opening-source");
+    return () => target.removeClass("is-arbor-auto-opening-source");
   }
 }

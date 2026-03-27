@@ -1,5 +1,7 @@
 export const VIEW_TYPE_ARBOR = "arbor-view";
+export const VIEW_TYPE_ARBOR_LOADING = "arbor-loading-view";
 export const METADATA_MARKER = "arbor:metadata:v1";
+export const VISIBLE_BLOCK_MARKER = "arbor:block:v1";
 export const DEFAULT_BLOCK_SEPARATOR = "\n\n";
 export const ROOT_COLUMN_LABEL = "Root";
 export const HISTORY_LIMIT = 200;

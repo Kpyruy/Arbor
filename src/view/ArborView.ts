@@ -51,12 +51,14 @@ import {
   BranchColumnModel,
   BranchHistoryEntry,
   BranchTreeMetadata,
+  ImportedBranchDocument,
   LinearizedBranchDocument,
   ArborSettings
 } from "../types";
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
 import { loadImportedBranchDocument } from "../storage/reconcile";
 import { applyBodyHash, linearizeTree } from "../storage/serializer";
+import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 
 type EditingOrigin = "card" | "preview";
@@ -74,8 +76,13 @@ interface LoadedFileState {
   metadata: BranchTreeMetadata;
   selectedBlockId: BranchBlockId | null;
   staleMetadata: BranchTreeMetadata | null;
-  origin: "metadata" | "imported" | "reconciled";
+  origin: ImportedBranchDocument["origin"];
   linearized: LinearizedBranchDocument;
+}
+
+interface LoadingOverlayState {
+  title: string;
+  description: string;
 }
 
 interface DragState {
@@ -191,6 +198,7 @@ export class ArborView extends FileView {
   private searchMetaEl: HTMLElement | null = null;
   private searchClearEl: HTMLButtonElement | null = null;
   private bannerEl: HTMLElement | null = null;
+  private loadingOverlayEl: HTMLElement | null = null;
   private bodyEl: HTMLElement | null = null;
   private columnsStageEl: HTMLElement | null = null;
   private columnsViewportEl: HTMLElement | null = null;
@@ -206,6 +214,7 @@ export class ArborView extends FileView {
   private shouldFocusSearchInput = false;
   private hoveredBlockId: BranchBlockId | null = null;
   private viewContext: BranchViewContext | null = null;
+  private loadingState: LoadingOverlayState | null = null;
   private readonly columnElementMap = new Map<string, HTMLElement>();
   private readonly currentColumnMap = new Map<string, BranchColumnModel>();
   private pendingFocusFrame: number | null = null;
@@ -247,36 +256,17 @@ export class ArborView extends FileView {
   }
 
   async onLoadFile(file: TFile): Promise<void> {
-    const text = await this.app.vault.cachedRead(file);
-    const parsed = parseBranchDocument(text);
-    const loaded = loadImportedBranchDocument(text);
-    const selectedBlockId = ensureSelectedBlock(loaded.metadata, this.state?.selectedBlockId ?? null);
+    const prepared = await this.prepareLoadedFileState(file, this.state?.selectedBlockId ?? null);
+    if (!prepared) {
+      return;
+    }
 
-    this.state = {
-      frontmatter: parsed.frontmatter,
-      metadata: loaded.metadata,
-      selectedBlockId,
-      staleMetadata: loaded.staleMetadata,
-      origin: loaded.origin,
-      linearized: linearizeTree(loaded.metadata)
-    };
-    this.plugin.rememberManagedNote(file.path);
-
-    if (loaded.origin === "reconciled") {
+    this.state = prepared;
+    if (this.state.origin === "reconciled") {
       new Notice("The tree was rebuilt from the visible Markdown body to avoid losing plain editor changes.");
     }
 
-    this.history.clear();
-    this.editingSession = null;
-    this.dragState = null;
-    this.previewSearchQuery = "";
-    this.isSearchOpen = false;
-    this.showFullMiniMap = false;
-    this.shouldFocusSearchInput = false;
-    this.hoveredBlockId = null;
-    this.viewContext = null;
-    this.pendingFocusBlockId = selectedBlockId;
-    this.pendingScrollBlockId = selectedBlockId;
+    this.resetLoadedUiState(this.state.selectedBlockId);
     this.render();
   }
 
@@ -306,6 +296,7 @@ export class ArborView extends FileView {
     this.shouldFocusSearchInput = false;
     this.hoveredBlockId = null;
     this.viewContext = null;
+    this.loadingState = null;
     this.teardownShell();
   }
 
@@ -349,20 +340,130 @@ export class ArborView extends FileView {
       return;
     }
 
-    const text = await this.app.vault.cachedRead(this.file);
-    const parsed = parseBranchDocument(text);
-    const loaded = loadImportedBranchDocument(text);
-    this.state = {
+    const prepared = await this.prepareLoadedFileState(this.file, this.state?.selectedBlockId ?? null);
+    if (!prepared) {
+      return;
+    }
+
+    this.state = prepared;
+    this.pendingFocusBlockId = this.state.selectedBlockId;
+    this.pendingScrollBlockId = this.state.selectedBlockId;
+    this.render();
+  }
+
+  private buildLoadedFileState(
+    parsed: ReturnType<typeof parseBranchDocument>,
+    loaded: ImportedBranchDocument,
+    preferredSelectedBlockId: BranchBlockId | null
+  ): LoadedFileState {
+    const selectedBlockId = ensureSelectedBlock(loaded.metadata, preferredSelectedBlockId);
+    return {
       frontmatter: parsed.frontmatter,
       metadata: loaded.metadata,
-      selectedBlockId: ensureSelectedBlock(loaded.metadata, this.state?.selectedBlockId ?? null),
+      selectedBlockId,
       staleMetadata: loaded.staleMetadata,
       origin: loaded.origin,
       linearized: linearizeTree(loaded.metadata)
     };
-    this.pendingFocusBlockId = this.state.selectedBlockId;
-    this.pendingScrollBlockId = this.state.selectedBlockId;
-    this.render();
+  }
+
+  private resetLoadedUiState(selectedBlockId: BranchBlockId | null): void {
+    this.history.clear();
+    this.editingSession = null;
+    this.dragState = null;
+    this.previewSearchQuery = "";
+    this.isSearchOpen = false;
+    this.showFullMiniMap = false;
+    this.shouldFocusSearchInput = false;
+    this.hoveredBlockId = null;
+    this.viewContext = null;
+    this.pendingFocusBlockId = selectedBlockId;
+    this.pendingScrollBlockId = selectedBlockId;
+  }
+
+  private async readLoadedFileState(
+    file: TFile,
+    preferredSelectedBlockId: BranchBlockId | null
+  ): Promise<{
+    state: LoadedFileState;
+    loaded: ImportedBranchDocument;
+    parsed: ReturnType<typeof parseBranchDocument>;
+  }> {
+    const text = await this.app.vault.cachedRead(file);
+    const parsed = parseBranchDocument(text);
+    const loaded = loadImportedBranchDocument(text);
+    return {
+      state: this.buildLoadedFileState(parsed, loaded, preferredSelectedBlockId),
+      loaded,
+      parsed
+    };
+  }
+
+  private async prepareLoadedFileState(
+    file: TFile,
+    preferredSelectedBlockId: BranchBlockId | null
+  ): Promise<LoadedFileState | null> {
+    const initial = await this.readLoadedFileState(file, preferredSelectedBlockId);
+    const expectedArborOpen = this.plugin.consumeExplicitArborOpen(file.path);
+    const staysInArbor = Boolean(initial.parsed.metadata)
+      || (expectedArborOpen && canOpenImportedBranchDocumentInArbor(initial.loaded));
+    if (!staysInArbor) {
+      await this.openFileInMarkdownView(file);
+      return null;
+    }
+
+    this.state = initial.state;
+
+    if (!initial.loaded.needsVisibleMarkerMigration || initial.loaded.origin !== "legacy") {
+      return initial.state;
+    }
+
+    const loadingStartedAt = performance.now();
+    this.loadingState = {
+      title: "Upgrading note structure",
+      description: "Rewriting this note to Arbor's precise block format."
+    };
+    this.ensureShell();
+    this.syncLoadingOverlay();
+    await this.waitForNextPaint();
+
+    try {
+      await this.persistState("Upgrade note structure");
+      const remainingLoadingTime = 220 - (performance.now() - loadingStartedAt);
+      if (remainingLoadingTime > 0) {
+        await this.wait(remainingLoadingTime);
+      }
+      const migrated = await this.readLoadedFileState(file, initial.state.selectedBlockId);
+      this.state = migrated.state;
+      this.plugin.rememberManagedNote(file.path);
+      return migrated.state;
+    } finally {
+      this.loadingState = null;
+    }
+  }
+
+  private waitForNextPaint(): Promise<void> {
+    return new Promise((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  }
+
+  private wait(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  private async openFileInMarkdownView(file: TFile): Promise<void> {
+    this.plugin.suppressAutoOpenOnce(file.path);
+    await this.leaf.setViewState({
+      type: "markdown",
+      active: true,
+      state: {
+        file: file.path
+      }
+    });
+    await this.app.workspace.revealLeaf(this.leaf);
   }
 
   selectBlock(blockId: BranchBlockId | null, options?: { focus?: boolean }): void {
@@ -841,6 +942,7 @@ export class ArborView extends FileView {
     this.viewContext = this.buildViewContext();
     this.syncSearchOverlay(this.viewContext);
     this.syncBanner();
+    this.syncLoadingOverlay();
     const preservedSceneWidth = this.armSceneWidthForPendingScroll();
 
     const columns = buildColumnModels(this.state.metadata, this.state.selectedBlockId, this.plugin.settings.previewSnippetLength);
@@ -861,7 +963,8 @@ export class ArborView extends FileView {
       this.columnsEl &&
       this.bodyEl &&
       this.breadcrumbsEl &&
-      this.bannerEl
+      this.bannerEl &&
+      this.loadingOverlayEl
     ) {
       return;
     }
@@ -893,6 +996,7 @@ export class ArborView extends FileView {
     this.viewMenuButtonEl.addEventListener("click", (event) => this.openViewMenu(event));
     this.viewMenuButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
     this.bannerEl = this.frameEl.createDiv({ cls: "arbor-banner" });
+    this.loadingOverlayEl = this.frameEl.createDiv({ cls: "arbor-loading-overlay" });
     this.bodyEl = this.frameEl.createDiv({ cls: "arbor-body" });
     this.columnsStageEl = this.bodyEl.createDiv({ cls: "arbor-columns-stage" });
     this.columnsViewportEl = this.columnsStageEl.createDiv({ cls: "arbor-columns-viewport" });
@@ -937,6 +1041,7 @@ export class ArborView extends FileView {
     this.searchMetaEl = null;
     this.searchClearEl = null;
     this.bannerEl = null;
+    this.loadingOverlayEl = null;
     this.bodyEl = null;
     this.columnsStageEl = null;
     this.columnsViewportEl = null;
@@ -1060,6 +1165,29 @@ export class ArborView extends FileView {
         text: "This note changed in plain Markdown mode. The branch tree was rebuilt from the visible note body."
       });
     }
+  }
+
+  private syncLoadingOverlay(): void {
+    if (!this.loadingOverlayEl) {
+      return;
+    }
+
+    const activeState = this.loadingState;
+    this.loadingOverlayEl.empty();
+    this.loadingOverlayEl.setCssStyles({ display: activeState ? "flex" : "none" });
+    if (!activeState) {
+      return;
+    }
+
+    const panel = this.loadingOverlayEl.createDiv({ cls: "arbor-loading-overlay-panel" });
+    panel.createEl("h2", {
+      cls: "arbor-loading-overlay-title",
+      text: activeState.title
+    });
+    panel.createEl("p", {
+      cls: "arbor-loading-overlay-description",
+      text: activeState.description
+    });
   }
 
   private buildViewContext(): BranchViewContext {
@@ -2911,6 +3039,7 @@ export class ArborView extends FileView {
     this.shouldFocusSearchInput = false;
     this.hoveredBlockId = null;
     this.viewContext = null;
+    this.loadingState = null;
     this.teardownShell();
   }
 
@@ -2934,6 +3063,8 @@ export class ArborView extends FileView {
       this.plugin.markOwnWrite(this.file.path);
       await this.app.vault.process(this.file, () => document);
       this.plugin.rememberManagedNote(this.file.path);
+      this.state.origin = "metadata";
+      this.state.staleMetadata = null;
     } catch (error) {
       console.error(`[Arbor] Failed to persist state after ${reason}`, error);
       new Notice(`Arbor could not save the note after "${reason}".`);

@@ -34,6 +34,30 @@ export function ensureBlockAfter(after: string | undefined, fallback = "\n\n"): 
   return after === undefined ? fallback : after;
 }
 
+export function getNextNumberedName(existingNames: string[], baseName: string): string {
+  const escapedBaseName = escapeRegExp(baseName);
+  const pattern = new RegExp(`^${escapedBaseName}(?:\\s+(\\d+))?$`);
+  let highestIndex = -1;
+
+  existingNames.forEach((name) => {
+    const match = name.match(pattern);
+    if (!match) {
+      return;
+    }
+
+    const index = match[1] ? Number(match[1]) : 0;
+    if (Number.isInteger(index) && index > highestIndex) {
+      highestIndex = index;
+    }
+  });
+
+  if (highestIndex < 0) {
+    return baseName;
+  }
+
+  return `${baseName} ${highestIndex + 1}`;
+}
+
 export function escapeRegExp(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
