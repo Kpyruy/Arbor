@@ -1,7 +1,7 @@
 {
   "id": "arbor",
   "name": "Arbor",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "minAppVersion": "1.5.12",
   "description": "Write notes as branching Markdown cards while keeping a normal note as the source of truth.",
   "author": "Kpyruy",

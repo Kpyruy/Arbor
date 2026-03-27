@@ -2,6 +2,26 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.2.0 - 2026-03-27
+
+Precise note format and opening-flow upgrade.
+
+### Added
+
+- added visible `arbor:block:v1` markers before each block while keeping hidden Arbor metadata at the end of the file
+- added a dedicated `arbor-loading` view for managed notes opened from the file explorer
+- added exact migration from legacy metadata-only Arbor notes to the new marker-backed format
+- added `New arbor note` in the file explorer menu with predictable `Untitled`, `Untitled 1`, `Untitled 2` numbering
+- added reviewer-facing tests for opening rules, marker parsing, migration, and false-positive protection
+
+### Changed
+
+- Arbor now restores structure from visible markers precisely instead of falling back to coarse heading-only recovery
+- managed-note auto-open now trusts metadata-backed Arbor notes instead of marker-like snippets in normal markdown files
+- managed notes open through an Arbor-controlled loading shell instead of briefly showing the standard markdown view
+- improved created note handling so new Arbor notes open in the main pane instead of spawning a side split
+- tightened runtime cache invalidation for managed notes across modify, rename, and delete events
+
 ## 0.1.9 - 2026-03-26
 
 Local reviewer-check setup.
