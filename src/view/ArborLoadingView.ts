@@ -24,9 +24,10 @@ export class ArborLoadingView extends FileView {
     return "git-fork";
   }
 
-  override async onOpen(): Promise<void> {
+  override onOpen(): Promise<void> {
     this.render();
     this.queueResolve();
+    return Promise.resolve();
   }
 
   clear(): void {
@@ -34,17 +35,19 @@ export class ArborLoadingView extends FileView {
     this.contentEl.empty();
   }
 
-  override async onLoadFile(file: TFile): Promise<void> {
+  override onLoadFile(file: TFile): Promise<void> {
     this.render();
     this.queueResolve(file);
+    return Promise.resolve();
   }
 
-  override async onUnloadFile(): Promise<void> {
+  override onUnloadFile(): Promise<void> {
     this.resolveStarted = false;
     this.clearResolveRetryTimer();
+    return Promise.resolve();
   }
 
-  override async onClose(): Promise<void> {
+  override onClose(): Promise<void> {
     this.resolveStarted = false;
     this.clearResolveRetryTimer();
     return super.onClose();

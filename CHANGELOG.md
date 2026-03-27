@@ -2,6 +2,14 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.2.1 - 2026-03-27
+
+Submission review follow-up.
+
+### Changed
+
+- removed unnecessary `async` declarations from the loading view lifecycle methods flagged by the review bot
+
 ## 0.2.0 - 2026-03-27
 
 Precise note format and opening-flow upgrade.
