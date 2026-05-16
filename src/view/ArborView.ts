@@ -1469,7 +1469,7 @@ export class ArborView extends FileView {
 
     const existingChildren = new Map<string, HTMLElement>();
     Array.from(cardsEl.children).forEach((child) => {
-      if (child instanceof HTMLElement && child.dataset.nodeKey) {
+      if (child.instanceOf(HTMLElement) && child.dataset.nodeKey) {
         existingChildren.set(child.dataset.nodeKey, child);
       }
     });
@@ -1513,8 +1513,7 @@ export class ArborView extends FileView {
       return existing;
     }
 
-    const indicator = document.createElement("div");
-    indicator.addClass("arbor-drop-indicator");
+    const indicator = createDiv({ cls: "arbor-drop-indicator" });
     indicator.dataset.nodeKey = key;
     return indicator;
   }
@@ -1527,8 +1526,7 @@ export class ArborView extends FileView {
       return existing;
     }
 
-    const card = document.createElement("div");
-    card.addClass("arbor-card");
+    const card = createDiv({ cls: "arbor-card" });
     card.tabIndex = 0;
     card.dataset.nodeKey = key;
     card.addEventListener("pointerdown", (event) => this.rememberCardPointerPosition(blockId, event.clientX, event.clientY));
@@ -1731,7 +1729,7 @@ export class ArborView extends FileView {
 
     if (!this.previewPaneEl) {
       this.previewPaneEl = this.bodyEl.createDiv({ cls: "arbor-preview-pane" });
-      this.previewPaneEl.createEl("div", { cls: "arbor-preview-title", text: "Selected block" });
+      this.previewPaneEl.createDiv({ cls: "arbor-preview-title", text: "Selected block" });
       this.previewMiniMapEl = this.previewPaneEl.createDiv({ cls: "arbor-preview-minimap" });
       this.previewContentEl = this.previewPaneEl.createDiv({ cls: "arbor-preview-content markdown-rendered" });
     }
@@ -1822,7 +1820,7 @@ export class ArborView extends FileView {
 
       const headerEl = previewBlockEl.createDiv({ cls: "arbor-preview-block-header" });
       const linearIndex = (linearIndexById.get(block.id) ?? 0) + 1;
-      headerEl.createEl("div", {
+      headerEl.createDiv({
         cls: "arbor-preview-index",
         text: `Block ${String(linearIndex).padStart(2, "0")}`
       });
@@ -2567,7 +2565,7 @@ export class ArborView extends FileView {
       return;
     }
 
-    column.blocks.forEach((block, index) => {
+    column.blocks.forEach((_block, index) => {
       if (this.dragState && this.dragState.columnKey === column.key && this.dragState.targetIndex === index) {
         cardsEl.createDiv({ cls: "arbor-drop-indicator" });
       }
@@ -2767,7 +2765,7 @@ export class ArborView extends FileView {
     });
   }
 
-  private async applyDrop(column: BranchColumnModel): Promise<void> {
+  private async applyDrop(_column: BranchColumnModel): Promise<void> {
     if (!this.dragState || !this.state) {
       return;
     }

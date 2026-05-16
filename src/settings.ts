@@ -172,7 +172,7 @@ export class ArborSettingTab extends PluginSettingTab {
     min: number,
     max: number,
     step: number,
-    format: "px" | "%" | "raw" = "px"
+    _format: "px" | "%" | "raw" = "px"
   ): void {
     new Setting(containerEl)
       .setName(name)
