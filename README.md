@@ -10,6 +10,8 @@ No separate canvas file. No sidecar database.
 
 ![Arbor workflow preview](assets/preview.gif)
 
+![Arbor Tree Overview](assets/tree-overview.png)
+
 The core idea:
 
 - write in short blocks instead of one long wall of text
