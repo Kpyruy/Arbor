@@ -20,6 +20,7 @@ All notable changes to Arbor should be documented in this file.
 - added a default opening-mode setting for choosing the branch editor or Tree Overview
 - lowered the minimum zoom level to 50% for large trees
 - preserved keyboard focus after deleting or changing a block, so arrow navigation stays available
+- kept the current Tree Overview visible while structural updates are prepared, avoiding flashes during Ctrl/Cmd + arrow creation
 ## 0.2.3 - 2026-07-30
 
 Readable Markdown, safer navigation, and smoother movement between Arbor and Obsidian.

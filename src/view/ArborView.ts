@@ -310,6 +310,7 @@ export class ArborView extends FileView {
   private presentationMode: ArborPresentationMode = "editor";
   private shouldCenterOverviewOnNextRender = false;
   private shouldRestoreOverviewKeyboardFocusAfterMutation = false;
+  private overviewRenderVersion = 0;
   private overviewPanState: {
     pointerId: number;
     startClientX: number;
@@ -1079,6 +1080,7 @@ export class ArborView extends FileView {
   }
 
   render(): void {
+    this.overviewRenderVersion += 1;
     if (this.renderFrame !== null) {
       window.cancelAnimationFrame(this.renderFrame);
     }
@@ -1949,14 +1951,15 @@ export class ArborView extends FileView {
     const stage = this.overviewStageEl;
     const viewport = this.overviewViewportEl;
     const scene = this.overviewSceneEl;
-    const surface = this.overviewSurfaceEl;
+    const previousSurface = this.overviewSurfaceEl;
+    const surface = scene.createDiv({ cls: "arbor-overview-surface is-staging" });
+    const overviewRenderVersion = this.overviewRenderVersion;
     stage.setCssStyles({ display: "" });
     const zoom = this.plugin.settings.zoomLevel;
 
     const initialLayout = buildOverviewLayout(this.state.metadata, {
       cardWidth: this.plugin.settings.cardWidth
     });
-    surface.empty();
     const selectedBlockId = this.state.selectedBlockId;
     const activePathIds = new Set(getActivePath(this.state.metadata, selectedBlockId).map((block) => block.id));
     const cardsById = new Map<BranchBlockId, HTMLElement>();
@@ -2033,6 +2036,10 @@ export class ArborView extends FileView {
     }
 
     await this.waitForNextPaint();
+    if (overviewRenderVersion !== this.overviewRenderVersion) {
+      surface.remove();
+      return;
+    }
     cardsById.forEach((card, blockId) => {
       measuredHeights.set(blockId, card.scrollHeight);
       card.removeClass("is-measuring");
@@ -2043,6 +2050,9 @@ export class ArborView extends FileView {
       cardHeights: measuredHeights
     });
     this.applyOverviewLayout(scene, surface, cardsById, layout, zoom);
+    previousSurface.remove();
+    surface.removeClass("is-staging");
+    this.overviewSurfaceEl = surface;
 
     viewport.toggleClass("is-zoomed-out", zoom < 0.78);
     if (this.shouldCenterOverviewOnNextRender) {

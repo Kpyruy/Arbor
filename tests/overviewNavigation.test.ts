@@ -99,4 +99,17 @@ describe("overview arrow navigation", () => {
     expect(source).toContain("private restoreOverviewKeyboardFocusAfterMutation");
     expect(source).toContain("this.overviewViewportEl?.focus({ preventScroll: true })");
   });
+
+  it("keeps the current overview visible while a structural update is rendered", () => {
+    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+    const overviewStart = source.indexOf("private async syncTreeOverview");
+    const overviewEnd = source.indexOf("private applyOverviewLayout", overviewStart);
+    const overview = source.slice(overviewStart, overviewEnd);
+
+    expect(overview).toContain("const previousSurface = this.overviewSurfaceEl;");
+    expect(overview).toContain('cls: "arbor-overview-surface is-staging"');
+    expect(overview).toContain("previousSurface.remove();");
+    expect(overview).toContain("this.overviewSurfaceEl = surface;");
+    expect(overview).not.toContain("surface.empty();");
+  });
 });

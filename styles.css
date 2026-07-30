@@ -528,6 +528,13 @@
   transform-origin: top left;
 }
 
+.arbor-overview-surface.is-staging {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .arbor-overview-links {
   position: absolute;
   inset: 0;
