@@ -1921,6 +1921,7 @@ export class ArborView extends FileView {
       this.overviewViewportEl.addEventListener("pointerup", (event) => this.handleOverviewPointerUp(event));
       this.overviewViewportEl.addEventListener("pointercancel", (event) => this.handleOverviewPointerUp(event));
       this.overviewViewportEl.addEventListener("lostpointercapture", () => this.cleanupOverviewPan());
+      this.overviewViewportEl.addEventListener("wheel", (event) => this.handleOverviewWheel(event), { passive: false });
       countEl.dataset.overviewCount = "true";
     }
 
@@ -2100,6 +2101,16 @@ export class ArborView extends FileView {
     }
   }
 
+  private handleOverviewWheel(event: WheelEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || !this.plugin.settings.enableCtrlWheelZoom) {
+      return;
+    }
+    event.preventDefault();
+    const factor = event.deltaY < 0 ? 1.06 : 1 / 1.06;
+    this.updateZoomLevel(this.plugin.settings.zoomLevel * factor);
+    this.render();
+  }
+
   private cleanupOverviewPan(): void {
     const viewport = this.overviewViewportEl;
     const pointerId = this.overviewPanState?.pointerId;
@@ -2116,6 +2127,7 @@ export class ArborView extends FileView {
       this.overviewViewportEl.scrollTop = 0;
     }
     this.updateZoomLevel(1);
+    this.render();
   }
 
   private async syncPreview(context: BranchViewContext): Promise<void> {
