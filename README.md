@@ -46,6 +46,7 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Search overlay for block-level search
 - Zoom, breadcrumbs, view menu, and context menus
 - Auto-open managed Arbor notes in Arbor view
+- File Explorer labels that mark managed notes with `ARBOR`
 - Safe rebuild when the note changed in plain Markdown mode
 
 ## Install

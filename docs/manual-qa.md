@@ -69,6 +69,13 @@
 - Confirm the note is rewritten with visible `arbor:block:v1` markers.
 - Reopen the same note and confirm it no longer triggers another migration.
 
+## File Explorer Labels
+
+- Put a legacy v1 Arbor note, a current v2 Arbor note, a normal `.md` note, and a Canvas note in the same folder.
+- Confirm only the two Arbor Markdown notes show the `ARBOR` File Explorer label.
+- Open the legacy v1 note in Arbor and confirm its migration preserves the label.
+- Delete an Arbor note's structure footer, refresh the File Explorer, and confirm its label disappears.
+
 ## Undo / Redo
 
 - Add a block, move a block, edit a block, and delete a block.
