@@ -1201,8 +1201,33 @@
 }
 
 .arbor-clean-export-choice input {
+  appearance: none;
+  display: grid;
+  place-content: center;
   flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
   margin: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.arbor-clean-export-choice input::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+  content: "";
+  transform: scale(0);
+}
+
+.arbor-clean-export-choice input:checked {
+  border-color: var(--interactive-accent);
+}
+
+.arbor-clean-export-choice input:checked::before {
+  transform: scale(1);
 }
 
 .arbor-confirm-actions {
