@@ -1,3 +1,13 @@
+.nav-file-title .arbor-file-badge {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--text-faint);
+  font-size: 0.65em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+
 .arbor-view {
   --bw-card-width: 300px;
   --bw-card-min-height: 120px;
