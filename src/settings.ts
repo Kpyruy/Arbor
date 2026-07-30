@@ -15,6 +15,7 @@ interface ArborSettingDefinition {
 }
 
 export const DEFAULT_SETTINGS: ArborSettings = {
+  defaultPresentationMode: "editor",
   splitDirection: "vertical",
   cardWidth: 300,
   cardMinHeight: 120,
@@ -41,6 +42,16 @@ export class ArborSettingTab extends PluginSettingTab {
   getSettingDefinitions(): ArborSettingDefinition[] {
     return [
       {
+        name: "Default opening mode",
+        desc: "Choose whether Arbor notes open in the branch editor or the full tree overview.",
+        control: {
+          type: "dropdown",
+          key: "defaultPresentationMode",
+          options: { editor: "Branch editor", overview: "Tree overview" },
+          defaultValue: DEFAULT_SETTINGS.defaultPresentationMode
+        }
+      },
+      {
         name: "Split direction",
         desc: "Choose where the branch view opens relative to the current note.",
         control: {
@@ -54,7 +65,7 @@ export class ArborSettingTab extends PluginSettingTab {
       this.sliderDefinition("Card minimum height", "Minimum card height in pixels.", "cardMinHeight", 80, 300, 10),
       this.sliderDefinition("Horizontal spacing", "Space between columns in pixels.", "horizontalSpacing", 8, 48, 2),
       this.sliderDefinition("Vertical spacing", "Space between cards in pixels.", "verticalSpacing", 4, 32, 2),
-      this.sliderDefinition("Default zoom", "Default scene zoom level.", "zoomLevel", 70, 160, 5, "%"),
+      this.sliderDefinition("Default zoom", "Default scene zoom level.", "zoomLevel", 50, 160, 5, "%"),
       this.sliderDefinition("Preview snippet length", "Maximum characters to show in card preview.", "previewSnippetLength", 80, 600, 10),
       this.toggleDefinition("Drag and drop", "Enable drag-and-drop reordering across columns.", "dragAndDrop"),
       this.toggleDefinition("Ctrl/Cmd + wheel zoom", "Zoom the branching scene with Ctrl/Cmd + mouse wheel.", "enableCtrlWheelZoom"),
@@ -115,6 +126,20 @@ export class ArborSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     new Setting(containerEl)
+      .setName("Default opening mode")
+      .setDesc("Choose whether notes open in the branch editor or tree overview.")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("editor", "Branch editor")
+          .addOption("overview", "Tree overview")
+          .setValue(this.plugin.settings.defaultPresentationMode)
+          .onChange(async (value) => {
+            this.plugin.settings.defaultPresentationMode = value as ArborSettings["defaultPresentationMode"];
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName("Split direction")
       .setDesc("Choose where the branch view opens relative to the current note.")
       .addDropdown((dropdown) =>
@@ -132,7 +157,7 @@ export class ArborSettingTab extends PluginSettingTab {
     this.addNumericSetting(containerEl, "Card minimum height", "Minimum card height in pixels.", "cardMinHeight", 80, 300, 10);
     this.addNumericSetting(containerEl, "Horizontal spacing", "Space between columns in pixels.", "horizontalSpacing", 8, 48, 2);
     this.addNumericSetting(containerEl, "Vertical spacing", "Space between cards in pixels.", "verticalSpacing", 4, 32, 2);
-    this.addNumericSetting(containerEl, "Default zoom", "Default scene zoom level.", "zoomLevel", 70, 160, 5, "%");
+    this.addNumericSetting(containerEl, "Default zoom", "Default scene zoom level.", "zoomLevel", 50, 160, 5, "%");
     this.addNumericSetting(containerEl, "Preview snippet length", "Maximum characters to show in card preview.", "previewSnippetLength", 80, 600, 10);
 
     new Setting(containerEl)

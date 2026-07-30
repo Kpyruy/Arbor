@@ -2,14 +2,20 @@
 
 All notable changes to Arbor should be documented in this file.
 
-## Unreleased
+## 0.2.4 - 2026-07-30
 
 ### Added
 
 - added Tree overview: a connected map of every block in the note, with pan and zoom controls
-- added compact overview cards and lightweight links so large trees stay readable
-- added a side editor for changing the selected block without leaving the full-tree map
+- added fully rendered Markdown cards that size themselves to their content
+- added direct in-card editing for the selected block without leaving the full-tree map
+- added keyboard navigation in Tree Overview: arrows move through the tree and numbers select child blocks
+- added a one-time in-app release notice that introduces Tree Overview after an update
 
+### Changed
+
+- added a default opening-mode setting for choosing the branch editor or Tree Overview
+- lowered the minimum zoom level to 50% for large trees
 ## 0.2.3 - 2026-07-30
 
 Readable Markdown, safer navigation, and smoother movement between Arbor and Obsidian.

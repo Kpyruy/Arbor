@@ -45,7 +45,7 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Keyboard-first navigation and structure editing
 - Search overlay for block-level search
 - Zoom, breadcrumbs, view menu, and context menus
-- Whole-tree Overview map with connected cards and side-panel editing
+- Whole-tree Overview map with connected, fully rendered Markdown cards
 - Auto-open managed Arbor notes in Arbor view
 - File Explorer labels that mark managed notes with `ARBOR`
 - Clean Markdown export copies with an optional YAML frontmatter
@@ -149,7 +149,7 @@ Notes:
 
 ### Tree overview
 
-Use **Tree overview** from the view menu or Command Palette to see every block in one connected map. Drag empty space to pan; Ctrl/Cmd + mouse wheel changes zoom. Select a card to edit it in the side panel without leaving the map. Overview always shows collapsed descendants and does not support drag-and-drop reparenting.
+Use **Tree overview** from the view menu or Command Palette to see every block in one connected map. Drag empty space to pan; Ctrl/Cmd + mouse wheel changes zoom. Cards render normal Obsidian Markdown and grow to fit their content. Select a card, then press `Enter` or double-click it to edit directly in place. Overview always shows collapsed descendants and does not support drag-and-drop reparenting.
 
 ## Command Palette Actions
 

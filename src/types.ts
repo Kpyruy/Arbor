@@ -93,6 +93,7 @@ export type SplitPaneDirection = "vertical" | "horizontal";
 export type BreadcrumbLabelFallbackMode = "firstLine" | "snippet" | "none";
 
 export interface ArborSettings {
+  defaultPresentationMode: ArborPresentationMode;
   splitDirection: SplitPaneDirection;
   cardWidth: number;
   cardMinHeight: number;

@@ -9,6 +9,7 @@ import { extractPathLabel, extractSnippet, sortBlocks } from "../utils";
 interface OverviewLayoutOptions {
   cardWidth: number;
   cardHeight: number;
+  cardHeights: ReadonlyMap<BranchBlockId, number>;
   columnGap: number;
   rowGap: number;
   labelLength: number;
@@ -18,6 +19,7 @@ interface OverviewLayoutOptions {
 const DEFAULT_OPTIONS: OverviewLayoutOptions = {
   cardWidth: 224,
   cardHeight: 76,
+  cardHeights: new Map(),
   columnGap: 104,
   rowGap: 30,
   labelLength: 46,
@@ -29,6 +31,10 @@ export function buildOverviewLayout(
   options: Partial<OverviewLayoutOptions> = {}
 ): ArborOverviewLayout {
   const config = { ...DEFAULT_OPTIONS, ...options };
+  const rowHeight = Math.max(
+    config.cardHeight,
+    ...Array.from(config.cardHeights.values(), (height) => Math.max(config.cardHeight, height))
+  );
   const nodes: ArborOverviewNode[] = [];
   const nodesById = new Map<BranchBlockId, ArborOverviewNode>();
   const links: ArborOverviewLayout["links"] = [];
@@ -54,7 +60,7 @@ export function buildOverviewLayout(
         x: depth * (config.cardWidth + config.columnGap),
         y: 0,
         width: config.cardWidth,
-        height: config.cardHeight,
+        height: Math.max(config.cardHeight, config.cardHeights.get(block.id) ?? config.cardHeight),
         label: extractPathLabel(block.content, {
           preferredPrefix: "#",
           fallback: "firstLine",
@@ -73,10 +79,17 @@ export function buildOverviewLayout(
       const children = childrenFor(block.id)
         .map((child) => nodesById.get(child.id))
         .filter((child): child is ArborOverviewNode => Boolean(child));
-      const row = children.length === 0
-        ? nextRow++
-        : (children[0].y + children[children.length - 1].y) / (2 * (config.cardHeight + config.rowGap));
-      node.y = row * (config.cardHeight + config.rowGap);
+      if (children.length === 0) {
+        const row = nextRow;
+        nextRow += 1;
+        node.y = row * (rowHeight + config.rowGap) + (rowHeight - node.height) / 2;
+        return;
+      }
+      const firstChild = children[0];
+      const lastChild = children[children.length - 1];
+      const firstCenter = firstChild.y + firstChild.height / 2;
+      const lastCenter = lastChild.y + lastChild.height / 2;
+      node.y = (firstCenter + lastCenter) / 2 - node.height / 2;
     });
   };
 

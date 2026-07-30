@@ -57,6 +57,22 @@ describe("overview layout", () => {
     expect(root.y).toBe((left.y + right.y) / 2);
   });
 
+  it("uses measured card heights without allowing adjacent rows to overlap", () => {
+    const layout = buildOverviewLayout(tree, {
+      cardHeights: new Map([
+        ["root", 180],
+        ["a", 76],
+        ["b", 76],
+        ["a1", 112]
+      ])
+    });
+    const a = layout.nodes.find((node) => node.id === "a")!;
+    const b = layout.nodes.find((node) => node.id === "b")!;
+
+    expect(layout.nodes.find((node) => node.id === "root")?.height).toBe(180);
+    expect(b.y).toBeGreaterThanOrEqual(a.y + a.height);
+  });
+
   it("creates finite empty-tree bounds and cubic parent-child links", () => {
     expect(buildOverviewLayout({ version: 1, prefix: "", blocks: [] }).width).toBeGreaterThan(0);
 

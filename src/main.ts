@@ -12,6 +12,7 @@ import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRoute
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { buildBranchDocument } from "./storage/document";
 import { normalizeMetadata } from "./storage/serializer";
+import { shouldShowReleaseNotice } from "./releaseNotice";
 import { ArborSettings } from "./types";
 import { getNextNumberedName } from "./utils";
 import { ArborLoadingView } from "./view/ArborLoadingView";
@@ -20,6 +21,7 @@ import { ArborView } from "./view/ArborView";
 interface ArborPluginData {
   settings: ArborSettings;
   managedPaths: string[];
+  lastSeenReleaseVersion?: string;
 }
 
 export default class ArborPlugin extends Plugin {
@@ -28,6 +30,7 @@ export default class ArborPlugin extends Plugin {
   private readonly suppressedAutoOpen = new AutoOpenSuppression(1_000);
   private readonly managedNotePaths = new Set<string>();
   private readonly explicitArborOpenPaths = new Map<string, number>();
+  private lastSeenReleaseVersion: string | undefined;
   private originalLeafSetViewState: typeof WorkspaceLeaf.prototype.setViewState | null = null;
 
   async onload(): Promise<void> {
@@ -88,6 +91,7 @@ export default class ArborPlugin extends Plugin {
     });
 
     this.registerCommands();
+    this.app.workspace.onLayoutReady(() => void this.showReleaseNoticeIfNeeded());
   }
 
   override onunload(): void {
@@ -102,6 +106,7 @@ export default class ArborPlugin extends Plugin {
     const raw: unknown = await this.loadData();
     const payload = this.normalizePluginData(raw);
     this.settings = { ...DEFAULT_SETTINGS, ...payload.settings };
+    this.lastSeenReleaseVersion = payload.lastSeenReleaseVersion;
     this.managedNotePaths.clear();
     payload.managedPaths.forEach((path) => this.managedNotePaths.add(path));
   }
@@ -748,22 +753,58 @@ export default class ArborPlugin extends Plugin {
         settings: { ...DEFAULT_SETTINGS, ...((candidate.settings as Partial<ArborSettings>) ?? {}) },
         managedPaths: Array.isArray(candidate.managedPaths)
           ? candidate.managedPaths.filter((item): item is string => typeof item === "string")
-          : []
+          : [],
+        lastSeenReleaseVersion: typeof candidate.lastSeenReleaseVersion === "string"
+          ? candidate.lastSeenReleaseVersion
+          : undefined
       };
     }
 
     return {
       settings: { ...DEFAULT_SETTINGS, ...(candidate as Partial<ArborSettings>) },
-      managedPaths: []
+      managedPaths: [],
+      lastSeenReleaseVersion: undefined
     };
   }
 
   private async savePluginData(): Promise<void> {
     const payload: ArborPluginData = {
       settings: this.settings,
-      managedPaths: [...this.managedNotePaths].sort((left, right) => left.localeCompare(right))
+      managedPaths: [...this.managedNotePaths].sort((left, right) => left.localeCompare(right)),
+      lastSeenReleaseVersion: this.lastSeenReleaseVersion
     };
     await this.saveData(payload);
+  }
+
+  private async showReleaseNoticeIfNeeded(): Promise<void> {
+    const version = this.manifest.version;
+    if (!shouldShowReleaseNotice(this.lastSeenReleaseVersion, version)) {
+      return;
+    }
+
+    this.lastSeenReleaseVersion = version;
+    await this.savePluginData();
+
+    const notice = new Notice("", 12_000);
+    const noticeEl = "messageEl" in notice
+      ? notice.messageEl
+      : (notice as unknown as { noticeEl: HTMLElement }).noticeEl;
+    noticeEl.empty();
+    noticeEl.addClass("arbor-release-notice");
+    const title = noticeEl.createDiv({ cls: "arbor-release-notice-title", text: `Arbor ${version}` });
+    title.createSpan({ cls: "arbor-release-notice-badge", text: "New" });
+    noticeEl.createDiv({
+      cls: "arbor-release-notice-body",
+      text: "Tree Overview is here — a clean, interactive map of your whole note."
+    });
+    const action = noticeEl.createEl("button", {
+      cls: "arbor-release-notice-action",
+      text: "Open tree overview"
+    });
+    action.addEventListener("click", () => {
+      this.getBranchViews()[0]?.openTreeOverview();
+      notice.hide();
+    });
   }
 
   private async refreshManagedStatus(file: TFile): Promise<void> {
