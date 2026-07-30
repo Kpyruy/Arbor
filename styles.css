@@ -1,6 +1,12 @@
+.nav-file-title:has(.arbor-file-badge) .nav-file-title-content {
+  padding-right: 52px;
+}
+
 .nav-file-title .arbor-file-badge {
-  margin-left: auto;
-  padding-left: 12px;
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
   color: var(--text-faint);
   font-size: 0.65em;
   font-weight: 600;
