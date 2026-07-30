@@ -9,16 +9,19 @@ const REFRESH_DELAY_MS = 100;
 export class ArborFileExplorerBadge {
   private readonly observers = new Map<HTMLElement, MutationObserver>();
   private readonly observedDocuments = new Set<Document>();
-  private readonly eventRefs: EventRef[];
+  private readonly vaultEventRefs: EventRef[];
+  private readonly workspaceEventRefs: EventRef[];
   private readonly generation = new ArborBadgeGeneration();
   private refreshTimer: number | null = null;
 
   constructor(private readonly app: App) {
-    this.eventRefs = [
+    this.vaultEventRefs = [
       this.app.vault.on("create", () => this.scheduleRefresh()),
       this.app.vault.on("modify", () => this.scheduleRefresh()),
       this.app.vault.on("rename", () => this.scheduleRefresh()),
-      this.app.vault.on("delete", () => this.scheduleRefresh()),
+      this.app.vault.on("delete", () => this.scheduleRefresh())
+    ];
+    this.workspaceEventRefs = [
       this.app.workspace.on("layout-change", () => this.scheduleRefresh())
     ];
     this.app.workspace.onLayoutReady(() => this.scheduleRefresh());
@@ -56,7 +59,8 @@ export class ArborFileExplorerBadge {
     }
     this.observers.forEach((observer) => observer.disconnect());
     this.observers.clear();
-    this.eventRefs.forEach((eventRef) => this.app.vault.offref(eventRef));
+    this.vaultEventRefs.forEach((eventRef) => this.app.vault.offref(eventRef));
+    this.workspaceEventRefs.forEach((eventRef) => this.app.workspace.offref(eventRef));
     this.observedDocuments.forEach((document) => {
       document.querySelectorAll(".arbor-file-badge").forEach((badge) => badge.remove());
     });
