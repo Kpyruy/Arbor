@@ -45,6 +45,7 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Keyboard-first navigation and structure editing
 - Search overlay for block-level search
 - Zoom, breadcrumbs, view menu, and context menus
+- Whole-tree Overview map with connected cards and side-panel editing
 - Auto-open managed Arbor notes in Arbor view
 - File Explorer labels that mark managed notes with `ARBOR`
 - Clean Markdown export copies with an optional YAML frontmatter
@@ -146,6 +147,10 @@ Notes:
 | `Ctrl/Cmd + Mouse wheel` | Zoom the scene if zoom is enabled in settings |
 | Click zoom indicator | Reset zoom to `100%` |
 
+### Tree overview
+
+Use **Tree overview** from the view menu or Command Palette to see every block in one connected map. Drag empty space to pan; Ctrl/Cmd + mouse wheel changes zoom. Select a card to edit it in the side panel without leaving the map. Overview always shows collapsed descendants and does not support drag-and-drop reparenting.
+
 ## Command Palette Actions
 
 All of these are exposed as normal Obsidian commands. By default, they have no bound hotkey unless you bind one yourself in Obsidian.
@@ -157,6 +162,8 @@ All of these are exposed as normal Obsidian commands. By default, they have no b
 | Create new note in Markdown editor | `create-note-markdown` | Global | None |
 | Create demo note | `create-demo-note` | Global | None |
 | Export clean copy | `export-clean-copy` | Arbor view | None |
+| Open tree overview | `open-tree-overview` | Arbor view | None |
+| Return to branch editor | `close-tree-overview` | Arbor view | None |
 | Open block actions menu | `open-block-actions-menu` | Arbor view | None |
 | Create new root block | `new-root-block` | Arbor view | None |
 | Create sibling above | `create-sibling-above` | Arbor view | None |

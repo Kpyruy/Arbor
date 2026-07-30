@@ -378,6 +378,253 @@
   flex: 1;
 }
 
+.arbor-overview-stage {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.arbor-overview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 30px;
+}
+
+.arbor-overview-count {
+  margin-right: auto;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+}
+
+.arbor-overview-toolbar-button,
+.arbor-overview-editor-actions button {
+  border: 1px solid color-mix(in srgb, var(--background-modifier-border) 76%, transparent);
+  background: color-mix(in srgb, var(--background-secondary) 94%, transparent);
+  color: var(--text-muted);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.76rem;
+}
+
+.arbor-overview-toolbar-button:hover,
+.arbor-overview-toolbar-button:focus-visible,
+.arbor-overview-editor-actions button:hover,
+.arbor-overview-editor-actions button:focus-visible {
+  color: var(--text-normal);
+  border-color: color-mix(in srgb, var(--interactive-accent) 34%, var(--background-modifier-border));
+}
+
+.arbor-overview-editor-actions button.is-primary {
+  color: var(--text-normal);
+  background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-secondary));
+  border-color: color-mix(in srgb, var(--interactive-accent) 42%, var(--background-modifier-border));
+}
+
+.arbor-overview-content {
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.arbor-overview-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid color-mix(in srgb, var(--background-modifier-border) 74%, transparent);
+  border-radius: 16px;
+  cursor: grab;
+  background-color: color-mix(in srgb, var(--background-primary) 94%, black 6%);
+  background-image: radial-gradient(color-mix(in srgb, var(--text-muted) 22%, transparent) 1px, transparent 1px);
+  background-size: 20px 20px;
+  scrollbar-width: thin;
+}
+
+.arbor-overview-viewport.is-panning,
+.arbor-overview-viewport.is-panning * {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.arbor-overview-scene {
+  position: relative;
+  width: var(--arbor-overview-width, 224px);
+  height: var(--arbor-overview-height, 76px);
+  margin: 60px;
+}
+
+.arbor-overview-links {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.arbor-overview-link {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text-muted) 52%, transparent);
+  stroke-width: 1.35;
+  vector-effect: non-scaling-stroke;
+}
+
+.arbor-overview-card {
+  position: absolute;
+  left: var(--arbor-overview-x, 0px);
+  top: var(--arbor-overview-y, 0px);
+  width: var(--arbor-overview-card-width, 224px);
+  min-height: var(--arbor-overview-card-height, 76px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: calc(10px * var(--arbor-overview-zoom, 1)) calc(12px * var(--arbor-overview-zoom, 1));
+  border: 1px solid color-mix(in srgb, var(--background-modifier-border) 76%, transparent);
+  border-radius: calc(10px * var(--arbor-overview-zoom, 1));
+  background: color-mix(in srgb, var(--background-secondary) 94%, black 6%);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.18);
+  color: var(--text-normal);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+.arbor-overview-card:hover,
+.arbor-overview-card:focus-visible {
+  border-color: color-mix(in srgb, var(--interactive-accent) 52%, var(--background-modifier-border));
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+  outline: none;
+}
+
+.arbor-overview-card.is-active {
+  border-color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-secondary));
+}
+
+.arbor-overview-card.is-on-path {
+  border-color: color-mix(in srgb, var(--interactive-accent) 34%, var(--background-modifier-border));
+}
+
+.arbor-overview-card-label {
+  width: 100%;
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: calc(0.8rem * var(--arbor-overview-zoom, 1));
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arbor-overview-card-snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: calc(0.72rem * var(--arbor-overview-zoom, 1));
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.arbor-overview-card.is-zoomed-out .arbor-overview-card-snippet {
+  display: none;
+}
+
+.arbor-overview-card-count {
+  position: absolute;
+  right: calc(8px * var(--arbor-overview-zoom, 1));
+  bottom: calc(7px * var(--arbor-overview-zoom, 1));
+  min-width: 16px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background-primary) 72%, transparent);
+  color: var(--text-muted);
+  font-size: calc(0.64rem * var(--arbor-overview-zoom, 1));
+  text-align: center;
+}
+
+.arbor-overview-editor {
+  width: min(360px, 34vw);
+  min-width: 260px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-left: 14px;
+  border-left: 1px solid color-mix(in srgb, var(--background-modifier-border) 70%, transparent);
+}
+
+.arbor-overview-editor-title {
+  color: var(--text-normal);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.arbor-overview-editor-preview {
+  min-height: 0;
+  flex: 1;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--background-modifier-border) 72%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--background-secondary) 88%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-text);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.arbor-overview-editor-input {
+  width: 100%;
+  min-height: 180px;
+  max-height: min(60vh, 640px);
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.arbor-overview-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.arbor-overview-editor-empty {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 760px) {
+  .arbor-overview-content {
+    flex-direction: column;
+  }
+
+  .arbor-overview-editor {
+    width: auto;
+    min-width: 0;
+    max-height: 38%;
+    padding: 12px 0 0;
+    border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 70%, transparent);
+    border-left: 0;
+  }
+
+  .arbor-overview-editor-preview {
+    min-height: 120px;
+  }
+}
+
 .arbor-columns-stage {
   position: relative;
   min-width: 0;

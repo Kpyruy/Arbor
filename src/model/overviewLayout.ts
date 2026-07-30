@@ -1,11 +1,10 @@
-import { getChildren } from "./tree";
 import {
   ArborOverviewLayout,
   ArborOverviewNode,
   BranchBlockId,
   BranchTreeMetadata
 } from "../types";
-import { extractPathLabel, extractSnippet } from "../utils";
+import { extractPathLabel, extractSnippet, sortBlocks } from "../utils";
 
 interface OverviewLayoutOptions {
   cardWidth: number;
@@ -31,20 +30,29 @@ export function buildOverviewLayout(
 ): ArborOverviewLayout {
   const config = { ...DEFAULT_OPTIONS, ...options };
   const nodes: ArborOverviewNode[] = [];
+  const nodesById = new Map<BranchBlockId, ArborOverviewNode>();
   const links: ArborOverviewLayout["links"] = [];
+  const childrenByParent = new Map<BranchBlockId | null, BranchTreeMetadata["blocks"]>();
+  metadata.blocks.forEach((block) => {
+    const siblings = childrenByParent.get(block.parentId) ?? [];
+    siblings.push(block);
+    childrenByParent.set(block.parentId, siblings);
+  });
+  childrenByParent.forEach((siblings, parentId) => {
+    childrenByParent.set(parentId, sortBlocks(siblings));
+  });
+  const childrenFor = (parentId: BranchBlockId | null) => childrenByParent.get(parentId) ?? [];
   let nextRow = 0;
 
   const visit = (parentId: BranchBlockId | null, depth: number): void => {
-    getChildren(metadata, parentId).forEach((block) => {
-      const row = nextRow;
-      nextRow += 1;
-      nodes.push({
+    childrenFor(parentId).forEach((block) => {
+      const node: ArborOverviewNode = {
         id: block.id,
         parentId: block.parentId,
         depth,
         order: block.order,
         x: depth * (config.cardWidth + config.columnGap),
-        y: row * (config.cardHeight + config.rowGap),
+        y: 0,
         width: config.cardWidth,
         height: config.cardHeight,
         label: extractPathLabel(block.content, {
@@ -54,12 +62,21 @@ export function buildOverviewLayout(
           maxLength: config.labelLength
         }),
         snippet: extractSnippet(block.content, config.snippetLength),
-        childCount: getChildren(metadata, block.id).length
-      });
+        childCount: childrenFor(block.id).length
+      };
+      nodes.push(node);
+      nodesById.set(node.id, node);
       if (block.parentId) {
         links.push({ parentId: block.parentId, childId: block.id });
       }
       visit(block.id, depth + 1);
+      const children = childrenFor(block.id)
+        .map((child) => nodesById.get(child.id))
+        .filter((child): child is ArborOverviewNode => Boolean(child));
+      const row = children.length === 0
+        ? nextRow++
+        : (children[0].y + children[children.length - 1].y) / (2 * (config.cardHeight + config.rowGap));
+      node.y = row * (config.cardHeight + config.rowGap);
     });
   };
 

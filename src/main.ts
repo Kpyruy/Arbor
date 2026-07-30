@@ -330,6 +330,15 @@ export default class ArborPlugin extends Plugin {
       }
     });
 
+    this.addBranchCommand(COMMANDS.openTreeOverview, "Open tree overview", (view) => {
+      view.openTreeOverview();
+      return Promise.resolve();
+    });
+    this.addBranchCommand(COMMANDS.closeTreeOverview, "Return to branch editor", (view) => {
+      view.closeTreeOverview();
+      return Promise.resolve();
+    });
+
     this.addBranchCommand(COMMANDS.openBlockMenu, "Open block actions menu", (view) => {
       view.openActiveBlockMenu();
       return Promise.resolve();
