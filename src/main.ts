@@ -5,6 +5,7 @@ import { ARBOR_DEMO_NOTE } from "./demoNote";
 import { ArborFileExplorerBadge } from "./fileExplorerBadge";
 import { FILE_EXPLORER_CREATION_SECTION, shouldShowNewArborMenuItem } from "./fileExplorerMenu";
 import { captureOriginalSetViewState, invokeOriginalSetViewState } from "./leafOpenInterception";
+import { buildAvailableMarkdownPath } from "./markdownPaths";
 import { createEmptyTree } from "./model/tree";
 import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
@@ -435,7 +436,13 @@ export default class ArborPlugin extends Plugin {
 
   async createDemoNote(): Promise<TFile | null> {
     const folderPath = this.getCreationFolderPath();
-    const targetPath = normalizePath(this.buildAvailableNotePath(folderPath, "Arbor demo"));
+    const targetPath = normalizePath(
+      buildAvailableMarkdownPath(
+        folderPath,
+        "Arbor demo",
+        (candidate) => this.app.vault.getAbstractFileByPath(candidate) !== null
+      )
+    );
     const existing = this.app.vault.getAbstractFileByPath(targetPath);
     if (existing instanceof TFile) {
       await this.openBranchViewForFile(existing);
@@ -491,6 +498,16 @@ export default class ArborPlugin extends Plugin {
     return file;
   }
 
+  async createCleanExportCopy(source: TFile, contents: string): Promise<TFile> {
+    const folderPath = source.parent?.path ?? "";
+    const path = buildAvailableMarkdownPath(
+      folderPath,
+      `${source.basename} — export`,
+      (candidate) => this.app.vault.getAbstractFileByPath(candidate) !== null
+    );
+    return this.app.vault.create(path, contents);
+  }
+
   private getCreationFolderPath(): string {
     const sourceFile = this.getActiveMarkdownFile() ?? this.getActiveBranchView()?.file ?? null;
     return this.resolveCreationFolderPath(sourceFile);
@@ -511,19 +528,6 @@ export default class ArborPlugin extends Plugin {
         ? target.parent?.path ?? ""
         : "";
     return folderPath === "/" ? "" : folderPath;
-  }
-
-  private buildAvailableNotePath(folderPath: string, baseName: string): string {
-    let index = 1;
-    while (true) {
-      const suffix = index === 1 ? "" : ` ${index}`;
-      const fileName = `${baseName}${suffix}.md`;
-      const candidate = folderPath ? `${folderPath}/${fileName}` : fileName;
-      if (!this.app.vault.getAbstractFileByPath(candidate)) {
-        return candidate;
-      }
-      index += 1;
-    }
   }
 
   private buildAvailableUntitledNotePath(folderPath: string): string {
