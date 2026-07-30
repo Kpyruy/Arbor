@@ -15,15 +15,16 @@ export interface BranchTreeMetadata {
   version: 1;
   prefix: string;
   blocks: BranchBlock[];
-  lastLinearHash?: string;
-  savedAt?: string;
 }
+
+export type ArborStorageFormat = "legacy-v1" | "structure-v2" | null;
 
 export interface ParsedBranchDocument {
   frontmatter: string;
   body: string;
   metadata: BranchTreeMetadata | null;
   metadataRaw: string;
+  storageFormat: ArborStorageFormat;
 }
 
 export interface ImportedBranchDocument {
@@ -60,8 +61,6 @@ export interface BranchHistoryEntry {
   selectedBlockId: BranchBlockId | null;
 }
 
-export type ManagedMetadataBlockStyle = "multiline" | "compact";
-
 export type SplitPaneDirection = "vertical" | "horizontal";
 export type BreadcrumbLabelFallbackMode = "firstLine" | "snippet" | "none";
 
@@ -82,7 +81,6 @@ export interface ArborSettings {
   breadcrumbLabelPreferredPrefix: string;
   breadcrumbLabelFallback: BreadcrumbLabelFallbackMode;
   liveLinearPreview: boolean;
-  metadataBlockStyle: ManagedMetadataBlockStyle;
 }
 
 export interface BranchSelectionRestore {

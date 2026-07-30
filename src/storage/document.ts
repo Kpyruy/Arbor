@@ -1,10 +1,11 @@
-import { METADATA_MARKER } from "../constants";
-import { ParsedBranchDocument, BranchTreeMetadata, ManagedMetadataBlockStyle } from "../types";
-import { buildMetadataBlock, parseMetadataBlock } from "./serializer";
+import { LEGACY_METADATA_MARKER, STRUCTURE_MARKER } from "../constants";
+import { ParsedBranchDocument, BranchTreeMetadata } from "../types";
+import { buildStructureBlock, parseStoredMetadataBlock } from "./serializer";
 import { normalizeNewlines } from "../utils";
 
 const FRONTMATTER_PATTERN = /^---\n[\s\S]*?\n---\n?/;
-const METADATA_MARKER_PATTERN = METADATA_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const METADATA_MARKER_PATTERN = LEGACY_METADATA_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const STRUCTURE_MARKER_PATTERN = STRUCTURE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const COMPACT_PATTERN = new RegExp(`\\n?<!--\\s*${METADATA_MARKER_PATTERN}:[A-Za-z0-9+/=\\r\\n_-]+\\s*-->\\s*$`);
 const MULTILINE_PATTERN = new RegExp(`\\n?<!--\\s*${METADATA_MARKER_PATTERN}\\s*\\n[\\s\\S]*?\\n-->\\s*$`);
 
@@ -15,29 +16,31 @@ export function parseBranchDocument(text: string): ParsedBranchDocument {
   let remaining = normalized.slice(frontmatter.length);
 
   let metadataRaw = "";
+  const structureMatch = remaining.match(new RegExp("\\n?%%\\s*" + STRUCTURE_MARKER_PATTERN + "\\s*\\n```json\\n[\\s\\S]*?\\n```\\n%%\\s*$"));
   const multilineMatch = remaining.match(MULTILINE_PATTERN);
   const compactMatch = remaining.match(COMPACT_PATTERN);
-  const metadataMatch = multilineMatch && (!compactMatch || multilineMatch.index! >= compactMatch.index!) ? multilineMatch : compactMatch;
+  const legacyMatch = multilineMatch && (!compactMatch || multilineMatch.index! >= compactMatch.index!) ? multilineMatch : compactMatch;
+  const metadataMatch = structureMatch ?? legacyMatch;
   if (metadataMatch && metadataMatch.index !== undefined) {
     metadataRaw = metadataMatch[0].trimStart();
     remaining = remaining.slice(0, metadataMatch.index);
   }
 
-  const metadata = metadataRaw ? parseMetadataBlock(metadataRaw) : null;
+  const stored = metadataRaw ? parseStoredMetadataBlock(metadataRaw) : { metadata: null, storageFormat: null };
 
   return {
     frontmatter,
     body: remaining,
-    metadata,
-    metadataRaw
+    metadata: stored.metadata,
+    metadataRaw,
+    storageFormat: stored.storageFormat
   };
 }
 
 export function buildBranchDocument(
   frontmatter: string,
   body: string,
-  metadata: BranchTreeMetadata | null,
-  metadataStyle: ManagedMetadataBlockStyle
+  metadata: BranchTreeMetadata | null
 ): string {
   const sections: string[] = [];
   if (frontmatter) {
@@ -47,7 +50,7 @@ export function buildBranchDocument(
   sections.push(body);
 
   if (metadata) {
-    const metadataBlock = buildMetadataBlock(metadata, metadataStyle);
+    const metadataBlock = buildStructureBlock(metadata);
     sections.push("\n");
     sections.push(metadataBlock);
     sections.push("\n");

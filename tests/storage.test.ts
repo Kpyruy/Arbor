@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseBranchDocument, buildBranchDocument } from "../src/storage/document";
-import { linearizeTree, buildMetadataBlock } from "../src/storage/serializer";
+import { buildStructureBlock, linearizeTree } from "../src/storage/serializer";
 import { loadImportedBranchDocument } from "../src/storage/reconcile";
 import { BranchBlock, BranchTreeMetadata } from "../src/types";
 
@@ -94,7 +94,7 @@ describe("document and storage", () => {
   it("round-trips metadata inside the same markdown note", () => {
     const metadata = metadataFixture();
     const linearized = linearizeTree(metadata);
-    const note = buildBranchDocument("---\naliases: []\n---\n", linearized.body, metadata, "multiline");
+    const note = buildBranchDocument("---\naliases: []\n---\n", linearized.body, metadata);
     const parsed = parseBranchDocument(note);
     expect(parsed.frontmatter.startsWith("---")).toBe(true);
     expect(parsed.body).toBe(linearized.body);
@@ -104,10 +104,24 @@ describe("document and storage", () => {
   it("keeps the note readable even if the plugin is disabled", () => {
     const metadata = metadataFixture();
     const linearized = linearizeTree(metadata);
-    const note = buildBranchDocument("", linearized.body, metadata, "compact");
+    const note = buildBranchDocument("", linearized.body, metadata);
     expect(note).toContain("# Heading");
     expect(note).toContain("Second root section");
-    expect(note).toContain("arbor:metadata:v1");
+    expect(note).toContain("%% arbor:structure");
+  });
+
+  it("writes a readable v2 structure footer without duplicated content or hashes", () => {
+    const metadata = metadataFixture();
+    const note = buildBranchDocument("", linearizeTree(metadata).body, metadata);
+
+    expect(note).toContain("%% arbor:structure");
+    expect(note).toContain('"arbor-plugin": "tree"');
+    expect(note).toContain('"id": "root-1"');
+    expect(note).toContain('"parent": null');
+    expect(note).toContain('"order": 0');
+    expect(note).not.toContain("arbor:metadata:v1");
+    expect(note).not.toContain("lastLinearHash");
+    expect(note).not.toContain('"content"');
   });
 
   it("rebuilds safely from plain markdown changes instead of losing content", () => {
@@ -130,11 +144,12 @@ describe("document and storage", () => {
     expect(loaded.metadata.blocks[0].content).toContain("# Root One");
   });
 
-  it("parses previously stored metadata blocks", () => {
-    const block = buildMetadataBlock(metadataFixture(), "multiline");
-    expect(block).toContain("arbor:metadata:v1");
+  it("parses readable structure footers", () => {
+    const block = buildStructureBlock(metadataFixture());
+    expect(block).toContain("%% arbor:structure");
     const parsed = parseBranchDocument(`Visible body\n\n${block}`);
     expect(parsed.metadata?.blocks).toHaveLength(3);
+    expect(parsed.storageFormat).toBe("structure-v2");
   });
 
   it("reconstructs exact blocks from visible markers without hidden metadata", () => {
@@ -159,10 +174,10 @@ describe("document and storage", () => {
           : block
       )
     };
-    const note = buildBranchDocument("", visibleBody, staleMetadata, "multiline");
+    const note = buildBranchDocument("", visibleBody, staleMetadata);
     const loaded = loadImportedBranchDocument(note);
 
-    expect(loaded.origin).toBe("markers");
+    expect(loaded.origin).toBe("metadata");
     expect(loaded.metadata.prefix).toBe(metadata.prefix);
     expect(loaded.metadata.blocks.map((block) => block.id)).toEqual(metadata.blocks.map((block) => block.id));
   });
@@ -178,18 +193,19 @@ describe("document and storage", () => {
       )
     };
     const visibleBody = linearizeTree(metadata).body;
-    const note = buildBranchDocument("", visibleBody, staleMetadata, "multiline");
+    const note = buildBranchDocument("", visibleBody, staleMetadata);
     const loaded = loadImportedBranchDocument(note);
 
-    expect(loaded.origin).toBe("markers");
-    expect(loaded.staleMetadata?.blocks[0].content).toBe("Outdated root");
+    expect(loaded.origin).toBe("metadata");
+    expect(loaded.staleMetadata).toBeNull();
     expect(loaded.metadata.blocks[0].content).toContain("# Heading");
   });
 
   it("flags metadata-only notes as legacy so they can be migrated exactly", () => {
     const metadata = metadataFixture();
     const legacyBody = legacyLinearize(metadata);
-    const note = buildBranchDocument("", legacyBody, metadata, "multiline");
+    const legacy = `<!-- arbor:metadata:v1\n${Buffer.from(JSON.stringify(metadata), "utf8").toString("base64")}\n-->`;
+    const note = `${legacyBody}\n${legacy}`;
     const loaded = loadImportedBranchDocument(note);
 
     expect(loaded.origin).toBe("legacy");
@@ -202,7 +218,8 @@ describe("document and storage", () => {
       "Child paragraph\n\nSecond paragraph",
       "Child paragraph\n\nInserted line\n\nSecond paragraph"
     );
-    const note = buildBranchDocument("", legacyBody, metadata, "multiline");
+    const legacy = `<!-- arbor:metadata:v1\n${Buffer.from(JSON.stringify(metadata), "utf8").toString("base64")}\n-->`;
+    const note = `${legacyBody}\n${legacy}`;
     const loaded = loadImportedBranchDocument(note);
 
     expect(loaded.origin).toBe("legacy");

@@ -57,7 +57,7 @@ import {
 } from "../types";
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
 import { loadImportedBranchDocument } from "../storage/reconcile";
-import { applyBodyHash, linearizeTree } from "../storage/serializer";
+import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 
@@ -2924,7 +2924,7 @@ export class ArborView extends FileView {
 
     this.history.push(label, this.state.metadata, this.state.selectedBlockId);
     const result = mutate(cloneMetadata(this.state.metadata));
-    this.state.metadata = applyBodyHash(result.metadata);
+    this.state.metadata = normalizeMetadata(result.metadata);
     this.state.selectedBlockId = ensureSelectedBlock(this.state.metadata, result.selectedBlockId);
     this.state.linearized = linearizeTree(this.state.metadata);
     this.state.origin = "metadata";
@@ -2985,7 +2985,7 @@ export class ArborView extends FileView {
     }
 
     this.history.push("Edit block", this.state.metadata, this.state.selectedBlockId);
-    this.state.metadata = applyBodyHash(updateBlockContent(this.state.metadata, blockId, value));
+    this.state.metadata = normalizeMetadata(updateBlockContent(this.state.metadata, blockId, value));
     this.state.selectedBlockId = blockId;
     this.state.linearized = linearizeTree(this.state.metadata);
     this.state.origin = "metadata";
@@ -3046,14 +3046,13 @@ export class ArborView extends FileView {
       return;
     }
 
-    const metadata = applyBodyHash(this.state.metadata);
+    const metadata = normalizeMetadata(this.state.metadata);
     this.state.metadata = metadata;
     this.state.linearized = linearizeTree(metadata);
     const document = buildBranchDocument(
       this.state.frontmatter,
       this.state.linearized.body,
-      metadata,
-      this.plugin.settings.metadataBlockStyle
+      metadata
     );
 
     this.isPersisting = true;

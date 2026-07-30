@@ -85,7 +85,7 @@ describe("managed note opening", () => {
   it("treats notes with hidden metadata as managed", () => {
     const metadata = metadataFixture();
     const visibleBody = linearizeTree(metadata).body;
-    const note = buildBranchDocument("", visibleBody, metadata, "multiline");
+    const note = buildBranchDocument("", visibleBody, metadata);
     const inspection = inspectManagedBranchDocumentText(note);
 
     expect(inspection.autoManaged).toBe(true);

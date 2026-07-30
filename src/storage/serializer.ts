@@ -1,11 +1,10 @@
-import { DEFAULT_BLOCK_SEPARATOR, METADATA_MARKER, VISIBLE_BLOCK_MARKER } from "../constants";
+import { DEFAULT_BLOCK_SEPARATOR, LEGACY_METADATA_MARKER, STRUCTURE_MARKER, VISIBLE_BLOCK_MARKER } from "../constants";
 import {
   BlockLocation,
   BranchBlock,
   BranchBlockId,
   BranchTreeMetadata,
   LinearizedBranchDocument,
-  ManagedMetadataBlockStyle
 } from "../types";
 import { hashString, normalizeNewlines } from "../utils";
 import { buildLinearOrder } from "../model/tree";
@@ -183,12 +182,15 @@ export function linearizeTree(metadata: BranchTreeMetadata): LinearizedBranchDoc
   };
 }
 
-export function encodeMetadata(metadata: BranchTreeMetadata): string {
-  const payload = JSON.stringify(normalizeMetadata(metadata));
-  return Buffer.from(payload, "utf8").toString("base64");
-}
+function parseLegacyMetadataBlock(raw: string): BranchTreeMetadata | null {
+  const marker = LEGACY_METADATA_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const compactMatch = raw.match(new RegExp(`<!--\\s*${marker}:([A-Za-z0-9+/=\\r\\n_-]+)\\s*-->`));
+  const multilineMatch = raw.match(new RegExp(`<!--\\s*${marker}\\s*\\n([\\s\\S]*?)\\n-->`));
+  const encoded = compactMatch?.[1] ?? multilineMatch?.[1];
+  if (!encoded) {
+    return null;
+  }
 
-export function decodeMetadata(encoded: string): BranchTreeMetadata | null {
   try {
     const json = Buffer.from(encoded.replace(/\s+/g, ""), "base64").toString("utf8");
     return normalizeMetadata(JSON.parse(json) as BranchTreeMetadata);
@@ -197,38 +199,66 @@ export function decodeMetadata(encoded: string): BranchTreeMetadata | null {
   }
 }
 
-export function buildMetadataBlock(metadata: BranchTreeMetadata, style: ManagedMetadataBlockStyle): string {
-  const encoded = encodeMetadata(metadata);
-  if (style === "compact") {
-    return `<!-- ${METADATA_MARKER}:${encoded} -->`;
-  }
+export function buildStructureBlock(metadata: BranchTreeMetadata): string {
+  const structure = {
+    "arbor-plugin": "tree",
+    version: 2,
+    blocks: normalizeMetadata(metadata).blocks.map((block) => ({
+      id: block.id,
+      parent: block.parentId,
+      order: block.order
+    }))
+  };
 
-  return `<!-- ${METADATA_MARKER}\n${encoded}\n-->`;
+  return [`%% ${STRUCTURE_MARKER}`, "```json", JSON.stringify(structure, null, 2), "```", "%%"].join("\n");
 }
 
-export function parseMetadataBlock(raw: string): BranchTreeMetadata | null {
-  const compactMatch = raw.match(new RegExp(`<!--\\s*${METADATA_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:([A-Za-z0-9+/=\\r\\n_-]+)\\s*-->`));
-  if (compactMatch?.[1]) {
-    return decodeMetadata(compactMatch[1]);
+export function parseStructureBlock(raw: string): BranchTreeMetadata | null {
+  const marker = STRUCTURE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = raw.match(new RegExp("^%%\\s*" + marker + "\\s*\\n```json\\n([\\s\\S]*?)\\n```\\n%%$"));
+  if (!match?.[1]) {
+    return null;
   }
 
-  const multilineMatch = raw.match(new RegExp(`<!--\\s*${METADATA_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\n([\\s\\S]*?)\\n-->`));
-  if (multilineMatch?.[1]) {
-    return decodeMetadata(multilineMatch[1]);
-  }
+  try {
+    const parsed = JSON.parse(match[1]) as {
+      "arbor-plugin"?: unknown;
+      version?: unknown;
+      blocks?: unknown;
+    };
+    if (parsed["arbor-plugin"] !== "tree" || parsed.version !== 2 || !Array.isArray(parsed.blocks)) {
+      return null;
+    }
 
-  return null;
+    const seen = new Set<string>();
+    const blocks: BranchBlock[] = [];
+    for (const entry of parsed.blocks) {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const { id, parent, order } = entry as Record<string, unknown>;
+      if (typeof id !== "string" || id.length === 0 || seen.has(id) || (parent !== null && typeof parent !== "string") || !Number.isInteger(order) || (order as number) < 0) {
+        return null;
+      }
+      seen.add(id);
+      blocks.push({ id, parentId: parent as string | null, order: order as number, content: "", after: "" });
+    }
+
+    return normalizeMetadata({ version: 1, prefix: "", blocks });
+  } catch {
+    return null;
+  }
+}
+
+export function parseStoredMetadataBlock(raw: string): { metadata: BranchTreeMetadata | null; storageFormat: "legacy-v1" | "structure-v2" | null } {
+  const normalized = raw.trim();
+  const structure = parseStructureBlock(normalized);
+  if (structure) {
+    return { metadata: structure, storageFormat: "structure-v2" };
+  }
+  return { metadata: parseLegacyMetadataBlock(normalized), storageFormat: "legacy-v1" };
 }
 
 export function computeBodyHash(body: string): string {
   return hashString(normalizeNewlines(body));
-}
-
-export function applyBodyHash(metadata: BranchTreeMetadata): BranchTreeMetadata {
-  const linearized = linearizeTree(metadata);
-  return {
-    ...normalizeMetadata(metadata),
-    lastLinearHash: computeBodyHash(linearized.body),
-    savedAt: new Date().toISOString()
-  };
 }
