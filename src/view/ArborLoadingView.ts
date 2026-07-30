@@ -107,7 +107,8 @@ export class ArborLoadingView extends FileView {
 
     try {
       await this.plugin.resolveLoadingLeafOpen(file, this.leaf, {
-        beforeSwap: () => this.playExitAnimation()
+        beforeSwap: () => this.playExitAnimation(),
+        eState: this.leaf.getEphemeralState()
       });
     } catch (error) {
       console.error("Arbor loading view failed to resolve", error);

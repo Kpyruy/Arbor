@@ -190,6 +190,7 @@ export default class ArborPlugin extends Plugin {
     leaf: WorkspaceLeaf,
     options?: {
       beforeSwap?: () => Promise<void> | void;
+      eState?: unknown;
     }
   ): Promise<void> {
     if (leaf.view.getViewType() !== VIEW_TYPE_ARBOR_LOADING) {
@@ -207,7 +208,7 @@ export default class ArborPlugin extends Plugin {
         state: {
           file: file.path
         }
-      });
+      }, options?.eState);
       await this.app.workspace.revealLeaf(leaf);
       return;
     }

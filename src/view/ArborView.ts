@@ -61,6 +61,7 @@ import { loadImportedBranchDocument } from "../storage/reconcile";
 import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
+import { buildArborBlockLink, parseArborBlockAnchor } from "../blockLinks";
 
 type EditingOrigin = "card" | "preview";
 
@@ -340,6 +341,22 @@ export class ArborView extends FileView {
 
     this.resetLoadedUiState(this.state.selectedBlockId);
     this.render();
+  }
+
+  override setEphemeralState(state: unknown): void {
+    super.setEphemeralState(state);
+    const subpath = typeof (state as { subpath?: unknown })?.subpath === "string"
+      ? (state as { subpath: string }).subpath
+      : null;
+    const blockId = parseArborBlockAnchor(subpath);
+    if (!blockId || !this.state) {
+      return;
+    }
+    if (!getBlock(this.state.metadata, blockId)) {
+      new Notice("This Arbor block is no longer available.");
+      return;
+    }
+    this.selectBlock(blockId, { focus: true });
   }
 
   async onUnloadFile(): Promise<void> {
@@ -3268,6 +3285,9 @@ export class ArborView extends FileView {
     menu
       .addSeparator()
       .addItem((item) =>
+        item.setTitle("Copy block link").setIcon("link").onClick(() => void this.copyBlockLink(blockId))
+      )
+      .addItem((item) =>
         item.setTitle("Duplicate subtree").setIcon("copy-plus").onClick(() => void this.runWithSelectedBlock(blockId, () => this.duplicateSelectedSubtree()))
       )
       .addItem((item) =>
@@ -3292,6 +3312,21 @@ export class ArborView extends FileView {
     this.applyDangerMenuItemStyles(menu);
 
     return menu;
+  }
+
+  private async copyBlockLink(blockId: BranchBlockId): Promise<void> {
+    const block = this.state ? getBlock(this.state.metadata, blockId) : null;
+    if (!this.file || !block) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(
+        buildArborBlockLink(this.file.path, blockId, extractPathLabel(block.content))
+      );
+    } catch (error) {
+      console.error("[Arbor] Failed to copy block link", error);
+      new Notice("Arbor could not copy the block link.");
+    }
   }
 
   private applyDangerMenuItemStyles(menu: Menu): void {
