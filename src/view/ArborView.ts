@@ -2075,11 +2075,15 @@ export class ArborView extends FileView {
   }
 
   private renderOverviewLinks(scene: HTMLElement, layout: ReturnType<typeof buildOverviewLayout>): void {
-    const svg = scene.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.classList.add("arbor-overview-links");
-    svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
-    svg.setAttribute("width", String(layout.width));
-    svg.setAttribute("height", String(layout.height));
+    const svg = scene.createSvg("svg", {
+      cls: "arbor-overview-links",
+      attr: {
+        viewBox: `0 0 ${layout.width} ${layout.height}`,
+        width: layout.width,
+        height: layout.height
+      },
+      prepend: true
+    });
     const nodesById = new Map(layout.nodes.map((node) => [node.id, node]));
     layout.links.forEach((link) => {
       const parent = nodesById.get(link.parentId);
@@ -2087,12 +2091,11 @@ export class ArborView extends FileView {
       if (!parent || !child) {
         return;
       }
-      const path = scene.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", buildOverviewLinkPath(parent, child));
-      path.classList.add("arbor-overview-link");
-      svg.appendChild(path);
+      svg.createSvg("path", {
+        cls: "arbor-overview-link",
+        attr: { d: buildOverviewLinkPath(parent, child) }
+      });
     });
-    scene.prepend(svg);
   }
 
   private handleOverviewPointerDown(event: PointerEvent): void {

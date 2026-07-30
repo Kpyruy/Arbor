@@ -786,9 +786,7 @@ export default class ArborPlugin extends Plugin {
     await this.savePluginData();
 
     const notice = new Notice("", 12_000);
-    const noticeEl = "messageEl" in notice
-      ? notice.messageEl
-      : (notice as unknown as { noticeEl: HTMLElement }).noticeEl;
+    const noticeEl = (notice as unknown as { noticeEl: HTMLElement }).noticeEl;
     noticeEl.empty();
     noticeEl.addClass("arbor-release-notice");
     const title = noticeEl.createDiv({ cls: "arbor-release-notice-title", text: `Arbor ${version}` });
