@@ -2,6 +2,7 @@ import { MarkdownView, Menu, normalizePath, Notice, Platform, Plugin, TAbstractF
 import { COMMANDS, VIEW_TYPE_ARBOR, VIEW_TYPE_ARBOR_LOADING } from "./constants";
 import { ARBOR_DEMO_NOTE } from "./demoNote";
 import { ArborFileExplorerBadge } from "./fileExplorerBadge";
+import { shouldShowNewArborMenuItem } from "./fileExplorerMenu";
 import { createEmptyTree } from "./model/tree";
 import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
@@ -779,32 +780,32 @@ export default class ArborPlugin extends Plugin {
   }
 
   private handleFileMenu(menu: Menu, file: TAbstractFile, source: string): void {
-    if (Platform.isMobileApp) {
+    if (
+      source === "link-context-menu" ||
+      !(file instanceof TFolder) ||
+      !shouldShowNewArborMenuItem("folder", Platform.isMobileApp)
+    ) {
       return;
     }
 
-    this.addNewArborMenuItem(menu, file, source);
+    this.addNewArborMenuItem(menu, file);
   }
 
   private handleFilesMenu(menu: Menu, files: TAbstractFile[], source: string): void {
-    if (Platform.isMobileApp || files.length !== 1) {
+    if (source === "link-context-menu" || files.length !== 0 || !shouldShowNewArborMenuItem("empty", Platform.isMobileApp)) {
       return;
     }
 
-    this.addNewArborMenuItem(menu, files[0], source);
+    this.addNewArborMenuItem(menu, null);
   }
 
-  private addNewArborMenuItem(menu: Menu, file: TAbstractFile, source: string): void {
-    if (source === "link-context-menu") {
-      return;
-    }
-
+  private addNewArborMenuItem(menu: Menu, target: TFolder | null): void {
     menu.addItem((item) => {
       item
         .setTitle("New arbor note")
         .setIcon("git-fork")
         .setSection("new")
-        .onClick(() => void this.createArborNoteNear(file, true));
+        .onClick(() => void this.createArborNoteNear(target, true));
     });
   }
 

@@ -86,6 +86,9 @@
 ## Context Menu And Commands
 
 - Right click a card and confirm the block actions menu opens.
+- Right click a note in the File Explorer and confirm `New arbor note` is absent.
+- Right click a folder and confirm `New arbor note` appears in the top creation section, then creates the note inside that folder.
+- Right click empty File Explorer space and confirm `New arbor note` appears in the top creation section, then creates the note in the vault root.
 - With Auto-open managed notes enabled, edit a block and click the file-text “Open in Markdown” header control.
 - Confirm the same tab becomes a normal Markdown view, the edit is saved, and Arbor does not immediately reopen.
 - Repeat from the Arbor view menu and verify Obsidian keeps the mode it already chose (Source, Live Preview, or Reading View).
