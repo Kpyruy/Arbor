@@ -4,7 +4,7 @@ Think in branches. Keep one note.
 
 Arbor is a writing-first branching editor for Obsidian. It lets you build a note as small Markdown blocks arranged left-to-right while keeping the note itself as a normal `.md` file.
 
-No export step. No separate canvas file. No sidecar database.
+No separate canvas file. No sidecar database.
 
 ![Arbor hero screenshot](assets/hero.png)
 
@@ -47,7 +47,10 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Zoom, breadcrumbs, view menu, and context menus
 - Auto-open managed Arbor notes in Arbor view
 - File Explorer labels that mark managed notes with `ARBOR`
+- Clean Markdown export copies with an optional YAML frontmatter
 - Safe rebuild when the note changed in plain Markdown mode
+
+Use a clean export copy as the Markdown handoff for Pandoc or another DOCX converter; Arbor does not generate DOCX directly.
 
 ## Install
 
@@ -153,6 +156,7 @@ All of these are exposed as normal Obsidian commands. By default, they have no b
 | Create new note | `create-note` | Global | None |
 | Create new note in Markdown editor | `create-note-markdown` | Global | None |
 | Create demo note | `create-demo-note` | Global | None |
+| Export clean copy | `export-clean-copy` | Arbor view | None |
 | Open block actions menu | `open-block-actions-menu` | Arbor view | None |
 | Create new root block | `new-root-block` | Arbor view | None |
 | Create sibling above | `create-sibling-above` | Arbor view | None |

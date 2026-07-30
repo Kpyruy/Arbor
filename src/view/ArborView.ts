@@ -56,6 +56,7 @@ import {
   ArborSettings
 } from "../types";
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
+import { buildCleanExportDocument, CleanExportMode } from "../storage/cleanExport";
 import { loadImportedBranchDocument } from "../storage/reconcile";
 import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
@@ -168,6 +169,76 @@ class ArborConfirmModal extends Modal {
       return;
     }
 
+    this.resolved = true;
+    this.resolver(value);
+    this.close();
+  }
+}
+
+class CleanExportModal extends Modal {
+  private resolved = false;
+  private mode: CleanExportMode = "keep-yaml";
+  private resolver: (value: CleanExportMode | null) => void = () => undefined;
+
+  waitForChoice(): Promise<CleanExportMode | null> {
+    return new Promise((resolve) => {
+      this.resolver = resolve;
+      this.open();
+    });
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h3", { text: "Create clean export copy" });
+    contentEl.createEl("p", {
+      text: "Choose whether to keep the original YAML frontmatter in the normal Markdown copy."
+    });
+
+    const choicesEl = contentEl.createDiv({ cls: "arbor-clean-export-choices" });
+    this.addChoice(choicesEl, "keep-yaml", "Keep YAML frontmatter");
+    this.addChoice(choicesEl, "text-only", "Text only");
+
+    const actionsEl = contentEl.createDiv({ cls: "arbor-confirm-actions" });
+    new ButtonComponent(actionsEl)
+      .setButtonText("Cancel")
+      .onClick(() => this.finish(null));
+    new ButtonComponent(actionsEl)
+      .setButtonText("Create export")
+      .setCta()
+      .onClick(() => this.finish(this.mode));
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    if (!this.resolved) {
+      this.resolved = true;
+      this.resolver(null);
+    }
+  }
+
+  private addChoice(container: HTMLElement, value: CleanExportMode, label: string): void {
+    const choiceEl = container.createEl("label", { cls: "arbor-clean-export-choice" });
+    const input = choiceEl.createEl("input", {
+      attr: {
+        type: "radio",
+        name: "arbor-clean-export-mode",
+        value
+      }
+    });
+    input.checked = this.mode === value;
+    input.addEventListener("change", () => {
+      if (input.checked) {
+        this.mode = value;
+      }
+    });
+    choiceEl.createSpan({ text: label });
+  }
+
+  private finish(value: CleanExportMode | null): void {
+    if (this.resolved) {
+      return;
+    }
     this.resolved = true;
     this.resolver(value);
     this.close();
@@ -465,6 +536,31 @@ export class ArborView extends FileView {
     }
     await this.commitEditIfNeeded();
     await this.openFileInMarkdownView(this.file);
+  }
+
+  async exportCleanCopy(): Promise<void> {
+    if (!this.file || !this.state) {
+      return;
+    }
+
+    await this.commitEditIfNeeded();
+    if (!this.file || !this.state) {
+      return;
+    }
+
+    const mode = await new CleanExportModal(this.app).waitForChoice();
+    if (!mode) {
+      return;
+    }
+
+    const contents = buildCleanExportDocument(this.state.frontmatter, this.state.metadata, mode);
+    try {
+      const exported = await this.plugin.createCleanExportCopy(this.file, contents);
+      await this.plugin.openFileInMarkdownView(this.app.workspace.getLeaf("tab"), exported);
+    } catch (error) {
+      console.error("[Arbor] Failed to create clean export", error);
+      new Notice("Arbor could not create the clean export copy.");
+    }
   }
 
   selectBlock(blockId: BranchBlockId | null, options?: { focus?: boolean }): void {
@@ -2083,6 +2179,9 @@ export class ArborView extends FileView {
     const menu = new Menu();
     menu.addItem((item) =>
       item.setTitle("Open in Markdown").setIcon("file-text").onClick(() => void this.openCurrentFileInMarkdown())
+    );
+    menu.addItem((item) =>
+      item.setTitle("Export clean copy…").setIcon("file-output").onClick(() => void this.exportCleanCopy())
     );
     menu.addSeparator();
     this.addViewToggleMenuItem(menu, "Selected block panel", this.plugin.settings.liveLinearPreview, async () => {

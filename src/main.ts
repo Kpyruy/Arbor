@@ -3,6 +3,7 @@ import { AutoOpenSuppression } from "./autoOpenSuppression";
 import { COMMANDS, VIEW_TYPE_ARBOR, VIEW_TYPE_ARBOR_LOADING } from "./constants";
 import { ARBOR_DEMO_NOTE } from "./demoNote";
 import { ArborFileExplorerBadge } from "./fileExplorerBadge";
+import { canExportCleanCopy } from "./exportCommand";
 import { FILE_EXPLORER_CREATION_SECTION, shouldShowNewArborMenuItem } from "./fileExplorerMenu";
 import { captureOriginalSetViewState, invokeOriginalSetViewState } from "./leafOpenInterception";
 import { buildAvailableMarkdownPath } from "./markdownPaths";
@@ -297,6 +298,21 @@ export default class ArborPlugin extends Plugin {
       id: COMMANDS.createDemo,
       name: "Create demo note",
       callback: () => void this.createDemoNote()
+    });
+
+    this.addCommand({
+      id: COMMANDS.exportCleanCopy,
+      name: "Export clean copy",
+      checkCallback: (checking) => {
+        const view = this.getActiveBranchView();
+        if (!canExportCleanCopy({ hasActiveArborView: Boolean(view), hasFile: Boolean(view?.file) })) {
+          return false;
+        }
+        if (!checking && view) {
+          void view.exportCleanCopy();
+        }
+        return true;
+      }
     });
 
     this.addBranchCommand(COMMANDS.openBlockMenu, "Open block actions menu", (view) => {

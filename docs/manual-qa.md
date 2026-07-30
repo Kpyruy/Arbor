@@ -46,6 +46,16 @@
 - Confirm the terminal `%% arbor:structure` footer is readable JSON with only block ID, parent, and order.
 - Disable the plugin and confirm the note is still readable as markdown.
 
+## Clean Export Copy
+
+- Open a saved Arbor note with YAML, nested blocks, code, tasks, and embeds.
+- Choose Export clean copy…, choose Keep YAML frontmatter, and create the export.
+- Confirm <source> — export.md opens in a normal Markdown tab; it has no ARBOR badge, visible block markers, or structure footer.
+- Confirm the order, content, and spacing match the readable source while the original Arbor note stays open and unchanged.
+- Repeat with Text only and confirm the YAML frontmatter is absent.
+- Export again and confirm — export 2.md is created without overwriting the first copy.
+- Cancel the modal and confirm no file is created.
+
 ## Rich Markdown Round-Trip
 
 - Use a note containing headings, paragraphs, tasks, callouts, code fences, tables, wiki links, embeds, and footnotes.
