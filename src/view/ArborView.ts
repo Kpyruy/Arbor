@@ -58,7 +58,7 @@ import {
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
 import { loadImportedBranchDocument } from "../storage/reconcile";
 import { linearizeTree, normalizeMetadata } from "../storage/serializer";
-import { buildMarkdownViewState, canOpenImportedBranchDocumentInArbor } from "../opening";
+import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 
 type EditingOrigin = "card" | "preview";
@@ -456,9 +456,7 @@ export class ArborView extends FileView {
   }
 
   private async openFileInMarkdownView(file: TFile): Promise<void> {
-    this.plugin.suppressAutoOpenOnce(file.path);
-    await this.leaf.setViewState(buildMarkdownViewState(file.path));
-    await this.app.workspace.revealLeaf(this.leaf);
+    await this.plugin.openFileInMarkdownView(this.leaf, file);
   }
 
   private async openCurrentFileInMarkdown(): Promise<void> {

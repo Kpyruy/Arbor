@@ -91,6 +91,7 @@
 - Right click empty File Explorer space and confirm `New arbor note` appears in the top creation section, then creates the note in the vault root.
 - With Auto-open managed notes enabled, edit a block and click the file-text “Open in Markdown” header control.
 - Confirm the same tab becomes a normal Markdown view, the edit is saved, and Arbor does not immediately reopen.
+- Confirm no Arbor loading screen remains after the Markdown view opens.
 - Repeat from the Arbor view menu and verify Obsidian keeps the mode it already chose (Source, Live Preview, or Reading View).
 - Use the menu to create a child block to continue the branch.
 - Focus a card and confirm `ArrowUp/ArrowDown/ArrowLeft/ArrowRight` move through siblings, parent, and first child.

@@ -112,15 +112,7 @@ export class ArborLoadingView extends FileView {
     } catch (error) {
       console.error("Arbor loading view failed to resolve", error);
       this.resolveStarted = false;
-      this.plugin.suppressAutoOpenOnce(file.path);
-      await this.leaf.setViewState({
-        type: "markdown",
-        active: true,
-        state: {
-          file: file.path
-        }
-      });
-      await this.app.workspace.revealLeaf(this.leaf);
+      await this.plugin.openFileInMarkdownView(this.leaf, file);
     }
   }
 
@@ -138,15 +130,12 @@ export class ArborLoadingView extends FileView {
 
     this.resolveStarted = true;
     try {
-      this.plugin.suppressAutoOpenOnce(filePath);
-      await this.leaf.setViewState({
-        type: "markdown",
-        active: true,
-        state: {
-          file: filePath
-        }
-      });
-      await this.app.workspace.revealLeaf(this.leaf);
+      const file = this.app.vault.getAbstractFileByPath(filePath);
+      if (!(file instanceof TFile)) {
+        this.renderFailureState();
+        return;
+      }
+      await this.plugin.openFileInMarkdownView(this.leaf, file);
       new Notice("Open this note in Markdown instead.");
     } finally {
       this.resolveStarted = false;

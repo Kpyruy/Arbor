@@ -3,6 +3,7 @@ import { COMMANDS, VIEW_TYPE_ARBOR, VIEW_TYPE_ARBOR_LOADING } from "./constants"
 import { ARBOR_DEMO_NOTE } from "./demoNote";
 import { ArborFileExplorerBadge } from "./fileExplorerBadge";
 import { FILE_EXPLORER_CREATION_SECTION, shouldShowNewArborMenuItem } from "./fileExplorerMenu";
+import { captureOriginalSetViewState, invokeOriginalSetViewState } from "./leafOpenInterception";
 import { createEmptyTree } from "./model/tree";
 import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
@@ -24,6 +25,7 @@ export default class ArborPlugin extends Plugin {
   private readonly suppressedAutoOpen = new Map<string, number>();
   private readonly managedNotePaths = new Set<string>();
   private readonly explicitArborOpenPaths = new Map<string, number>();
+  private originalLeafSetViewState: typeof WorkspaceLeaf.prototype.setViewState | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -126,6 +128,21 @@ export default class ArborPlugin extends Plugin {
     this.suppressedAutoOpen.set(path, (this.suppressedAutoOpen.get(path) ?? 0) + 3);
   }
 
+  async openFileInMarkdownView(leaf: WorkspaceLeaf, file: TFile): Promise<void> {
+    const viewState = {
+      type: "markdown" as const,
+      active: true,
+      state: { file: file.path }
+    };
+    if (this.originalLeafSetViewState) {
+      await invokeOriginalSetViewState(this.originalLeafSetViewState, leaf, viewState);
+    } else {
+      this.suppressAutoOpenOnce(file.path);
+      await leaf.setViewState(viewState);
+    }
+    await this.app.workspace.revealLeaf(leaf);
+  }
+
   rememberManagedNote(path: string): void {
     if (this.managedNotePaths.has(path)) {
       return;
@@ -202,24 +219,13 @@ export default class ArborPlugin extends Plugin {
       return;
     }
 
-    this.suppressAutoOpenOnce(file.path);
     await beforeSwap?.();
-    await leaf.setViewState({
-      type: "markdown",
-      active: true,
-      state: {
-        file: file.path
-      }
-    });
-    await this.app.workspace.revealLeaf(leaf);
+    await this.openFileInMarkdownView(leaf, file);
   }
 
   private installLeafOpenInterception(): void {
-    const descriptor = Object.getOwnPropertyDescriptor(WorkspaceLeaf.prototype, "setViewState");
-    const original = descriptor?.value as typeof WorkspaceLeaf.prototype.setViewState | undefined;
-    if (typeof original !== "function") {
-      return;
-    }
+    const original = captureOriginalSetViewState(WorkspaceLeaf.prototype);
+    this.originalLeafSetViewState = original;
 
     const rewriteViewStateForManagedOpen = this.rewriteViewStateForManagedOpen.bind(this);
     const patched: typeof WorkspaceLeaf.prototype.setViewState = function (this: WorkspaceLeaf, state, ...args) {
