@@ -63,7 +63,14 @@ import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
 import { resolveNumericChildTarget } from "../numericNavigation";
-import { canDragCard, canStartCardDrag } from "../cardViewport";
+import {
+  canDragCard,
+  canStartCardDrag,
+  CARD_PREVIEW_MAX_HEIGHT_PX,
+  clampCardCenter,
+  hasVerticalOverflow,
+  resolveEditorHeight
+} from "../cardViewport";
 
 type EditingOrigin = "card" | "preview";
 
@@ -1825,6 +1832,13 @@ export class ArborView extends FileView {
       card.dataset.renderSignature = renderSignature;
     }
 
+    if (content) {
+      const isCompactPreview = !card.hasClass("is-active") && !card.hasClass("is-editing");
+      card.toggleClass(
+        "has-truncated-content",
+        isCompactPreview && hasVerticalOverflow(content.scrollHeight, content.clientHeight)
+      );
+    }
     card.dataset.renderMode = "content";
   }
 
@@ -3246,7 +3260,8 @@ export class ArborView extends FileView {
       "--bw-column-gap": `${this.plugin.settings.horizontalSpacing}px`,
       "--bw-card-gap": `${this.plugin.settings.verticalSpacing}px`,
       "--bw-zoom": `${this.plugin.settings.zoomLevel}`,
-      "--bw-content-zoom": `${this.plugin.settings.zoomLevel}`
+      "--bw-content-zoom": `${this.plugin.settings.zoomLevel}`,
+      "--arbor-card-preview-max-height": `${CARD_PREVIEW_MAX_HEIGHT_PX}px`
     });
     this.syncZoomIndicator();
   }
@@ -3412,7 +3427,12 @@ export class ArborView extends FileView {
 
   private resizeEditor(textarea: HTMLTextAreaElement): void {
     textarea.setCssProps({ "--arbor-editor-height": "0px" });
-    textarea.setCssProps({ "--arbor-editor-height": `${Math.max(textarea.scrollHeight, 180)}px` });
+    const card = textarea.closest<HTMLElement>(".arbor-card");
+    const viewportHeight = this.columnsViewportEl?.clientHeight ?? window.innerHeight;
+    const cardChromeHeight = card ? Math.max(0, card.offsetHeight - textarea.offsetHeight) : 0;
+    textarea.setCssProps({
+      "--arbor-editor-height": `${resolveEditorHeight(textarea.scrollHeight, viewportHeight, cardChromeHeight)}px`
+    });
   }
 
   private handleViewportWheel(event: WheelEvent, viewport: HTMLElement): void {
@@ -3806,9 +3826,17 @@ export class ArborView extends FileView {
       const naturalCenterY =
         this.getElementOffsetTopWithin(alignmentTarget, columnsRoot) +
         alignmentTarget.offsetHeight / 2;
-      const anchorCenterY = index === 0
+      const preferredCenterY = index === 0
         ? rootAnchorCenterY
         : (resolvedCenterYByColumn.get(index - 1) ?? naturalCenterY);
+      const anchorCenterY = alignmentTarget.hasClass("is-active")
+        ? clampCardCenter(
+            preferredCenterY,
+            alignmentTarget.offsetHeight,
+            viewportRect.top - columnsRootRect.top,
+            viewport.clientHeight
+          )
+        : preferredCenterY;
       const shift = anchorCenterY - naturalCenterY;
 
       if (Math.abs(shift) < 0.25) {

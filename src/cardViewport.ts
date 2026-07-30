@@ -23,6 +23,10 @@ export function resolveEditorHeight(scrollHeight: number, viewportHeight: number
   return Math.max(MIN_EDITOR_HEIGHT_PX, Math.min(scrollHeight, available));
 }
 
+export function hasVerticalOverflow(scrollHeight: number, clientHeight: number): boolean {
+  return scrollHeight > clientHeight;
+}
+
 export function clampCardCenter(preferredCenter: number, cardHeight: number, viewportTop: number, viewportHeight: number): number {
   const halfHeight = Math.min(cardHeight / 2, Math.max(0, viewportHeight / 2 - CARD_VIEWPORT_EDGE_PADDING_PX));
   const minimum = viewportTop + CARD_VIEWPORT_EDGE_PADDING_PX + halfHeight;

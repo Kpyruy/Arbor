@@ -686,11 +686,34 @@
 }
 
 .arbor-card-content {
+  position: relative;
   color: var(--text-normal);
   font-size: calc(1rem * var(--bw-content-zoom));
   line-height: 1.55;
   overflow: hidden;
   user-select: text;
+}
+
+.arbor-card:not(.is-active):not(.is-editing) .arbor-card-content {
+  max-height: var(--arbor-card-preview-max-height);
+}
+
+.arbor-card.has-truncated-content:not(.is-active):not(.is-editing) .arbor-card-content::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3.4rem;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(transparent, color-mix(in srgb, var(--background-secondary) 92%, black 8%));
+}
+
+.arbor-card.is-active .arbor-card-content,
+.arbor-card.is-editing .arbor-editor {
+  max-height: min(560px, calc(100dvh - 220px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .arbor-card-content > :first-child {

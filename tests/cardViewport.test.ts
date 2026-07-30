@@ -5,6 +5,7 @@ import {
   canDragCard,
   canStartCardDrag,
   clampCardCenter,
+  hasVerticalOverflow,
   resolveEditorHeight
 } from "../src/cardViewport";
 
@@ -28,6 +29,11 @@ describe("bounded Arbor card viewport rules", () => {
   it("caps editor height at the usable canvas", () => {
     expect(resolveEditorHeight(1_200, 700, 36)).toBe(616);
     expect(resolveEditorHeight(120, 700, 36)).toBe(180);
+  });
+
+  it("marks only content taller than its preview as truncated", () => {
+    expect(hasVerticalOverflow(260, 260)).toBe(false);
+    expect(hasVerticalOverflow(261, 260)).toBe(true);
   });
 
   it("clamps a card center inside canvas safety bounds", () => {
