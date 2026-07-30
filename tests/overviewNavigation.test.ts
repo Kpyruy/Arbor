@@ -102,6 +102,7 @@ describe("overview arrow navigation", () => {
 
   it("keeps the current overview visible while a structural update is rendered", () => {
     const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
     const overviewStart = source.indexOf("private async syncTreeOverview");
     const overviewEnd = source.indexOf("private applyOverviewLayout", overviewStart);
     const overview = source.slice(overviewStart, overviewEnd);
@@ -111,5 +112,11 @@ describe("overview arrow navigation", () => {
     expect(overview).toContain("previousSurface.remove();");
     expect(overview).toContain("this.overviewSurfaceEl = surface;");
     expect(overview).not.toContain("surface.empty();");
+    const stagingStyles = styles.slice(
+      styles.indexOf(".arbor-overview-surface.is-staging"),
+      styles.indexOf(".arbor-overview-links")
+    );
+    expect(stagingStyles).toContain("opacity: 0;");
+    expect(stagingStyles).not.toContain("visibility: hidden;");
   });
 });

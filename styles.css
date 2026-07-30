@@ -531,7 +531,7 @@
 .arbor-overview-surface.is-staging {
   position: absolute;
   inset: 0;
-  visibility: hidden;
+  opacity: 0;
   pointer-events: none;
 }
 
