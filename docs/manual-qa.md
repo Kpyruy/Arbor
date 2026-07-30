@@ -2,7 +2,7 @@
 
 ## Core Rendering
 
-- Open a note with hidden Arbor metadata.
+- Open a note with an Arbor structure footer.
 - Run `Open view for current note`.
 - Confirm root blocks appear in the left column.
 - Click a root card and confirm its children open in the next column.
@@ -43,7 +43,7 @@
 - Confirm the note body reads like normal markdown.
 - Confirm each block starts with an `<!-- arbor:block:v1 ... -->` marker in source mode.
 - Confirm YAML frontmatter remains untouched.
-- Confirm hidden metadata sits at the end of the note.
+- Confirm the terminal `%% arbor:structure` footer is readable JSON with only block ID, parent, and order.
 - Disable the plugin and confirm the note is still readable as markdown.
 
 ## Rich Markdown Round-Trip
@@ -79,6 +79,9 @@
 ## Context Menu And Commands
 
 - Right click a card and confirm the block actions menu opens.
+- With Auto-open managed notes enabled, edit a block and click the file-text “Open in Markdown” header control.
+- Confirm the same tab becomes a normal Markdown view, the edit is saved, and Arbor does not immediately reopen.
+- Repeat from the Arbor view menu and verify Obsidian keeps the mode it already chose (Source, Live Preview, or Reading View).
 - Use the menu to create a child block to continue the branch.
 - Focus a card and confirm `ArrowUp/ArrowDown/ArrowLeft/ArrowRight` move through siblings, parent, and first child.
 - Confirm `Home` jumps to the first sibling and `End` jumps to the last sibling.

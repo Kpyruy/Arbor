@@ -57,8 +57,8 @@ import {
 } from "../types";
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
 import { loadImportedBranchDocument } from "../storage/reconcile";
-import { applyBodyHash, linearizeTree } from "../storage/serializer";
-import { canOpenImportedBranchDocumentInArbor } from "../opening";
+import { linearizeTree, normalizeMetadata } from "../storage/serializer";
+import { buildMarkdownViewState, canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 
 type EditingOrigin = "card" | "preview";
@@ -191,6 +191,7 @@ export class ArborView extends FileView {
   private frameEl: HTMLElement | null = null;
   private breadcrumbsEl: HTMLElement | null = null;
   private zoomIndicatorEl: HTMLButtonElement | null = null;
+  private markdownButtonEl: HTMLButtonElement | null = null;
   private viewMenuButtonEl: HTMLButtonElement | null = null;
   private searchOverlayEl: HTMLElement | null = null;
   private searchDialogEl: HTMLElement | null = null;
@@ -414,7 +415,7 @@ export class ArborView extends FileView {
 
     this.state = initial.state;
 
-    if (!initial.loaded.needsVisibleMarkerMigration || initial.loaded.origin !== "legacy") {
+    if (!initial.loaded.needsVisibleMarkerMigration) {
       return initial.state;
     }
 
@@ -456,14 +457,16 @@ export class ArborView extends FileView {
 
   private async openFileInMarkdownView(file: TFile): Promise<void> {
     this.plugin.suppressAutoOpenOnce(file.path);
-    await this.leaf.setViewState({
-      type: "markdown",
-      active: true,
-      state: {
-        file: file.path
-      }
-    });
+    await this.leaf.setViewState(buildMarkdownViewState(file.path));
     await this.app.workspace.revealLeaf(this.leaf);
+  }
+
+  private async openCurrentFileInMarkdown(): Promise<void> {
+    if (!this.file) {
+      return;
+    }
+    await this.commitEditIfNeeded();
+    await this.openFileInMarkdownView(this.file);
   }
 
   selectBlock(blockId: BranchBlockId | null, options?: { focus?: boolean }): void {
@@ -985,6 +988,13 @@ export class ArborView extends FileView {
     });
     this.zoomIndicatorEl.addEventListener("click", () => this.updateZoomLevel(1));
     this.zoomIndicatorEl.addEventListener("mousedown", (event) => event.stopPropagation());
+    this.markdownButtonEl = this.frameEl.createEl("button", {
+      cls: "arbor-markdown-button",
+      attr: { type: "button", "aria-label": "Open in Markdown" }
+    });
+    setIcon(this.markdownButtonEl, "file-text");
+    this.markdownButtonEl.addEventListener("click", () => void this.openCurrentFileInMarkdown());
+    this.markdownButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
     this.viewMenuButtonEl = this.frameEl.createEl("button", {
       cls: "arbor-view-menu-button",
       attr: {
@@ -1034,6 +1044,7 @@ export class ArborView extends FileView {
     this.frameEl = null;
     this.breadcrumbsEl = null;
     this.zoomIndicatorEl = null;
+    this.markdownButtonEl = null;
     this.viewMenuButtonEl = null;
     this.searchOverlayEl = null;
     this.searchDialogEl = null;
@@ -1513,7 +1524,8 @@ export class ArborView extends FileView {
       return existing;
     }
 
-    const indicator = createDiv({ cls: "arbor-drop-indicator" });
+    const indicator = document.createElement("div");
+    indicator.className = "arbor-drop-indicator";
     indicator.dataset.nodeKey = key;
     return indicator;
   }
@@ -1526,7 +1538,8 @@ export class ArborView extends FileView {
       return existing;
     }
 
-    const card = createDiv({ cls: "arbor-card" });
+    const card = document.createElement("div");
+    card.className = "arbor-card";
     card.tabIndex = 0;
     card.dataset.nodeKey = key;
     card.addEventListener("pointerdown", (event) => this.rememberCardPointerPosition(blockId, event.clientX, event.clientY));
@@ -2070,6 +2083,10 @@ export class ArborView extends FileView {
     event?.stopPropagation();
 
     const menu = new Menu();
+    menu.addItem((item) =>
+      item.setTitle("Open in Markdown").setIcon("file-text").onClick(() => void this.openCurrentFileInMarkdown())
+    );
+    menu.addSeparator();
     this.addViewToggleMenuItem(menu, "Selected block panel", this.plugin.settings.liveLinearPreview, async () => {
       await this.updateViewSetting("liveLinearPreview", !this.plugin.settings.liveLinearPreview);
     });
@@ -2924,7 +2941,7 @@ export class ArborView extends FileView {
 
     this.history.push(label, this.state.metadata, this.state.selectedBlockId);
     const result = mutate(cloneMetadata(this.state.metadata));
-    this.state.metadata = applyBodyHash(result.metadata);
+    this.state.metadata = normalizeMetadata(result.metadata);
     this.state.selectedBlockId = ensureSelectedBlock(this.state.metadata, result.selectedBlockId);
     this.state.linearized = linearizeTree(this.state.metadata);
     this.state.origin = "metadata";
@@ -2985,7 +3002,7 @@ export class ArborView extends FileView {
     }
 
     this.history.push("Edit block", this.state.metadata, this.state.selectedBlockId);
-    this.state.metadata = applyBodyHash(updateBlockContent(this.state.metadata, blockId, value));
+    this.state.metadata = normalizeMetadata(updateBlockContent(this.state.metadata, blockId, value));
     this.state.selectedBlockId = blockId;
     this.state.linearized = linearizeTree(this.state.metadata);
     this.state.origin = "metadata";
@@ -3046,14 +3063,13 @@ export class ArborView extends FileView {
       return;
     }
 
-    const metadata = applyBodyHash(this.state.metadata);
+    const metadata = normalizeMetadata(this.state.metadata);
     this.state.metadata = metadata;
     this.state.linearized = linearizeTree(metadata);
     const document = buildBranchDocument(
       this.state.frontmatter,
       this.state.linearized.body,
-      metadata,
-      this.plugin.settings.metadataBlockStyle
+      metadata
     );
 
     this.isPersisting = true;

@@ -18,8 +18,7 @@ export const DEFAULT_SETTINGS: ArborSettings = {
   showBreadcrumbFlow: true,
   breadcrumbLabelPreferredPrefix: "#",
   breadcrumbLabelFallback: "firstLine",
-  liveLinearPreview: false,
-  metadataBlockStyle: "multiline"
+  liveLinearPreview: false
 };
 
 export class ArborSettingTab extends PluginSettingTab {
@@ -146,19 +145,6 @@ export class ArborSettingTab extends PluginSettingTab {
         })
       );
 
-    new Setting(containerEl)
-      .setName("Managed metadata block style")
-      .setDesc("How hidden in-note tree metadata is stored.")
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOption("multiline", "Multiline HTML comment")
-          .addOption("compact", "Compact single-line HTML comment")
-          .setValue(this.plugin.settings.metadataBlockStyle)
-          .onChange(async (value) => {
-            this.plugin.settings.metadataBlockStyle = value as ArborSettings["metadataBlockStyle"];
-            await this.plugin.saveSettings();
-          })
-      );
   }
 
   private addNumericSetting(

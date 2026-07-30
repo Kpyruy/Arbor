@@ -137,6 +137,7 @@
 }
 
 .arbor-zoom-indicator,
+.arbor-markdown-button,
 .arbor-view-menu-button {
   position: absolute;
   top: 2px;
@@ -161,9 +162,10 @@
 }
 
 .arbor-zoom-indicator {
-  right: 44px;
+  right: 84px;
 }
 
+.arbor-markdown-button,
 .arbor-view-menu-button {
   display: inline-flex;
   align-items: center;
@@ -174,6 +176,11 @@
   right: 4px;
 }
 
+.arbor-markdown-button {
+  right: 44px;
+}
+
+.arbor-markdown-button svg,
 .arbor-view-menu-button svg {
   width: 15px;
   height: 15px;
@@ -182,6 +189,8 @@
 .arbor-zoom-indicator:hover,
 .arbor-zoom-indicator:focus-visible,
 .arbor-zoom-indicator.is-visible,
+.arbor-markdown-button:hover,
+.arbor-markdown-button:focus-visible,
 .arbor-view-menu-button:hover,
 .arbor-view-menu-button:focus-visible {
   opacity: 0.92;
@@ -194,6 +203,7 @@
 }
 
 .arbor-zoom-indicator:focus-visible,
+.arbor-markdown-button:focus-visible,
 .arbor-view-menu-button:focus-visible {
   outline: 1px solid color-mix(in srgb, var(--interactive-accent) 58%, transparent);
   outline-offset: 2px;

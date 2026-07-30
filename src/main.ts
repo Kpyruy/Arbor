@@ -5,7 +5,7 @@ import { createEmptyTree } from "./model/tree";
 import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { buildBranchDocument } from "./storage/document";
-import { applyBodyHash } from "./storage/serializer";
+import { normalizeMetadata } from "./storage/serializer";
 import { ArborSettings } from "./types";
 import { getNextNumberedName } from "./utils";
 import { ArborLoadingView } from "./view/ArborLoadingView";
@@ -498,8 +498,7 @@ export default class ArborPlugin extends Plugin {
     return buildBranchDocument(
       "",
       "",
-      applyBodyHash(createEmptyTree()),
-      this.settings.metadataBlockStyle
+      normalizeMetadata(createEmptyTree())
     );
   }
 

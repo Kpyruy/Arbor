@@ -4,7 +4,7 @@ import { buildLinearOrder, createEmptyTree, getRootBlocks } from "../model/tree"
 import { ImportedBranchDocument, BranchBlock, BranchTreeMetadata } from "../types";
 import { normalizeNewlines, nowIso } from "../utils";
 import { parseBranchDocument } from "./document";
-import { applyBodyHash, computeBodyHash, linearizeTree, linearizeTreeLegacy, normalizeMetadata, parseVisibleBlockMetadata } from "./serializer";
+import { computeBodyHash, linearizeTree, linearizeTreeLegacy, normalizeMetadata, parseVisibleBlockMetadata } from "./serializer";
 
 function buildImportedBlock(content: string, order: number): BranchBlock {
   const timestamp = nowIso();
@@ -68,7 +68,7 @@ function extractHeadingSections(body: string): string[] {
 function importBodyToMetadata(body: string): BranchTreeMetadata {
   const tree = createEmptyTree();
   if (body.length === 0) {
-    return applyBodyHash(tree);
+    return normalizeMetadata(tree);
   }
 
   const headingSections = extractHeadingSections(body);
@@ -85,7 +85,7 @@ function importBodyToMetadata(body: string): BranchTreeMetadata {
     tree.blocks[0].after = "";
   }
 
-  return applyBodyHash(tree);
+  return normalizeMetadata(tree);
 }
 
 function splitChunkContentAndAfter(chunk: string): { content: string; after: string } {
@@ -139,7 +139,7 @@ function translateLegacyBodyToMetadata(body: string, storedMetadata: BranchTreeM
   const prefixEnd = translateLegacyBoundaryIndex(diffParts, normalizedMetadata.prefix.length);
   let oldCursor = normalizedMetadata.prefix.length;
 
-  return applyBodyHash({
+  return normalizeMetadata({
     ...normalizedMetadata,
     prefix: normalizedBody.slice(0, prefixEnd),
     blocks: ordered.map((block) => {
@@ -192,14 +192,24 @@ export function loadImportedBranchDocument(text: string): ImportedBranchDocument
   const hasStoredMetadataBlock = parsed.metadataRaw.length > 0;
 
   if (hasStoredMetadataBlock && visibleMarkerMetadata) {
-    const markerMetadata = applyBodyHash(mergeMarkerMetadataWithStoredExtras(visibleMarkerMetadata, parsed.metadata));
+    if (parsed.storageFormat === "structure-v2") {
+      return {
+        metadata: normalizeMetadata(visibleMarkerMetadata),
+        origin: "metadata",
+        staleMetadata: null,
+        needsVisibleMarkerMigration: false
+      };
+    }
+
+    const markerMetadata = normalizeMetadata(mergeMarkerMetadataWithStoredExtras(visibleMarkerMetadata, parsed.metadata));
     if (parsed.metadata) {
       const linearized = linearizeTree(parsed.metadata);
       if (computeBodyHash(parsed.body) === computeBodyHash(linearized.body)) {
         return {
-          metadata: applyBodyHash(parsed.metadata),
+          metadata: normalizeMetadata(parsed.metadata),
           origin: "metadata",
-          staleMetadata: null
+          staleMetadata: null,
+          needsVisibleMarkerMigration: true
         };
       }
     }
@@ -208,7 +218,7 @@ export function loadImportedBranchDocument(text: string): ImportedBranchDocument
       metadata: markerMetadata,
       origin: "markers",
       staleMetadata: parsed.metadata,
-      needsVisibleMarkerMigration: false
+      needsVisibleMarkerMigration: true
     };
   }
 
@@ -223,14 +233,14 @@ export function loadImportedBranchDocument(text: string): ImportedBranchDocument
     }
 
     return {
-      metadata: applyBodyHash(visibleMarkerMetadata),
+      metadata: normalizeMetadata(visibleMarkerMetadata),
       origin: "markers",
       staleMetadata: null,
       needsVisibleMarkerMigration: false
     };
   }
 
-  if (parsed.metadata) {
+  if (parsed.metadata && parsed.storageFormat === "legacy-v1") {
     return {
       metadata: translateLegacyBodyToMetadata(parsed.body, parsed.metadata),
       origin: "legacy",

@@ -258,8 +258,7 @@ export function createEmptyTree(): BranchTreeMetadata {
   return {
     version: 1,
     prefix: "",
-    blocks: [],
-    savedAt: nowIso()
+    blocks: []
   };
 }
 

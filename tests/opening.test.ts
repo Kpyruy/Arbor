@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   inspectManagedBranchDocumentText,
+  buildMarkdownViewState,
   resolveLoadingViewTarget,
   shouldRouteMarkdownOpenToLoadingView
 } from "../src/opening";
@@ -32,6 +33,14 @@ function metadataFixture(): BranchTreeMetadata {
 }
 
 describe("managed note opening", () => {
+  it("builds a normal Markdown view state for the current file", () => {
+    expect(buildMarkdownViewState("Ideas/Branch.md")).toEqual({
+      type: "markdown",
+      active: true,
+      state: { file: "Ideas/Branch.md" }
+    });
+  });
+
   it("routes cached managed markdown opens to arbor-loading", () => {
     expect(
       shouldRouteMarkdownOpenToLoadingView({
@@ -85,7 +94,7 @@ describe("managed note opening", () => {
   it("treats notes with hidden metadata as managed", () => {
     const metadata = metadataFixture();
     const visibleBody = linearizeTree(metadata).body;
-    const note = buildBranchDocument("", visibleBody, metadata, "multiline");
+    const note = buildBranchDocument("", visibleBody, metadata);
     const inspection = inspectManagedBranchDocumentText(note);
 
     expect(inspection.autoManaged).toBe(true);

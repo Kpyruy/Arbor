@@ -38,7 +38,7 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Left-to-right branching editor for one Markdown note
 - Stable block tree with inline editing
 - Normal readable Markdown body as the source document
-- Visible block markers plus hidden in-note metadata for exact recovery
+- Visible block markers plus a readable in-note structure footer for exact recovery
 - Selected block panel with focused preview and inline editing
 - Context-aware dimming so the active branch stays readable
 - Drag-and-drop reorder and reparent
@@ -211,7 +211,6 @@ Current menu actions:
 | Preferred breadcrumb line prefix | `#` | Prefer the first non-empty line that starts with `#` when generating breadcrumb labels |
 | Breadcrumb fallback | `First non-empty line` | What Arbor uses when no preferred-prefix line exists |
 | Selected block panel | `Off` | Show the focused preview/editor panel for the selected block |
-| Managed metadata block style | `Multiline` | Store hidden Arbor metadata as a multiline or compact HTML comment |
 
 ## How Notes Stay Normal Markdown
 
@@ -221,27 +220,33 @@ Each Arbor note contains:
 
 - the visible Markdown body
 - machine-written block markers before each block in the visible body
-- one hidden metadata block at the end of the same note
+- one readable structure footer at the end of the same note
 
 Example shape:
 
-```md
+````md
 <!-- arbor:block:v1 id="root-1" parent="" order="0" -->
 # A visible markdown note
 
 This text is still readable in normal Obsidian.
 
-<!-- arbor:metadata:v1
-BASE64_ENCODED_JSON
--->
+%% arbor:structure
+```json
+{
+  "arbor-plugin": "tree",
+  "version": 2,
+  "blocks": [{ "id": "root-1", "parent": null, "order": 0 }]
+}
 ```
+%%
+````
 
 Important behavior:
 
 - frontmatter is preserved
 - the visible body stays readable if the plugin is disabled
-- Arbor keeps stable block IDs in both visible markers and hidden metadata
-- if hidden metadata is stale, Arbor can recover the exact block tree from the visible markers
+- Arbor keeps stable block IDs in both visible markers and the readable structure footer
+- if the structure footer is stale, Arbor recovers the exact block tree from the visible markers
 - if you open an older Arbor note without visible markers, Arbor upgrades it automatically to the precise marker format
 - if you edit the note in normal Markdown mode, Arbor will safely rebuild the tree from the visible note body instead of silently dropping content
 
@@ -254,7 +259,7 @@ Beautiful blocks in the `> [!note]` style are still normal Markdown callouts. In
 - No ads are shown.
 - Arbor does not make network requests for its core functionality.
 - Arbor stores plugin settings with Obsidian's plugin data system.
-- Arbor stores branch structure inside the note itself as hidden metadata comments.
+- Arbor stores branch structure inside the note itself as a readable Obsidian comment footer.
 - If you paste an image into a block, Arbor writes that image into your vault as a normal attachment.
 
 ## Demo Notes
