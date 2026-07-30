@@ -1,4 +1,5 @@
 import { MarkdownView, Menu, normalizePath, Notice, Platform, Plugin, TAbstractFile, TFile, TFolder, WorkspaceLeaf } from "obsidian";
+import { AutoOpenSuppression } from "./autoOpenSuppression";
 import { COMMANDS, VIEW_TYPE_ARBOR, VIEW_TYPE_ARBOR_LOADING } from "./constants";
 import { ARBOR_DEMO_NOTE } from "./demoNote";
 import { ArborFileExplorerBadge } from "./fileExplorerBadge";
@@ -22,7 +23,7 @@ interface ArborPluginData {
 export default class ArborPlugin extends Plugin {
   settings: ArborSettings = DEFAULT_SETTINGS;
   private readonly ownWrites = new Map<string, number>();
-  private readonly suppressedAutoOpen = new Map<string, number>();
+  private readonly suppressedAutoOpen = new AutoOpenSuppression(1_000);
   private readonly managedNotePaths = new Set<string>();
   private readonly explicitArborOpenPaths = new Map<string, number>();
   private originalLeafSetViewState: typeof WorkspaceLeaf.prototype.setViewState | null = null;
@@ -125,7 +126,7 @@ export default class ArborPlugin extends Plugin {
   }
 
   suppressAutoOpenOnce(path: string): void {
-    this.suppressedAutoOpen.set(path, (this.suppressedAutoOpen.get(path) ?? 0) + 3);
+    this.suppressedAutoOpen.suppress(path);
   }
 
   async openFileInMarkdownView(leaf: WorkspaceLeaf, file: TFile): Promise<void> {
@@ -134,10 +135,10 @@ export default class ArborPlugin extends Plugin {
       active: true,
       state: { file: file.path }
     };
+    this.suppressAutoOpenOnce(file.path);
     if (this.originalLeafSetViewState) {
       await invokeOriginalSetViewState(this.originalLeafSetViewState, leaf, viewState);
     } else {
-      this.suppressAutoOpenOnce(file.path);
       await leaf.setViewState(viewState);
     }
     await this.app.workspace.revealLeaf(leaf);
@@ -178,18 +179,8 @@ export default class ArborPlugin extends Plugin {
     return true;
   }
 
-  private consumeSuppressedAutoOpen(path: string): boolean {
-    const count = this.suppressedAutoOpen.get(path) ?? 0;
-    if (count <= 0) {
-      return false;
-    }
-
-    if (count === 1) {
-      this.suppressedAutoOpen.delete(path);
-    } else {
-      this.suppressedAutoOpen.set(path, count - 1);
-    }
-    return true;
+  private isAutoOpenSuppressed(path: string): boolean {
+    return this.suppressedAutoOpen.isSuppressed(path);
   }
 
   async resolveLoadingLeafOpen(
@@ -243,7 +234,7 @@ export default class ArborPlugin extends Plugin {
   private rewriteViewStateForManagedOpen(state: Parameters<WorkspaceLeaf["setViewState"]>[0]): Parameters<WorkspaceLeaf["setViewState"]>[0] {
     const requestedViewType = typeof state?.type === "string" ? state.type : "";
     const filePath = typeof state?.state?.file === "string" ? state.state.file : null;
-    const isSuppressed = filePath ? this.consumeSuppressedAutoOpen(filePath) : false;
+    const isSuppressed = filePath ? this.isAutoOpenSuppressed(filePath) : false;
     if (!shouldRouteMarkdownOpenToLoadingView({
       requestedViewType,
       filePath,
@@ -567,7 +558,7 @@ export default class ArborPlugin extends Plugin {
       return;
     }
 
-    if (this.consumeSuppressedAutoOpen(file.path)) {
+    if (this.isAutoOpenSuppressed(file.path)) {
       return;
     }
 
@@ -603,7 +594,7 @@ export default class ArborPlugin extends Plugin {
       return;
     }
 
-    if (this.consumeSuppressedAutoOpen(view.file.path)) {
+    if (this.isAutoOpenSuppressed(view.file.path)) {
       return;
     }
 
