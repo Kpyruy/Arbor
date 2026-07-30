@@ -1,6 +1,7 @@
 import { MarkdownView, Menu, normalizePath, Notice, Platform, Plugin, TAbstractFile, TFile, TFolder, WorkspaceLeaf } from "obsidian";
 import { COMMANDS, VIEW_TYPE_ARBOR, VIEW_TYPE_ARBOR_LOADING } from "./constants";
 import { ARBOR_DEMO_NOTE } from "./demoNote";
+import { ArborFileExplorerBadge } from "./fileExplorerBadge";
 import { createEmptyTree } from "./model/tree";
 import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
@@ -31,6 +32,9 @@ export default class ArborPlugin extends Plugin {
     this.registerView(VIEW_TYPE_ARBOR_LOADING, (leaf) => new ArborLoadingView(leaf, this));
     this.installLeafOpenInterception();
     this.addSettingTab(new ArborSettingTab(this.app, this));
+    const fileExplorerBadge = new ArborFileExplorerBadge(this.app);
+    this.register(() => fileExplorerBadge.unload());
+    void fileExplorerBadge.refresh();
 
     this.registerEvent(this.app.vault.on("modify", (file) => {
       if (!(file instanceof TFile) || file.extension !== "md") {
