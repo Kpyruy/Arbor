@@ -2,6 +2,18 @@ import { App, PluginSettingTab, Setting } from "obsidian";
 import type ArborPlugin from "./main";
 import { ArborSettings } from "./types";
 
+type ArborSettingControl =
+  | { type: "dropdown"; key: keyof ArborSettings; options: Record<string, string>; defaultValue?: string }
+  | { type: "slider"; key: keyof ArborSettings; min: number; max: number; step: number; defaultValue?: number; displayFormat?: (value: number) => string }
+  | { type: "toggle"; key: keyof ArborSettings; defaultValue?: boolean }
+  | { type: "text"; key: keyof ArborSettings; placeholder?: string; defaultValue?: string };
+
+interface ArborSettingDefinition {
+  name: string;
+  desc: string;
+  control: ArborSettingControl;
+}
+
 export const DEFAULT_SETTINGS: ArborSettings = {
   splitDirection: "vertical",
   cardWidth: 300,
@@ -24,6 +36,78 @@ export const DEFAULT_SETTINGS: ArborSettings = {
 export class ArborSettingTab extends PluginSettingTab {
   constructor(app: App, private readonly plugin: ArborPlugin) {
     super(app, plugin);
+  }
+
+  getSettingDefinitions(): ArborSettingDefinition[] {
+    return [
+      {
+        name: "Split direction",
+        desc: "Choose where the branch view opens relative to the current note.",
+        control: {
+          type: "dropdown",
+          key: "splitDirection",
+          options: { vertical: "Vertical split", horizontal: "Horizontal split" },
+          defaultValue: DEFAULT_SETTINGS.splitDirection
+        }
+      },
+      this.sliderDefinition("Card width", "Card width in pixels.", "cardWidth", 220, 520, 10),
+      this.sliderDefinition("Card minimum height", "Minimum card height in pixels.", "cardMinHeight", 80, 300, 10),
+      this.sliderDefinition("Horizontal spacing", "Space between columns in pixels.", "horizontalSpacing", 8, 48, 2),
+      this.sliderDefinition("Vertical spacing", "Space between cards in pixels.", "verticalSpacing", 4, 32, 2),
+      this.sliderDefinition("Default zoom", "Default scene zoom level.", "zoomLevel", 70, 160, 5, "%"),
+      this.sliderDefinition("Preview snippet length", "Maximum characters to show in card preview.", "previewSnippetLength", 80, 600, 10),
+      this.toggleDefinition("Drag and drop", "Enable drag-and-drop reordering across columns.", "dragAndDrop"),
+      this.toggleDefinition("Ctrl/Cmd + wheel zoom", "Zoom the branching scene with Ctrl/Cmd + mouse wheel.", "enableCtrlWheelZoom"),
+      this.toggleDefinition("Auto-open managed notes", "Open managed notes directly in the branch view when you open them normally.", "autoOpenManagedNotes"),
+      this.toggleDefinition("Show breadcrumb path", "Show the active block path as a breadcrumb strip.", "showBreadcrumb"),
+      this.toggleDefinition("Show breadcrumb flow", "Show subtle connectors between breadcrumb items.", "showBreadcrumbFlow"),
+      {
+        name: "Preferred breadcrumb line prefix",
+        desc: "Use the first non-empty line that starts with this prefix for breadcrumb labels. Leave blank to skip prefix matching.",
+        control: {
+          type: "text",
+          key: "breadcrumbLabelPreferredPrefix",
+          placeholder: "#",
+          defaultValue: DEFAULT_SETTINGS.breadcrumbLabelPreferredPrefix
+        }
+      },
+      {
+        name: "Breadcrumb fallback",
+        desc: "What to use when no preferred-prefix line exists.",
+        control: {
+          type: "dropdown",
+          key: "breadcrumbLabelFallback",
+          options: { firstLine: "First non-empty line", snippet: "Clean snippet", none: "No fallback" },
+          defaultValue: DEFAULT_SETTINGS.breadcrumbLabelFallback
+        }
+      },
+      this.toggleDefinition("Selected block panel", "Show the focused selected-block panel alongside the branching editor.", "liveLinearPreview")
+    ];
+  }
+
+  getControlValue(key: string): unknown {
+    if (key === "zoomLevel") {
+      return Math.round(this.plugin.settings.zoomLevel * 100);
+    }
+    return (this.plugin.settings as unknown as Record<string, unknown>)[key];
+  }
+
+  async setControlValue(key: string, value: unknown): Promise<void> {
+    if (!(key in DEFAULT_SETTINGS)) {
+      return;
+    }
+
+    const settings = this.plugin.settings as unknown as Record<string, unknown>;
+    settings[key] = key === "zoomLevel" && typeof value === "number"
+      ? value / 100
+      : key === "breadcrumbLabelPreferredPrefix" && typeof value === "string"
+        ? value.trim()
+        : value;
+    await this.plugin.saveSettings();
+
+    if (["cardWidth", "cardMinHeight", "horizontalSpacing", "verticalSpacing", "zoomLevel", "previewSnippetLength", "dragAndDrop", "showBreadcrumb", "showBreadcrumbFlow", "breadcrumbLabelPreferredPrefix", "breadcrumbLabelFallback", "liveLinearPreview"].includes(key)) {
+      this.plugin.refreshAllBranchViews();
+    }
   }
 
   display(): void {
@@ -175,5 +259,38 @@ export class ArborSettingTab extends PluginSettingTab {
             this.plugin.refreshAllBranchViews();
           })
       );
+  }
+
+  private sliderDefinition(
+    name: string,
+    desc: string,
+    key: Extract<keyof ArborSettings, "cardWidth" | "cardMinHeight" | "horizontalSpacing" | "verticalSpacing" | "zoomLevel" | "previewSnippetLength">,
+    min: number,
+    max: number,
+    step: number,
+    suffix = "px"
+  ): ArborSettingDefinition {
+    const defaultValue = key === "zoomLevel" ? DEFAULT_SETTINGS.zoomLevel * 100 : DEFAULT_SETTINGS[key];
+    return {
+      name,
+      desc,
+      control: {
+        type: "slider",
+        key,
+        min,
+        max,
+        step,
+        defaultValue,
+        displayFormat: suffix === "%" ? (value) => `${value}%` : undefined
+      }
+    };
+  }
+
+  private toggleDefinition(
+    name: string,
+    desc: string,
+    key: Extract<keyof ArborSettings, "dragAndDrop" | "enableCtrlWheelZoom" | "autoOpenManagedNotes" | "showBreadcrumb" | "showBreadcrumbFlow" | "liveLinearPreview">
+  ): ArborSettingDefinition {
+    return { name, desc, control: { type: "toggle", key, defaultValue: DEFAULT_SETTINGS[key] } };
   }
 }

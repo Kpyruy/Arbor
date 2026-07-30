@@ -1591,17 +1591,17 @@ export class ArborView extends FileView {
     const desiredNodes: HTMLElement[] = [];
     for (let index = 0; index < column.blocks.length; index += 1) {
       if (this.dragState && this.dragState.columnKey === column.key && this.dragState.targetIndex === index) {
-        desiredNodes.push(this.ensureIndicatorNode(existingChildren, `indicator-${column.key}-${index}`));
+        desiredNodes.push(this.ensureIndicatorNode(cardsEl, existingChildren, `indicator-${column.key}-${index}`));
       }
 
       const block = column.blocks[index];
-      const card = this.ensureCardNode(existingChildren, block.id);
+      const card = this.ensureCardNode(cardsEl, existingChildren, block.id);
       await this.syncCardNode(card, block, column, index, context);
       desiredNodes.push(card);
     }
 
     if (this.dragState && this.dragState.columnKey === column.key && this.dragState.targetIndex === column.blocks.length) {
-      desiredNodes.push(this.ensureIndicatorNode(existingChildren, `indicator-${column.key}-${column.blocks.length}`));
+      desiredNodes.push(this.ensureIndicatorNode(cardsEl, existingChildren, `indicator-${column.key}-${column.blocks.length}`));
     }
 
     desiredNodes.forEach((node, index) => {
@@ -1619,7 +1619,7 @@ export class ArborView extends FileView {
     });
   }
 
-  private ensureIndicatorNode(existingChildren: Map<string, HTMLElement>, key: string): HTMLElement {
+  private ensureIndicatorNode(cardsEl: HTMLElement, existingChildren: Map<string, HTMLElement>, key: string): HTMLElement {
     const existing = existingChildren.get(key);
     if (existing) {
       existing.className = "arbor-drop-indicator";
@@ -1627,13 +1627,12 @@ export class ArborView extends FileView {
       return existing;
     }
 
-    const indicator = document.createElement("div");
-    indicator.className = "arbor-drop-indicator";
+    const indicator = cardsEl.createDiv({ cls: "arbor-drop-indicator" });
     indicator.dataset.nodeKey = key;
     return indicator;
   }
 
-  private ensureCardNode(existingChildren: Map<string, HTMLElement>, blockId: BranchBlockId): HTMLElement {
+  private ensureCardNode(cardsEl: HTMLElement, existingChildren: Map<string, HTMLElement>, blockId: BranchBlockId): HTMLElement {
     const key = `card-${blockId}`;
     const existing = existingChildren.get(key);
     if (existing) {
@@ -1641,8 +1640,7 @@ export class ArborView extends FileView {
       return existing;
     }
 
-    const card = document.createElement("div");
-    card.className = "arbor-card";
+    const card = cardsEl.createDiv({ cls: "arbor-card" });
     card.tabIndex = 0;
     card.dataset.nodeKey = key;
     card.addEventListener("pointerdown", (event) => this.rememberCardPointerPosition(blockId, event.clientX, event.clientY));
@@ -2914,7 +2912,8 @@ export class ArborView extends FileView {
 
   private getTransparentDragImage(): HTMLCanvasElement {
     if (!this.transparentDragImageEl) {
-      const canvas = this.contentEl.ownerDocument.createElement("canvas");
+      const canvas = this.contentEl.createEl("canvas");
+      canvas.remove();
       canvas.width = 1;
       canvas.height = 1;
       this.transparentDragImageEl = canvas;

@@ -63,6 +63,9 @@ export class ArborFileExplorerBadge {
     this.workspaceEventRefs.forEach((eventRef) => this.app.workspace.offref(eventRef));
     this.observedDocuments.forEach((document) => {
       document.querySelectorAll(".arbor-file-badge").forEach((badge) => badge.remove());
+      document.querySelectorAll<HTMLElement>(".nav-file-title-content.has-arbor-file-badge").forEach((content) => {
+        content.removeClass("has-arbor-file-badge");
+      });
     });
     this.observedDocuments.clear();
   }
@@ -120,15 +123,14 @@ export class ArborFileExplorerBadge {
       return;
     }
 
+    content.addClass("has-arbor-file-badge");
     if (!content.querySelector(".arbor-file-badge")) {
-      const badge = document.createElement("span");
-      badge.className = "arbor-file-badge";
-      badge.textContent = "ARBOR";
-      content.append(badge);
+      content.createSpan({ cls: "arbor-file-badge", text: "ARBOR" });
     }
   }
 
   private removeBadge(title: HTMLElement): void {
     title.querySelectorAll(".arbor-file-badge").forEach((badge) => badge.remove());
+    title.querySelector<HTMLElement>(".nav-file-title-content")?.removeClass("has-arbor-file-badge");
   }
 }

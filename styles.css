@@ -1,4 +1,4 @@
-.nav-file-title:has(.arbor-file-badge) .nav-file-title-content {
+.nav-file-title-content.has-arbor-file-badge {
   padding-right: 52px;
 }
 
