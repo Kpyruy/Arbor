@@ -259,6 +259,7 @@ export class ArborView extends FileView {
   private blurCommitTimer: number | null = null;
   private numericNavigationTimer: number | null = null;
   private numericNavigationBuffer = "";
+  private pendingLinkedBlockId: BranchBlockId | null = null;
   private isPersisting = false;
   private pendingFocusBlockId: BranchBlockId | null = null;
   private pendingScrollBlockId: BranchBlockId | null = null;
@@ -338,6 +339,15 @@ export class ArborView extends FileView {
     }
 
     this.state = prepared;
+    if (this.pendingLinkedBlockId) {
+      const linkedBlockId = this.pendingLinkedBlockId;
+      this.pendingLinkedBlockId = null;
+      if (getBlock(this.state.metadata, linkedBlockId)) {
+        this.state.selectedBlockId = linkedBlockId;
+      } else {
+        new Notice("Arbor block is no longer available.");
+      }
+    }
     if (this.state.origin === "reconciled") {
       new Notice("The tree was rebuilt from the visible Markdown body to avoid losing plain editor changes.");
     }
@@ -352,7 +362,11 @@ export class ArborView extends FileView {
       ? (state as { subpath: string }).subpath
       : null;
     const blockId = parseArborBlockAnchor(subpath);
-    if (!blockId || !this.state) {
+    if (!blockId) {
+      return;
+    }
+    if (!this.state) {
+      this.pendingLinkedBlockId = blockId;
       return;
     }
     if (!getBlock(this.state.metadata, blockId)) {
@@ -3212,7 +3226,7 @@ export class ArborView extends FileView {
       if (target) {
         this.selectBlock(target, { focus: true });
       }
-    }, 350);
+    }, 250);
     return true;
   }
 
