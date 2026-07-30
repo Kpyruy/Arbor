@@ -224,7 +224,7 @@ Each Arbor note contains:
 
 Example shape:
 
-```md
+````md
 <!-- arbor:block:v1 id="root-1" parent="" order="0" -->
 # A visible markdown note
 
@@ -239,7 +239,7 @@ This text is still readable in normal Obsidian.
 }
 ```
 %%
-```
+````
 
 Important behavior:
 
