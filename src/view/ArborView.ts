@@ -543,19 +543,24 @@ export class ArborView extends FileView {
       return;
     }
 
-    await this.commitEditIfNeeded();
-    if (!this.file || !this.state) {
-      return;
-    }
+    const file = this.file;
+    const { frontmatter, metadata } = this.state;
+    const pendingEdit = this.editingSession
+      ? { blockId: this.editingSession.blockId, content: this.editingSession.value }
+      : undefined;
+    this.clearBlurCommitTimer();
 
     const mode = await new CleanExportModal(this.app).waitForChoice();
     if (!mode) {
       return;
     }
+    if (this.file !== file || !this.state) {
+      return;
+    }
 
-    const contents = buildCleanExportDocument(this.state.frontmatter, this.state.metadata, mode);
     try {
-      const exported = await this.plugin.createCleanExportCopy(this.file, contents);
+      const contents = buildCleanExportDocument(frontmatter, metadata, mode, pendingEdit);
+      const exported = await this.plugin.createCleanExportCopy(file, contents);
       await this.plugin.openFileInMarkdownView(this.app.workspace.getLeaf("tab"), exported);
     } catch (error) {
       console.error("[Arbor] Failed to create clean export", error);

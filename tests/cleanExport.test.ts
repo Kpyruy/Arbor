@@ -52,4 +52,17 @@ describe("clean Arbor exports", () => {
       "> [!note] Introduction\n> Keep this prefix.\n\n# Root\n\nChild\n\n# Next"
     );
   });
+
+  it("exports an in-progress block edit without changing the source metadata", () => {
+    const metadata = metadataFixture();
+    const output = buildCleanExportDocument(
+      "",
+      metadata,
+      "text-only",
+      { blockId: "child", content: "Edited only in the export" }
+    );
+
+    expect(output).toContain("Edited only in the export");
+    expect(metadata.blocks.find((block) => block.id === "child")?.content).toBe("Child");
+  });
 });
