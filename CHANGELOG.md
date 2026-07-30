@@ -2,6 +2,24 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.2.3 - 2026-07-30
+
+Readable Markdown, safer navigation, and smoother movement between Arbor and Obsidian.
+
+### Added
+
+- added a readable structure footer and automatic migration for older Arbor notes
+- added the ARBOR File Explorer label for managed notes
+- added clean Markdown export copies with an optional YAML frontmatter
+- added Copy block link for opening a specific Arbor block from another note
+- added numeric child navigation: type a child number, or use 0 to return to the parent block
+
+### Changed
+
+- moved New arbor note into the File Explorer creation section for folders and empty space only
+- improved the normal Markdown switch so managed notes do not reopen Arbor immediately
+- refined export modal controls and File Explorer labels for clearer interaction
+
 ## 0.2.1 - 2026-03-27
 
 Submission review follow-up.
