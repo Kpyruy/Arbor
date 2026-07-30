@@ -15,6 +15,7 @@ export function parseArborBlockAnchor(subpath: string | null | undefined): Branc
 }
 
 export function buildArborBlockLink(notePath: string, blockId: BranchBlockId, label: string): string {
-  const target = notePath.replace(/\.md$/i, "");
-  return `[[${target}#${blockAnchor(blockId)}|${label.replace(/[[\]|]/g, "")}]]`;
+  const href = "obsidian://arbor?file=" + encodeURIComponent(notePath) + "&block=" + encodeURIComponent(blockId);
+  const safeLabel = label.split("[").join("").split("]").join("");
+  return `[${safeLabel}](${href})`;
 }

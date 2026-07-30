@@ -8,9 +8,9 @@ describe("Arbor block links", () => {
     expect(parseArborBlockAnchor("#Heading")).toBeNull();
   });
 
-  it("builds a portable wiki link for a block", () => {
+  it("builds a protocol link from the existing block ID", () => {
     expect(buildArborBlockLink("Drafts/Essay.md", "bw-x", "Opening")).toBe(
-      "[[Drafts/Essay#^arbor-bw-x|Opening]]"
+      "[Opening](obsidian://arbor?file=Drafts%2FEssay.md&block=bw-x)"
     );
   });
 });

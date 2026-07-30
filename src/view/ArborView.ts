@@ -61,7 +61,7 @@ import { loadImportedBranchDocument } from "../storage/reconcile";
 import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
-import { buildArborBlockLink, parseArborBlockAnchor } from "../blockLinks";
+import { buildArborBlockLink } from "../blockLinks";
 import { resolveNumericChildTarget } from "../numericNavigation";
 
 type EditingOrigin = "card" | "preview";
@@ -259,7 +259,6 @@ export class ArborView extends FileView {
   private blurCommitTimer: number | null = null;
   private numericNavigationTimer: number | null = null;
   private numericNavigationBuffer = "";
-  private pendingLinkedBlockId: BranchBlockId | null = null;
   private isPersisting = false;
   private pendingFocusBlockId: BranchBlockId | null = null;
   private pendingScrollBlockId: BranchBlockId | null = null;
@@ -339,41 +338,12 @@ export class ArborView extends FileView {
     }
 
     this.state = prepared;
-    if (this.pendingLinkedBlockId) {
-      const linkedBlockId = this.pendingLinkedBlockId;
-      this.pendingLinkedBlockId = null;
-      if (getBlock(this.state.metadata, linkedBlockId)) {
-        this.state.selectedBlockId = linkedBlockId;
-      } else {
-        new Notice("Arbor block is no longer available.");
-      }
-    }
     if (this.state.origin === "reconciled") {
       new Notice("The tree was rebuilt from the visible Markdown body to avoid losing plain editor changes.");
     }
 
     this.resetLoadedUiState(this.state.selectedBlockId);
     this.render();
-  }
-
-  override setEphemeralState(state: unknown): void {
-    super.setEphemeralState(state);
-    const subpath = typeof (state as { subpath?: unknown })?.subpath === "string"
-      ? (state as { subpath: string }).subpath
-      : null;
-    const blockId = parseArborBlockAnchor(subpath);
-    if (!blockId) {
-      return;
-    }
-    if (!this.state) {
-      this.pendingLinkedBlockId = blockId;
-      return;
-    }
-    if (!getBlock(this.state.metadata, blockId)) {
-      new Notice("Arbor block is no longer available.");
-      return;
-    }
-    this.selectBlock(blockId, { focus: true });
   }
 
   async onUnloadFile(): Promise<void> {

@@ -72,6 +72,20 @@ export default class ArborPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("files-menu", (menu, files, source) => {
       this.handleFilesMenu(menu, files, source);
     }));
+    this.registerObsidianProtocolHandler("arbor", (params) => {
+      const filePath = typeof params.file === "string" ? params.file : "";
+      const blockId = typeof params.block === "string" ? params.block : "";
+      const file = this.app.vault.getAbstractFileByPath(filePath);
+      if (!(file instanceof TFile) || !blockId) {
+        new Notice("Arbor block link is no longer available.");
+        return;
+      }
+      void this.openBranchViewForFile(file, {
+        preferredLeaf: this.app.workspace.getMostRecentLeaf(),
+        splitIfNeeded: false,
+        selectedBlockId: blockId
+      });
+    });
 
     this.registerCommands();
   }
@@ -426,6 +440,7 @@ export default class ArborPlugin extends Plugin {
     options?: {
       preferredLeaf?: WorkspaceLeaf | null;
       splitIfNeeded?: boolean;
+      selectedBlockId?: string;
     }
   ): Promise<ArborView | null> {
     if (Platform.isMobileApp) {
@@ -448,7 +463,11 @@ export default class ArborPlugin extends Plugin {
       }
     });
     await this.app.workspace.revealLeaf(leaf);
-    return leaf.view instanceof ArborView ? leaf.view : null;
+    const view = leaf.view instanceof ArborView ? leaf.view : null;
+    if (view && options?.selectedBlockId) {
+      view.selectBlock(options.selectedBlockId, { focus: true });
+    }
+    return view;
   }
 
   async createDemoNote(): Promise<TFile | null> {
