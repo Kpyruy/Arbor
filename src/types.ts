@@ -61,6 +61,34 @@ export interface BranchHistoryEntry {
   selectedBlockId: BranchBlockId | null;
 }
 
+export type ArborPresentationMode = "editor" | "overview";
+
+export interface ArborOverviewNode {
+  id: BranchBlockId;
+  parentId: BranchBlockId | null;
+  depth: number;
+  order: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+  snippet: string;
+  childCount: number;
+}
+
+export interface ArborOverviewLink {
+  parentId: BranchBlockId;
+  childId: BranchBlockId;
+}
+
+export interface ArborOverviewLayout {
+  nodes: ArborOverviewNode[];
+  links: ArborOverviewLink[];
+  width: number;
+  height: number;
+}
+
 export type SplitPaneDirection = "vertical" | "horizontal";
 export type BreadcrumbLabelFallbackMode = "firstLine" | "snippet" | "none";
 
