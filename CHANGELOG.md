@@ -4,6 +4,8 @@ All notable changes to Arbor should be documented in this file.
 
 ## 0.2.4 - 2026-07-30
 
+![Tree Overview: a full, connected view of an Arbor note](assets/tree-overview.png)
+
 ### Added
 
 - added Tree overview: a connected map of every block in the note, with pan and zoom controls

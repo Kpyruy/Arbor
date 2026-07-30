@@ -647,6 +647,16 @@ export class ArborView extends FileView {
       this.pendingScrollBlockId = this.state.selectedBlockId;
     }
 
+    if (this.presentationMode === "overview") {
+      this.pendingFocusBlockId = null;
+      this.pendingScrollBlockId = null;
+      this.syncBreadcrumbs();
+      this.viewContext = this.buildViewContext();
+      this.syncSearchOverlay(this.viewContext);
+      this.syncOverviewSelection(selectionChanged);
+      return;
+    }
+
     if (!selectionChanged && !options?.focus) {
       return;
     }
@@ -2013,14 +2023,34 @@ export class ArborView extends FileView {
         }
       });
       cardsById.set(node.id, card);
-      measuredHeights.set(node.id, card.offsetHeight);
-      card.removeClass("is-measuring");
     }
+
+    await this.waitForNextPaint();
+    cardsById.forEach((card, blockId) => {
+      measuredHeights.set(blockId, card.scrollHeight);
+      card.removeClass("is-measuring");
+    });
 
     const layout = buildOverviewLayout(this.state.metadata, {
       cardWidth: this.plugin.settings.cardWidth,
       cardHeights: measuredHeights
     });
+    this.applyOverviewLayout(scene, surface, cardsById, layout, zoom);
+
+    viewport.toggleClass("is-zoomed-out", zoom < 0.78);
+    if (this.shouldCenterOverviewOnNextRender) {
+      this.shouldCenterOverviewOnNextRender = false;
+      window.requestAnimationFrame(() => this.centerOverviewOnSelectedBlock());
+    }
+  }
+
+  private applyOverviewLayout(
+    scene: HTMLElement,
+    surface: HTMLElement,
+    cardsById: ReadonlyMap<BranchBlockId, HTMLElement>,
+    layout: ReturnType<typeof buildOverviewLayout>,
+    zoom: number
+  ): void {
     scene.setCssProps({
       "--arbor-overview-zoom": String(zoom),
       "--arbor-overview-width": `${layout.width * zoom}px`,
@@ -2040,13 +2070,8 @@ export class ArborView extends FileView {
         "--arbor-overview-card-height": `${node.height}px`
       });
     });
+    surface.querySelector(".arbor-overview-links")?.remove();
     this.renderOverviewLinks(surface, layout);
-
-    viewport.toggleClass("is-zoomed-out", zoom < 0.78);
-    if (this.shouldCenterOverviewOnNextRender) {
-      this.shouldCenterOverviewOnNextRender = false;
-      window.requestAnimationFrame(() => this.centerOverviewOnSelectedBlock());
-    }
   }
 
   private renderOverviewLinks(scene: HTMLElement, layout: ReturnType<typeof buildOverviewLayout>): void {
@@ -2133,6 +2158,10 @@ export class ArborView extends FileView {
       return;
     }
 
+    if ((event.ctrlKey || event.metaKey) && this.handleDirectionalCreateShortcut(event)) {
+      return;
+    }
+
     if (this.tryHandleNumericChildNavigation(event, this.state.selectedBlockId)) {
       return;
     }
@@ -2147,7 +2176,6 @@ export class ArborView extends FileView {
       return;
     }
 
-    this.shouldCenterOverviewOnNextRender = true;
     this.selectBlock(targetId);
   }
 
@@ -2193,6 +2221,75 @@ export class ArborView extends FileView {
     viewport.scrollTo({
       left: Math.max(0, centerX - viewport.clientWidth / 2),
       top: Math.max(0, centerY - viewport.clientHeight / 2),
+      behavior: "smooth"
+    });
+  }
+
+  private syncOverviewSelection(selectionChanged: boolean): void {
+    if (!this.state || !this.overviewSurfaceEl) {
+      return;
+    }
+
+    const selectedBlockId = this.state.selectedBlockId;
+    const activePathIds = new Set(getActivePath(this.state.metadata, selectedBlockId).map((block) => block.id));
+    const cards = this.overviewSurfaceEl.querySelectorAll<HTMLElement>(".arbor-overview-card");
+    let selectedCard: HTMLElement | null = null;
+    cards.forEach((card) => {
+      const blockId = card.dataset.blockId;
+      const isActive = blockId === selectedBlockId;
+      card.toggleClass("is-active", isActive);
+      card.toggleClass("is-on-path", !isActive && Boolean(blockId && activePathIds.has(blockId)));
+      if (isActive) {
+        selectedCard = card;
+      }
+    });
+
+    if (selectionChanged && selectedCard) {
+      this.revealOverviewSelectedCard(selectedCard);
+    }
+  }
+
+  private revealOverviewSelectedCard(selectedCard: HTMLElement): void {
+    const viewport = this.overviewViewportEl;
+    const scene = this.overviewSceneEl;
+    if (!viewport || !scene) {
+      return;
+    }
+
+    const zoom = this.plugin.settings.zoomLevel;
+    const padding = 36;
+    const cardLeft = scene.offsetLeft + selectedCard.offsetLeft * zoom;
+    const cardTop = scene.offsetTop + selectedCard.offsetTop * zoom;
+    const cardRight = cardLeft + selectedCard.offsetWidth * zoom;
+    const cardBottom = cardTop + selectedCard.offsetHeight * zoom;
+    const viewportRight = viewport.scrollLeft + viewport.clientWidth;
+    const viewportBottom = viewport.scrollTop + viewport.clientHeight;
+    const isOutsideViewport =
+      cardLeft < viewport.scrollLeft + padding ||
+      cardRight > viewportRight - padding ||
+      cardTop < viewport.scrollTop + padding ||
+      cardBottom > viewportBottom - padding;
+
+    if (!isOutsideViewport) {
+      return;
+    }
+
+    let targetLeft = viewport.scrollLeft;
+    let targetTop = viewport.scrollTop;
+    if (cardLeft < viewport.scrollLeft + padding) {
+      targetLeft = cardLeft - padding;
+    } else if (cardRight > viewportRight - padding) {
+      targetLeft = cardRight - viewport.clientWidth + padding;
+    }
+    if (cardTop < viewport.scrollTop + padding) {
+      targetTop = cardTop - padding;
+    } else if (cardBottom > viewportBottom - padding) {
+      targetTop = cardBottom - viewport.clientHeight + padding;
+    }
+
+    viewport.scrollTo({
+      left: Math.max(0, Math.min(targetLeft, viewport.scrollWidth - viewport.clientWidth)),
+      top: Math.max(0, Math.min(targetTop, viewport.scrollHeight - viewport.clientHeight)),
       behavior: "smooth"
     });
   }
@@ -3588,9 +3685,6 @@ export class ArborView extends FileView {
         value
       );
       if (target) {
-        if (this.presentationMode === "overview") {
-          this.shouldCenterOverviewOnNextRender = true;
-        }
         this.selectBlock(target, { focus: true });
       }
     }, 250);

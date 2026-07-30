@@ -37,4 +37,41 @@ describe("overview arrow navigation", () => {
 
     expect(handler).toContain("this.tryHandleNumericChildNavigation(event, this.state.selectedBlockId)");
   });
+
+  it("reuses Ctrl/Cmd arrow creation inside the overview keyboard handler", () => {
+    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+    const handlerStart = source.indexOf("private handleOverviewKeyDown");
+    const handlerEnd = source.indexOf("private syncOverviewZoom", handlerStart);
+    const handler = source.slice(handlerStart, handlerEnd);
+
+    expect(handler).toContain("(event.ctrlKey || event.metaKey) && this.handleDirectionalCreateShortcut(event)");
+  });
+
+  it("keeps the overview camera in place during keyboard navigation", () => {
+    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+    const handlerStart = source.indexOf("private handleOverviewKeyDown");
+    const handlerEnd = source.indexOf("private syncOverviewZoom", handlerStart);
+    const handler = source.slice(handlerStart, handlerEnd);
+    const numericStart = source.indexOf("private tryHandleNumericChildNavigation");
+    const numericEnd = source.indexOf("private clearNumericNavigation", numericStart);
+    const numericNavigation = source.slice(numericStart, numericEnd);
+
+    expect(handler).not.toContain("this.shouldCenterOverviewOnNextRender = true;");
+    expect(numericNavigation).not.toContain("this.presentationMode === \"overview\"");
+  });
+
+  it("updates selection without rebuilding the overview and smoothly reveals an off-screen card", () => {
+    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+    const selectStart = source.indexOf("selectBlock(blockId:");
+    const selectEnd = source.indexOf("async createRootBlock", selectStart);
+    const selectBlock = source.slice(selectStart, selectEnd);
+    const followStart = source.indexOf("private revealOverviewSelectedCard");
+    const followEnd = source.indexOf("private clearOverviewZoomFrame", followStart);
+    const revealSelectedCard = source.slice(followStart, followEnd);
+
+    expect(selectBlock).toContain('this.presentationMode === "overview"');
+    expect(selectBlock).toContain("this.syncOverviewSelection(selectionChanged)");
+    expect(revealSelectedCard).toContain('behavior: "smooth"');
+    expect(revealSelectedCard).toContain("const isOutsideViewport");
+  });
 });

@@ -260,7 +260,7 @@
   background: color-mix(in srgb, var(--background-secondary) 82%, var(--interactive-accent) 18%);
   color: var(--text-muted);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 10px 12px 22px;
 }
 
 .arbor-loading-overlay {
@@ -547,7 +547,8 @@
   left: var(--arbor-overview-x, 0px);
   top: var(--arbor-overview-y, 0px);
   width: var(--arbor-overview-card-width, 224px);
-  height: var(--arbor-overview-card-height, 76px);
+  min-height: var(--arbor-overview-card-height, 76px);
+  height: auto;
   max-height: min(58vh, 460px);
   box-sizing: border-box;
   display: flex;
