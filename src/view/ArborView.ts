@@ -63,6 +63,7 @@ import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
 import { resolveNumericChildTarget } from "../numericNavigation";
+import { canDragCard, canStartCardDrag } from "../cardViewport";
 
 type EditingOrigin = "card" | "preview";
 
@@ -1669,7 +1670,8 @@ export class ArborView extends FileView {
     card.dataset.columnKey = column.key;
     card.dataset.blockIndex = String(index);
     card.dataset.parentId = block.parentId ?? "";
-    card.draggable = this.plugin.settings.dragAndDrop;
+    const isEditingCard = this.editingSession?.blockId === block.id && this.editingSession.origin === "card";
+    card.draggable = canDragCard(this.plugin.settings.dragAndDrop, isEditingCard);
     card.removeClass(
       "is-active",
       "is-on-path",
@@ -1706,7 +1708,7 @@ export class ArborView extends FileView {
       }
     }
 
-    if (this.editingSession?.blockId === block.id && this.editingSession.origin === "card") {
+    if (isEditingCard) {
       card.addClass("is-editing");
       this.syncEditorNode(card, block);
       return;
@@ -2572,12 +2574,13 @@ export class ArborView extends FileView {
   }
 
   private handleCardDragStart(event: DragEvent): void {
-    if (!this.plugin.settings.dragAndDrop) {
+    const card = event.currentTarget as HTMLElement;
+    const blockId = card.dataset.blockId;
+    if (!canStartCardDrag(this.plugin.settings.dragAndDrop, this.editingSession?.blockId ?? null, blockId)) {
+      event.preventDefault();
       return;
     }
 
-    const card = event.currentTarget as HTMLElement;
-    const blockId = card.dataset.blockId;
     const columnKey = card.dataset.columnKey ?? "";
     const blockIndex = Number(card.dataset.blockIndex ?? "-1");
     const column = this.currentColumnMap.get(columnKey);

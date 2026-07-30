@@ -7,6 +7,14 @@ export function canDragCard(dragAndDropEnabled: boolean, isEditing: boolean): bo
   return dragAndDropEnabled && !isEditing;
 }
 
+export function canStartCardDrag(
+  dragAndDropEnabled: boolean,
+  editingBlockId: string | null,
+  blockId: string | null | undefined
+): boolean {
+  return dragAndDropEnabled && Boolean(blockId) && editingBlockId !== blockId;
+}
+
 export function resolveEditorHeight(scrollHeight: number, viewportHeight: number, cardChromeHeight: number): number {
   const available = Math.max(
     MIN_EDITOR_HEIGHT_PX,

@@ -3,6 +3,7 @@ import {
   CARD_PREVIEW_MAX_HEIGHT_PX,
   CARD_VIEWPORT_EDGE_PADDING_PX,
   canDragCard,
+  canStartCardDrag,
   clampCardCenter,
   resolveEditorHeight
 } from "../src/cardViewport";
@@ -16,6 +17,12 @@ describe("bounded Arbor card viewport rules", () => {
     expect(canDragCard(true, true)).toBe(false);
     expect(canDragCard(true, false)).toBe(true);
     expect(canDragCard(false, false)).toBe(false);
+  });
+
+  it("blocks dragstart for the active edit session", () => {
+    expect(canStartCardDrag(true, "block-1", "block-1")).toBe(false);
+    expect(canStartCardDrag(true, "block-1", "block-2")).toBe(true);
+    expect(canStartCardDrag(false, null, "block-1")).toBe(false);
   });
 
   it("caps editor height at the usable canvas", () => {
