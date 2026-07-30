@@ -241,7 +241,9 @@ export function parseStructureBlock(raw: string): BranchTreeMetadata | null {
         return null;
       }
       seen.add(id);
-      blocks.push({ id, parentId: parent as string | null, order: order as number, content: "", after: "" });
+      const parentId = typeof parent === "string" ? parent : null;
+      const blockOrder = Number(order);
+      blocks.push({ id, parentId, order: blockOrder, content: "", after: "" });
     }
 
     return normalizeMetadata({ version: 1, prefix: "", blocks });

@@ -19,6 +19,14 @@ export interface MarkdownOpenInterceptionInput {
   managedPathHint: boolean;
 }
 
+export function buildMarkdownViewState(filePath: string): {
+  type: "markdown";
+  active: true;
+  state: { file: string };
+} {
+  return { type: "markdown", active: true, state: { file: filePath } };
+}
+
 export function canOpenImportedBranchDocumentInArbor(imported: ImportedBranchDocument): boolean {
   return imported.origin === "metadata"
     || (imported.origin === "markers"

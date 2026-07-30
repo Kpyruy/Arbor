@@ -152,6 +152,11 @@ describe("document and storage", () => {
     expect(parsed.storageFormat).toBe("structure-v2");
   });
 
+  it("does not parse a structure footer example inside a fenced code block", () => {
+    const example = ["```md", buildStructureBlock(metadataFixture()), "```", "", "# Normal note"].join("\n");
+    expect(parseBranchDocument(example).storageFormat).toBeNull();
+  });
+
   it("reconstructs exact blocks from visible markers without hidden metadata", () => {
     const metadata = metadataFixture();
     const visibleBody = linearizeTree(metadata).body;
