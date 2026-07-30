@@ -2,7 +2,7 @@ import { MarkdownView, Menu, normalizePath, Notice, Platform, Plugin, TAbstractF
 import { COMMANDS, VIEW_TYPE_ARBOR, VIEW_TYPE_ARBOR_LOADING } from "./constants";
 import { ARBOR_DEMO_NOTE } from "./demoNote";
 import { ArborFileExplorerBadge } from "./fileExplorerBadge";
-import { shouldShowNewArborMenuItem } from "./fileExplorerMenu";
+import { FILE_EXPLORER_CREATION_SECTION, shouldShowNewArborMenuItem } from "./fileExplorerMenu";
 import { createEmptyTree } from "./model/tree";
 import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
@@ -804,7 +804,7 @@ export default class ArborPlugin extends Plugin {
       item
         .setTitle("New arbor note")
         .setIcon("git-fork")
-        .setSection("new")
+        .setSection(FILE_EXPLORER_CREATION_SECTION)
         .onClick(() => void this.createArborNoteNear(target, true));
     });
   }

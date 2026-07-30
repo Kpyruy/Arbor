@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { shouldShowNewArborMenuItem } from "../src/fileExplorerMenu";
+import { FILE_EXPLORER_CREATION_SECTION, shouldShowNewArborMenuItem } from "../src/fileExplorerMenu";
 
 describe("New arbor note File Explorer menu eligibility", () => {
+  it("uses Obsidian's primary creation section", () => {
+    expect(FILE_EXPLORER_CREATION_SECTION).toBe("action-primary");
+  });
+
   it("shows the action for a folder", () => {
     expect(shouldShowNewArborMenuItem("folder", false)).toBe(true);
   });
