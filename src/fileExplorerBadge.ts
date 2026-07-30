@@ -1,21 +1,9 @@
-import type { App, EventRef, TFile } from "obsidian";
-import { LEGACY_METADATA_MARKER, STRUCTURE_MARKER } from "./constants";
-import { parseStructureBlock } from "./storage/serializer";
-import { normalizeNewlines } from "./utils";
+import { App, EventRef, TFile } from "obsidian";
+import { isArborManagedText } from "./fileExplorerBadgeRecognition";
+
+export { isArborManagedText } from "./fileExplorerBadgeRecognition";
 
 const REFRESH_DELAY_MS = 100;
-const LEGACY_METADATA_PATTERN = new RegExp(`<!--\\s*${LEGACY_METADATA_MARKER}\\b[\\s\\S]*?-->`);
-const STRUCTURED_METADATA_PATTERN = new RegExp("%%\\s*" + STRUCTURE_MARKER + "\\s*\\n```json\\n[\\s\\S]*?\\n```\\n%%");
-
-export function isArborManagedText(text: string): boolean {
-  const normalized = normalizeNewlines(text);
-  if (LEGACY_METADATA_PATTERN.test(normalized)) {
-    return true;
-  }
-
-  const structure = normalized.match(STRUCTURED_METADATA_PATTERN)?.[0];
-  return structure ? parseStructureBlock(structure) !== null : false;
-}
 
 export class ArborFileExplorerBadge {
   private readonly observers = new Map<HTMLElement, MutationObserver>();
@@ -84,7 +72,7 @@ export class ArborFileExplorerBadge {
   private async decorateTitle(title: HTMLElement): Promise<void> {
     const path = title.dataset.path;
     const file = path ? this.app.vault.getAbstractFileByPath(path) : null;
-    if (!this.isMarkdownFile(file)) {
+    if (!(file instanceof TFile) || file.extension !== "md") {
       this.removeBadge(title);
       return;
     }
@@ -113,12 +101,5 @@ export class ArborFileExplorerBadge {
 
   private removeBadge(title: HTMLElement): void {
     title.querySelectorAll(".arbor-file-badge").forEach((badge) => badge.remove());
-  }
-
-  private isMarkdownFile(file: unknown): file is TFile {
-    return typeof file === "object"
-      && file !== null
-      && "extension" in file
-      && (file as TFile).extension === "md";
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isArborManagedText } from "../src/fileExplorerBadge";
+import { isArborManagedText } from "../src/fileExplorerBadgeRecognition";
 
 describe("Arbor File Explorer badge recognition", () => {
   it("recognizes legacy hidden Arbor metadata", () => {
