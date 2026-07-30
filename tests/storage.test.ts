@@ -217,6 +217,16 @@ describe("document and storage", () => {
     expect(loaded.metadata.blocks.map((block) => block.id)).toEqual(metadata.blocks.map((block) => block.id));
   });
 
+  it("marks legacy v1 notes with visible markers for automatic footer migration", () => {
+    const metadata = metadataFixture();
+    const visibleBody = linearizeTree(metadata).body;
+    const legacyFooter = `<!-- arbor:metadata:v1\n${Buffer.from(JSON.stringify(metadata), "utf8").toString("base64")}\n-->`;
+    const loaded = loadImportedBranchDocument(`${visibleBody}\n${legacyFooter}`);
+
+    expect(loaded.origin).toBe("metadata");
+    expect(loaded.needsVisibleMarkerMigration).toBe(true);
+  });
+
   it("preserves block boundaries for legacy notes with plain-markdown drift", () => {
     const metadata = metadataFixture();
     const legacyBody = legacyLinearize(metadata).replace(

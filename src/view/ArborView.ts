@@ -415,7 +415,7 @@ export class ArborView extends FileView {
 
     this.state = initial.state;
 
-    if (!initial.loaded.needsVisibleMarkerMigration || initial.loaded.origin !== "legacy") {
+    if (!initial.loaded.needsVisibleMarkerMigration) {
       return initial.state;
     }
 

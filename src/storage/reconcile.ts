@@ -208,7 +208,8 @@ export function loadImportedBranchDocument(text: string): ImportedBranchDocument
         return {
           metadata: normalizeMetadata(parsed.metadata),
           origin: "metadata",
-          staleMetadata: null
+          staleMetadata: null,
+          needsVisibleMarkerMigration: true
         };
       }
     }
@@ -217,7 +218,7 @@ export function loadImportedBranchDocument(text: string): ImportedBranchDocument
       metadata: markerMetadata,
       origin: "markers",
       staleMetadata: parsed.metadata,
-      needsVisibleMarkerMigration: false
+      needsVisibleMarkerMigration: true
     };
   }
 
