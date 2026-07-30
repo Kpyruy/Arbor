@@ -16,5 +16,5 @@ export function parseArborBlockAnchor(subpath: string | null | undefined): Branc
 
 export function buildArborBlockLink(notePath: string, blockId: BranchBlockId, label: string): string {
   const target = notePath.replace(/\.md$/i, "");
-  return `[[${target}#${blockAnchor(blockId)}|${label.replace(/[\[\]|]/g, "")}]]`;
+  return `[[${target}#${blockAnchor(blockId)}|${label.replace(/[[\]|]/g, "")}]]`;
 }

@@ -62,6 +62,7 @@ import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink, parseArborBlockAnchor } from "../blockLinks";
+import { resolveNumericChildTarget } from "../numericNavigation";
 
 type EditingOrigin = "card" | "preview";
 
@@ -256,6 +257,8 @@ export class ArborView extends FileView {
   private renderFrame: number | null = null;
   private layoutFrame: number | null = null;
   private blurCommitTimer: number | null = null;
+  private numericNavigationTimer: number | null = null;
+  private numericNavigationBuffer = "";
   private isPersisting = false;
   private pendingFocusBlockId: BranchBlockId | null = null;
   private pendingScrollBlockId: BranchBlockId | null = null;
@@ -353,7 +356,7 @@ export class ArborView extends FileView {
       return;
     }
     if (!getBlock(this.state.metadata, blockId)) {
-      new Notice("This Arbor block is no longer available.");
+      new Notice("Arbor block is no longer available.");
       return;
     }
     this.selectBlock(blockId, { focus: true });
@@ -2459,6 +2462,9 @@ export class ArborView extends FileView {
     if ((event.ctrlKey || event.metaKey) && this.handleDirectionalCreateShortcut(event)) {
       return;
     }
+    if (this.tryHandleNumericChildNavigation(event, blockId)) {
+      return;
+    }
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
@@ -2529,6 +2535,9 @@ export class ArborView extends FileView {
     }
 
     if ((event.ctrlKey || event.metaKey) && this.handleDirectionalCreateShortcut(event)) {
+      return;
+    }
+    if (this.tryHandleNumericChildNavigation(event, this.state.selectedBlockId)) {
       return;
     }
 
@@ -3150,6 +3159,7 @@ export class ArborView extends FileView {
   }
 
   private resetViewState(): void {
+    this.clearNumericNavigation();
     this.clearBlurCommitTimer();
     this.clearZoomPersistTimer();
     this.clearZoomIndicatorTimer();
@@ -3175,6 +3185,43 @@ export class ArborView extends FileView {
     this.viewContext = null;
     this.loadingState = null;
     this.teardownShell();
+  }
+
+  private tryHandleNumericChildNavigation(event: KeyboardEvent, blockId: BranchBlockId): boolean {
+    if (event.ctrlKey || event.metaKey || event.altKey || !/^\d$/.test(event.key) || !this.state) {
+      return false;
+    }
+    event.preventDefault();
+    this.numericNavigationBuffer += event.key;
+    if (this.numericNavigationTimer !== null) {
+      window.clearTimeout(this.numericNavigationTimer);
+    }
+    this.numericNavigationTimer = window.setTimeout(() => {
+      const value = Number(this.numericNavigationBuffer);
+      this.clearNumericNavigation();
+      const block = getBlock(this.state?.metadata ?? createEmptyTree(), blockId);
+      if (!this.state || !block) {
+        return;
+      }
+      const target = resolveNumericChildTarget(
+        blockId,
+        block.parentId,
+        getChildren(this.state.metadata, blockId),
+        value
+      );
+      if (target) {
+        this.selectBlock(target, { focus: true });
+      }
+    }, 350);
+    return true;
+  }
+
+  private clearNumericNavigation(): void {
+    if (this.numericNavigationTimer !== null) {
+      window.clearTimeout(this.numericNavigationTimer);
+      this.numericNavigationTimer = null;
+    }
+    this.numericNavigationBuffer = "";
   }
 
   private async persistState(reason: string): Promise<void> {
