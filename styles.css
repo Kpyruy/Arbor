@@ -14,6 +14,13 @@
   pointer-events: none;
 }
 
+.nav-file-title:hover .arbor-file-badge,
+.nav-file-title:focus-within .arbor-file-badge,
+.nav-file-title.is-active .arbor-file-badge,
+.nav-file-title.is-selected .arbor-file-badge {
+  color: var(--text-normal);
+}
+
 .arbor-view {
   --bw-card-width: 300px;
   --bw-card-min-height: 120px;
