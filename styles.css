@@ -1175,6 +1175,36 @@
   color: var(--text-error);
 }
 
+.arbor-clean-export-choices {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.arbor-clean-export-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  cursor: pointer;
+}
+
+.arbor-clean-export-choice:hover,
+.arbor-clean-export-choice:focus-within {
+  border-color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 10%, var(--background-secondary));
+}
+
+.arbor-clean-export-choice input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
 .arbor-confirm-actions {
   display: flex;
   justify-content: flex-end;
