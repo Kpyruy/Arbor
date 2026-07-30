@@ -8,6 +8,7 @@ import {
 } from "../types";
 import { hashString, normalizeNewlines } from "../utils";
 import { buildLinearOrder } from "../model/tree";
+import { blockAnchor } from "../blockLinks";
 
 const VISIBLE_BLOCK_MARKER_PATTERN = VISIBLE_BLOCK_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const VISIBLE_BLOCK_LINE_PATTERN = new RegExp(
@@ -32,7 +33,7 @@ function countLines(input: string): number {
 
 function buildVisibleBlockMarker(block: Pick<BranchBlock, "id" | "parentId" | "order">): string {
   const parentId = block.parentId ?? "";
-  return `<!-- ${VISIBLE_BLOCK_MARKER} id="${block.id}" parent="${parentId}" order="${block.order}" -->\n`;
+  return `<!-- ${VISIBLE_BLOCK_MARKER} id="${block.id}" parent="${parentId}" order="${block.order}" -->\n${blockAnchor(block.id)}\n`;
 }
 
 function splitChunkContentAndAfter(chunk: string): { content: string; after: string } {
@@ -103,7 +104,11 @@ export function parseVisibleBlockMetadata(body: string): BranchTreeMetadata | nu
       return null;
     }
 
-    const contentStart = start + match.markerLength;
+    let contentStart = start + match.markerLength;
+    const expectedAnchor = `${blockAnchor(id)}\n`;
+    if (normalized.slice(contentStart, contentStart + expectedAnchor.length) === expectedAnchor) {
+      contentStart += expectedAnchor.length;
+    }
     const nextStart = matches[index + 1]?.index ?? normalized.length;
     const chunk = normalized.slice(contentStart, nextStart);
     const { content, after } = splitChunkContentAndAfter(chunk);

@@ -87,8 +87,17 @@ describe("document and storage", () => {
     const linearized = linearizeTree(metadataFixture());
     expect(linearized.body).toContain("const x = 1;");
     expect(linearized.body).toContain('<!-- arbor:block:v1 id="root-1" parent="" order="0" -->');
+    expect(linearized.body).toContain("^arbor-root-1");
     expect(linearized.body.indexOf("Child paragraph")).toBeGreaterThan(linearized.body.indexOf("# Heading"));
     expect(linearized.body.indexOf("Second root section")).toBeGreaterThan(linearized.body.indexOf("Child paragraph"));
+  });
+
+  it("does not treat native Arbor anchors as block content", () => {
+    const metadata = metadataFixture();
+    const loaded = loadImportedBranchDocument(linearizeTree(metadata).body);
+
+    expect(loaded.metadata.blocks[0].content).toBe(metadata.blocks[0].content);
+    expect(loaded.metadata.blocks[0].content).not.toContain("^arbor-root-1");
   });
 
   it("round-trips metadata inside the same markdown note", () => {
