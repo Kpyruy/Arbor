@@ -74,4 +74,29 @@ describe("overview arrow navigation", () => {
     expect(revealSelectedCard).toContain('behavior: "smooth"');
     expect(revealSelectedCard).toContain("const isOutsideViewport");
   });
+
+  it("uses the regular block menu when right-clicking an overview card", () => {
+    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+    const overviewStart = source.indexOf("private async syncTreeOverview");
+    const overviewEnd = source.indexOf("private applyOverviewLayout", overviewStart);
+    const overview = source.slice(overviewStart, overviewEnd);
+
+    expect(overview).toContain('card.addEventListener("contextmenu"');
+    expect(overview).toContain("this.buildBlockMenu(node.id).showAtMouseEvent(event)");
+  });
+
+  it("restores overview keyboard focus after deleting a block", () => {
+    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+    const handlerStart = source.indexOf("private handleOverviewKeyDown");
+    const handlerEnd = source.indexOf("private syncOverviewZoom", handlerStart);
+    const handler = source.slice(handlerStart, handlerEnd);
+    const mutationStart = source.indexOf("private async applyMutation");
+    const mutationEnd = source.indexOf("private currentHistorySnapshot", mutationStart);
+    const mutation = source.slice(mutationStart, mutationEnd);
+
+    expect(handler).toContain("void this.deleteSelectedBlock()");
+    expect(mutation).toContain("this.shouldRestoreOverviewKeyboardFocusAfterMutation =");
+    expect(source).toContain("private restoreOverviewKeyboardFocusAfterMutation");
+    expect(source).toContain("this.overviewViewportEl?.focus({ preventScroll: true })");
+  });
 });

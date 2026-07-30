@@ -309,6 +309,7 @@ export class ArborView extends FileView {
   private loadingState: LoadingOverlayState | null = null;
   private presentationMode: ArborPresentationMode = "editor";
   private shouldCenterOverviewOnNextRender = false;
+  private shouldRestoreOverviewKeyboardFocusAfterMutation = false;
   private overviewPanState: {
     pointerId: number;
     startClientX: number;
@@ -2014,6 +2015,12 @@ export class ArborView extends FileView {
         event.stopPropagation();
         this.beginEditingBlock(node.id, "overview");
       });
+      card.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.selectBlock(node.id, { focus: false });
+        this.buildBlockMenu(node.id).showAtMouseEvent(event);
+      });
       card.addEventListener("mouseenter", () => this.setHoveredBlock(node.id));
       card.addEventListener("mouseleave", () => this.setHoveredBlock(null));
       card.addEventListener("keydown", (event) => {
@@ -2042,6 +2049,7 @@ export class ArborView extends FileView {
       this.shouldCenterOverviewOnNextRender = false;
       window.requestAnimationFrame(() => this.centerOverviewOnSelectedBlock());
     }
+    this.restoreOverviewKeyboardFocusAfterMutation();
   }
 
   private applyOverviewLayout(
@@ -2166,6 +2174,12 @@ export class ArborView extends FileView {
     }
 
     if (this.tryHandleNumericChildNavigation(event, this.state.selectedBlockId)) {
+      return;
+    }
+
+    if ((event.key === "Backspace" || event.key === "Delete") && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+      event.preventDefault();
+      void this.deleteSelectedBlock();
       return;
     }
 
@@ -2294,6 +2308,17 @@ export class ArborView extends FileView {
       left: Math.max(0, Math.min(targetLeft, viewport.scrollWidth - viewport.clientWidth)),
       top: Math.max(0, Math.min(targetTop, viewport.scrollHeight - viewport.clientHeight)),
       behavior: "smooth"
+    });
+  }
+
+  private restoreOverviewKeyboardFocusAfterMutation(): void {
+    if (!this.shouldRestoreOverviewKeyboardFocusAfterMutation) {
+      return;
+    }
+    this.shouldRestoreOverviewKeyboardFocusAfterMutation = false;
+    this.pendingFocusBlockId = null;
+    window.requestAnimationFrame(() => {
+      this.overviewViewportEl?.focus({ preventScroll: true });
     });
   }
 
@@ -3552,7 +3577,11 @@ export class ArborView extends FileView {
     this.state.linearized = linearizeTree(this.state.metadata);
     this.state.origin = "metadata";
     this.state.staleMetadata = null;
+    this.pendingFocusBlockId = this.state.selectedBlockId;
     this.pendingScrollBlockId = this.state.selectedBlockId;
+    this.shouldRestoreOverviewKeyboardFocusAfterMutation =
+      this.presentationMode === "overview" &&
+      this.overviewViewportEl?.contains(this.contentEl.ownerDocument.activeElement) === true;
 
     if (autofocusSelection && this.state.selectedBlockId) {
       const block = getBlock(this.state.metadata, this.state.selectedBlockId);
