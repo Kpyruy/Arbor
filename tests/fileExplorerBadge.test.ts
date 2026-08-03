@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { isArborManagedText } from "../src/fileExplorerBadgeRecognition";
+
+const badgeSource = readFileSync(fileURLToPath(new URL("../src/fileExplorerBadge.ts", import.meta.url)), "utf8");
 
 describe("Arbor File Explorer badge recognition", () => {
   it("recognizes legacy hidden Arbor metadata", () => {
@@ -21,5 +25,12 @@ describe("Arbor File Explorer badge recognition", () => {
 
   it("does not recognize a plain Markdown note", () => {
     expect(isArborManagedText("# Plain note")).toBe(false);
+  });
+
+  it("does not add the Arbor badge into an inline rename field", () => {
+    expect(badgeSource).toContain('attributeFilter: ["data-path", "class"]');
+    expect(badgeSource).toContain('target.matches?.(".nav-file-title-content.is-being-renamed")');
+    expect(badgeSource).toContain("this.isInlineRenameActive(title, content)");
+    expect(badgeSource).toContain('content.hasClass("is-being-renamed")');
   });
 });

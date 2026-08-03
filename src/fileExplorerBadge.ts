@@ -80,11 +80,18 @@ export class ArborFileExplorerBadge {
         const target = mutation.target as HTMLElement;
         if (mutation.type === "attributes" && target.matches?.(".nav-file-title")) {
           this.removeBadge(target);
+          return;
+        }
+        if (mutation.type === "attributes" && target.matches?.(".nav-file-title-content.is-being-renamed")) {
+          const title = target.closest<HTMLElement>(".nav-file-title");
+          if (title) {
+            this.removeBadge(title);
+          }
         }
       });
       this.scheduleRefresh();
     });
-    observer.observe(container, { attributes: true, attributeFilter: ["data-path"], childList: true, subtree: true });
+    observer.observe(container, { attributes: true, attributeFilter: ["data-path", "class"], childList: true, subtree: true });
     this.observers.set(container, observer);
   }
 
@@ -118,6 +125,10 @@ export class ArborFileExplorerBadge {
     if (!content) {
       return;
     }
+    if (this.isInlineRenameActive(title, content)) {
+      this.removeBadge(title);
+      return;
+    }
     if (!isArborManagedText(text)) {
       this.removeBadge(title);
       return;
@@ -127,6 +138,13 @@ export class ArborFileExplorerBadge {
     if (!content.querySelector(".arbor-file-badge")) {
       content.createSpan({ cls: "arbor-file-badge", text: "ARBOR" });
     }
+  }
+
+  private isInlineRenameActive(title: HTMLElement, content: HTMLElement): boolean {
+    return title.hasClass("is-being-renamed") ||
+      content.hasClass("is-being-renamed") ||
+      content.matches("[contenteditable='true']") ||
+      Boolean(content.querySelector("input, textarea, [contenteditable='true']"));
   }
 
   private removeBadge(title: HTMLElement): void {
