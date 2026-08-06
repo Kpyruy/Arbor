@@ -2,6 +2,12 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.2.5 - 2026-08-06
+
+### Fixed
+
+- fixed File Explorer inline renaming when the Arbor badge is displayed
+
 ## 0.2.4 - 2026-07-30
 
 ![Tree Overview: a full, connected view of an Arbor note](assets/tree-overview.png)
