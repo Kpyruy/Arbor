@@ -64,7 +64,7 @@ import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
 import { resolveNumericChildTarget } from "../numericNavigation";
-import { getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey, getVisualColumnOrder } from "../layoutDirection";
+import { getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey } from "../layoutDirection";
 import { buildOverviewLayout, buildOverviewLinkPath } from "../model/overviewLayout";
 import { resolveOverviewArrowTarget } from "../overviewNavigation";
 import {
@@ -467,6 +467,32 @@ export class ArborView extends FileView {
     this.pendingFocusBlockId = this.state.selectedBlockId;
     this.pendingScrollBlockId = this.state.selectedBlockId;
     this.render();
+  }
+
+  async refreshLayoutDirection(): Promise<void> {
+    if (!this.file || !this.state || this.renderedLayoutDirection === this.plugin.settings.layoutDirection) {
+      return;
+    }
+
+    this.stopHorizontalScrollMotion();
+    this.applyViewClasses(this.contentEl);
+
+    if (this.presentationMode === "overview") {
+      this.shouldCenterOverviewOnNextRender = true;
+      this.render();
+      return;
+    }
+
+    this.syncBreadcrumbs();
+    this.syncViewportEdgeFades();
+    window.requestAnimationFrame(() => {
+      this.alignColumnsToActivePath();
+      const viewport = this.columnsViewportEl;
+      const activeCard = this.columnsEl?.querySelector<HTMLElement>(".arbor-card.is-active");
+      if (viewport && activeCard) {
+        this.scrollCardIntoHorizontalView(activeCard, viewport, 0, true);
+      }
+    });
   }
 
   private buildLoadedFileState(
@@ -1585,13 +1611,12 @@ export class ArborView extends FileView {
       }
     }
 
-    const visualColumns = getVisualColumnOrder(columns, this.plugin.settings.layoutDirection);
-    for (let index = 0; index < visualColumns.length; index += 1) {
-      const column = visualColumns[index];
+    for (let index = 0; index < columns.length; index += 1) {
+      const column = columns[index];
       const columnEl = this.ensureColumnElement(column.key);
       columnEl.dataset.columnKey = column.key;
       columnEl.dataset.parentId = column.parentId ?? "";
-      columnEl.dataset.columnDepth = String(columns.indexOf(column));
+      columnEl.dataset.columnDepth = String(index);
 
       const siblingAtIndex = this.columnsEl.children[index] ?? null;
       if (siblingAtIndex !== columnEl) {

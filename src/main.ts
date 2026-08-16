@@ -130,8 +130,13 @@ export default class ArborPlugin extends Plugin {
       .filter((view): view is ArborView => view instanceof ArborView);
   }
 
-  refreshAllBranchViews(): void {
+  refreshAllBranchViews(options?: { layoutDirectionChanged?: boolean }): void {
     this.getBranchViews().forEach((view) => {
+      if (options?.layoutDirectionChanged) {
+        void view.refreshLayoutDirection();
+        return;
+      }
+
       void view.refreshView();
     });
   }

@@ -127,7 +127,9 @@ export class ArborSettingTab extends PluginSettingTab {
         : value;
     await this.plugin.saveSettings();
 
-    if (["layoutDirection", "cardWidth", "cardMinHeight", "horizontalSpacing", "verticalSpacing", "zoomLevel", "previewSnippetLength", "dragAndDrop", "showBreadcrumb", "showBreadcrumbFlow", "breadcrumbLabelPreferredPrefix", "breadcrumbLabelFallback", "liveLinearPreview"].includes(key)) {
+    if (key === "layoutDirection") {
+      this.plugin.refreshAllBranchViews({ layoutDirectionChanged: true });
+    } else if (["cardWidth", "cardMinHeight", "horizontalSpacing", "verticalSpacing", "zoomLevel", "previewSnippetLength", "dragAndDrop", "showBreadcrumb", "showBreadcrumbFlow", "breadcrumbLabelPreferredPrefix", "breadcrumbLabelFallback", "liveLinearPreview"].includes(key)) {
       this.plugin.refreshAllBranchViews();
     }
   }
@@ -147,7 +149,7 @@ export class ArborSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.layoutDirection = value as ArborSettings["layoutDirection"];
             await this.plugin.saveSettings();
-            this.plugin.refreshAllBranchViews();
+            this.plugin.refreshAllBranchViews({ layoutDirectionChanged: true });
           })
       );
 

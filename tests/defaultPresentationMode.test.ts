@@ -27,7 +27,7 @@ describe("default presentation mode", () => {
     expect(source).toContain("if (this.shouldCenterOverviewOnNextRender) {");
   });
 
-  it("keeps Arbor floating controls in the left corner", () => {
+  it("keeps Arbor floating controls at the tree origin in both directions", () => {
     const styles = readProjectFile("styles.css");
     const topControls = styles.slice(
       styles.indexOf(".arbor-zoom-indicator,"),
@@ -37,10 +37,14 @@ describe("default presentation mode", () => {
       styles.indexOf(".arbor-overview-exit,"),
       styles.indexOf(".arbor-overview-exit svg")
     );
+    const baseOverviewControls = overviewControls.slice(0, overviewControls.indexOf(".arbor-view.is-rtl"));
 
     expect(topControls).toContain("left: 4px;");
     expect(topControls).toContain("left: 84px;");
     expect(overviewControls).toContain("left: 12px;");
-    expect(overviewControls).not.toContain("right: 12px;");
+    expect(baseOverviewControls).not.toContain("right: 12px;");
+    expect(styles).toContain(".arbor-view.is-rtl .arbor-zoom-indicator");
+    expect(styles).toContain("right: 84px;");
+    expect(styles).toContain(".arbor-view.is-rtl .arbor-overview-button");
   });
 });

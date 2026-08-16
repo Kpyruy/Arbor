@@ -185,6 +185,21 @@
   left: 44px;
 }
 
+.arbor-view.is-rtl .arbor-zoom-indicator,
+.arbor-view.is-rtl .arbor-markdown-button,
+.arbor-view.is-rtl .arbor-view-menu-button {
+  left: auto;
+  right: 4px;
+}
+
+.arbor-view.is-rtl .arbor-markdown-button {
+  right: 44px;
+}
+
+.arbor-view.is-rtl .arbor-zoom-indicator {
+  right: 84px;
+}
+
 .arbor-markdown-button svg,
 .arbor-view-menu-button svg {
   width: 15px;
@@ -402,6 +417,12 @@
   height: 32px;
   padding: 0;
   place-items: center;
+}
+
+.arbor-view.is-rtl .arbor-overview-exit,
+.arbor-view.is-rtl .arbor-overview-button {
+  left: auto;
+  right: 12px;
 }
 
 .arbor-overview-exit svg,
@@ -755,8 +776,8 @@
 }
 
 .arbor-view.is-rtl .arbor-columns {
-  margin-left: auto;
-  justify-content: flex-end;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
 }
 
 .arbor-column {
