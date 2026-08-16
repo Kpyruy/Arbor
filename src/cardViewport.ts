@@ -33,3 +33,21 @@ export function clampCardCenter(preferredCenter: number, cardHeight: number, vie
   const maximum = viewportTop + viewportHeight - CARD_VIEWPORT_EDGE_PADDING_PX - halfHeight;
   return Math.max(minimum, Math.min(preferredCenter, maximum));
 }
+
+export function reserveSceneWidthForColumns(
+  currentSceneWidth: number,
+  viewportWidth: number,
+  existingColumnCount: number,
+  nextColumnCount: number,
+  columnWidth: number,
+  columnGap: number,
+  zoom: number
+): number {
+  const safeExistingCount = Math.max(0, existingColumnCount);
+  const safeNextCount = Math.max(0, nextColumnCount);
+  const widthForColumnCount = (count: number): number =>
+    count * columnWidth + Math.max(0, count - 1) * columnGap;
+  const pendingWidth = Math.max(0, widthForColumnCount(safeNextCount) - widthForColumnCount(safeExistingCount)) * zoom;
+
+  return Math.max(currentSceneWidth, viewportWidth, currentSceneWidth + pendingWidth);
+}

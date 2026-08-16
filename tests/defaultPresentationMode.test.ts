@@ -109,4 +109,13 @@ describe("default presentation mode", () => {
       selectBlock.indexOf("this.pendingScrollBlockId = this.state.selectedBlockId;")
     );
   });
+
+  it("reserves the next column layout before synchronizing editor cards", () => {
+    const view = readProjectFile("src/view/ArborView.ts");
+
+    expect(view).toContain("this.armSceneWidthForPendingScroll(columns.length)");
+    expect(view.indexOf("this.armSceneWidthForPendingScroll(columns.length)")).toBeLessThan(
+      view.indexOf("await this.syncColumns(columns, this.viewContext);")
+    );
+  });
 });

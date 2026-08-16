@@ -73,6 +73,7 @@ import {
   CARD_PREVIEW_MAX_HEIGHT_PX,
   clampCardCenter,
   hasVerticalOverflow,
+  reserveSceneWidthForColumns,
   resolveEditorHeight
 } from "../cardViewport";
 
@@ -1146,8 +1147,6 @@ export class ArborView extends FileView {
     this.syncSearchOverlay(this.viewContext);
     this.syncBanner();
     this.syncLoadingOverlay();
-    const preservedSceneWidth = this.armSceneWidthForPendingScroll();
-
     if (this.presentationMode === "overview") {
       this.overviewButtonEl?.setCssStyles({ display: "none" });
       this.columnsStageEl?.setCssStyles({ display: "none" });
@@ -1161,6 +1160,7 @@ export class ArborView extends FileView {
     this.columnsStageEl?.setCssStyles({ display: "" });
     this.previewPaneEl?.setCssStyles({ display: "" });
     const columns = buildColumnModels(this.state.metadata, this.state.selectedBlockId, this.plugin.settings.previewSnippetLength);
+    const preservedSceneWidth = this.armSceneWidthForPendingScroll(columns.length);
     this.currentColumnMap.clear();
     columns.forEach((column) => this.currentColumnMap.set(column.key, column));
 
@@ -4216,12 +4216,21 @@ export class ArborView extends FileView {
     }
   }
 
-  private armSceneWidthForPendingScroll(): number {
+  private armSceneWidthForPendingScroll(nextColumnCount: number): number {
     if (!this.pendingScrollBlockId || !this.columnsEl || !this.columnsViewportEl) {
       return 0;
     }
 
-    const preservedSceneWidth = Math.max(this.columnsEl.scrollWidth, this.columnsViewportEl.clientWidth);
+    const existingColumnCount = this.columnsEl.querySelectorAll(".arbor-column").length;
+    const preservedSceneWidth = reserveSceneWidthForColumns(
+      this.columnsEl.scrollWidth,
+      this.columnsViewportEl.clientWidth,
+      existingColumnCount,
+      nextColumnCount,
+      this.plugin.settings.cardWidth,
+      this.plugin.settings.horizontalSpacing,
+      this.plugin.settings.zoomLevel
+    );
     this.columnsEl.setCssProps({ "--arbor-columns-min-width": `${preservedSceneWidth}px` });
     return preservedSceneWidth;
   }

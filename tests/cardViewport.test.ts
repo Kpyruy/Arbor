@@ -6,6 +6,7 @@ import {
   canStartCardDrag,
   clampCardCenter,
   hasVerticalOverflow,
+  reserveSceneWidthForColumns,
   resolveEditorHeight
 } from "../src/cardViewport";
 
@@ -40,5 +41,11 @@ describe("bounded Arbor card viewport rules", () => {
     expect(CARD_VIEWPORT_EDGE_PADDING_PX).toBe(24);
     expect(clampCardCenter(120, 520, 0, 700)).toBe(284);
     expect(clampCardCenter(640, 520, 0, 700)).toBe(416);
+  });
+
+  it("reserves room for columns that will be added outside the RTL viewport", () => {
+    expect(reserveSceneWidthForColumns(1_000, 800, 2, 3, 300, 20, 1)).toBe(1_320);
+    expect(reserveSceneWidthForColumns(1_000, 800, 3, 2, 300, 20, 1)).toBe(1_000);
+    expect(reserveSceneWidthForColumns(600, 800, 0, 1, 300, 20, 1)).toBe(900);
   });
 });
