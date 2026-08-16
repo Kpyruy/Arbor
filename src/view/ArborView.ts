@@ -64,7 +64,7 @@ import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
 import { resolveNumericChildTarget } from "../numericNavigation";
-import { getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey } from "../layoutDirection";
+import { getBreadcrumbScrollInsets, getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey } from "../layoutDirection";
 import { buildOverviewLayout, buildOverviewLinkPath } from "../model/overviewLayout";
 import { resolveOverviewArrowTarget } from "../overviewNavigation";
 import {
@@ -1358,8 +1358,7 @@ export class ArborView extends FileView {
 
       const breadcrumbsRect = breadcrumbsEl.getBoundingClientRect();
       const activeRect = activeButton.getBoundingClientRect();
-      const rightInset = (this.zoomIndicatorEl?.offsetWidth ?? 0) + (this.viewMenuButtonEl?.offsetWidth ?? 0) + 32;
-      const leftInset = 28;
+      const { left: leftInset, right: rightInset } = getBreadcrumbScrollInsets(this.plugin.settings.layoutDirection);
       const isFullyVisible =
         activeRect.left >= breadcrumbsRect.left + leftInset &&
         activeRect.right <= breadcrumbsRect.right - rightInset;

@@ -45,3 +45,9 @@ export function getVisualColumnOrder<T>(columns: readonly T[], direction: ArborL
 export function getHorizontalWheelDelta(delta: number, direction: ArborLayoutDirection): number {
   return direction === "rtl" ? -delta : delta;
 }
+
+export function getBreadcrumbScrollInsets(direction: ArborLayoutDirection): { left: number; right: number } {
+  return direction === "rtl"
+    ? { left: 132, right: 28 }
+    : { left: 28, right: 132 };
+}

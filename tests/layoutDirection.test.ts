@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   getChildArrowKey,
+  getBreadcrumbScrollInsets,
   getHorizontalWheelDelta,
   getParentArrowKey,
   getVisualColumnOrder,
@@ -31,6 +32,11 @@ describe("Arbor layout direction", () => {
     expect(semanticColumns).toEqual([0, 1, 2]);
     expect(getHorizontalWheelDelta(24, "ltr")).toBe(24);
     expect(getHorizontalWheelDelta(24, "rtl")).toBe(-24);
+  });
+
+  it("keeps the active breadcrumb clear of the controls on either edge", () => {
+    expect(getBreadcrumbScrollInsets("ltr")).toEqual({ left: 28, right: 132 });
+    expect(getBreadcrumbScrollInsets("rtl")).toEqual({ left: 132, right: 28 });
   });
 
   it("exposes a top-level setting that refreshes every open Arbor view", () => {
