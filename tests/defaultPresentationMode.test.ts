@@ -47,4 +47,19 @@ describe("default presentation mode", () => {
     expect(styles).toContain("right: 84px;");
     expect(styles).toContain(".arbor-view.is-rtl .arbor-overview-button");
   });
+
+  it("reserves the control edge before laying out breadcrumbs", () => {
+    const styles = readProjectFile("styles.css");
+    const breadcrumbs = styles.slice(
+      styles.indexOf(".arbor-breadcrumbs {"),
+      styles.indexOf(".arbor-breadcrumbs button,")
+    );
+    const rtlBreadcrumbs = styles.slice(
+      styles.indexOf(".arbor-view.is-rtl .arbor-breadcrumbs"),
+      styles.indexOf(".arbor-breadcrumbs button,")
+    );
+
+    expect(breadcrumbs).toContain("padding: 4px 14px 8px 132px;");
+    expect(rtlBreadcrumbs).toContain("padding: 4px 132px 8px 14px;");
+  });
 });

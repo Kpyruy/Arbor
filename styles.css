@@ -86,7 +86,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   min-width: 0;
-  padding: 4px 132px 8px 14px;
+  padding: 4px 14px 8px 132px;
   mask-image: linear-gradient(to right, transparent 0, black 18px, black calc(100% - 18px), transparent 100%);
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -94,7 +94,7 @@
 
 .arbor-view.is-rtl .arbor-breadcrumbs {
   flex-direction: row-reverse;
-  padding: 4px 14px 8px 132px;
+  padding: 4px 132px 8px 14px;
 }
 
 .arbor-breadcrumbs button,
@@ -776,8 +776,13 @@
 }
 
 .arbor-view.is-rtl .arbor-columns {
-  flex-direction: row-reverse;
+  direction: rtl;
+  flex-direction: row;
   justify-content: flex-start;
+}
+
+.arbor-view.is-rtl .arbor-column {
+  direction: ltr;
 }
 
 .arbor-column {

@@ -43,7 +43,7 @@ describe("Arbor layout direction", () => {
     expect(main).toContain("resolveInitialLayoutDirection");
   });
 
-  it("renders RTL as a CSS mirror while keeping semantic depth and cards in place", () => {
+  it("renders RTL as a CSS mirror while keeping semantic depth and card text in place", () => {
     const view = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
     const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
 
@@ -53,7 +53,14 @@ describe("Arbor layout direction", () => {
     expect(view).toContain("getHorizontalWheelDelta(event.deltaY, this.plugin.settings.layoutDirection)");
     expect(view).toContain('root.classList.toggle("is-rtl", this.plugin.settings.layoutDirection === "rtl")');
     expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumbs");
-    expect(styles).toContain("flex-direction: row-reverse;");
+    const rtlColumns = styles.slice(
+      styles.indexOf(".arbor-view.is-rtl .arbor-columns"),
+      styles.indexOf(".arbor-column {")
+    );
+
+    expect(rtlColumns).toContain("direction: rtl;");
+    expect(styles).toContain(".arbor-view.is-rtl .arbor-column");
+    expect(styles).toContain("direction: ltr;");
   });
 
   it("anchors the mirrored editor scene to the right edge even while Arbor preserves viewport width", () => {
@@ -64,6 +71,7 @@ describe("Arbor layout direction", () => {
     );
 
     expect(rtlColumns).toContain("justify-content: flex-start;");
+    expect(rtlColumns).toContain("flex-direction: row;");
   });
 
   it("snaps the selected card after changing direction instead of animating from stale scroll coordinates", () => {
