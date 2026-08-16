@@ -80,20 +80,48 @@
 }
 
 .arbor-breadcrumbs {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
   overflow-x: auto;
   overflow-y: hidden;
   min-width: 0;
-  padding: 4px 132px 8px 14px;
+  padding: 4px 168px 8px 14px;
   mask-image: linear-gradient(to right, transparent 0, black 18px, black calc(100% - 18px), transparent 100%);
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
 .arbor-view.is-rtl .arbor-breadcrumbs {
-  padding: 4px 14px 8px 132px;
+  padding: 4px 14px 8px 168px;
+}
+
+.arbor-view.is-rtl .arbor-breadcrumbs::before {
+  content: "";
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.arbor-breadcrumbs::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 168px;
+  pointer-events: none;
+  border-left: 1px solid color-mix(in srgb, var(--background-modifier-border) 74%, transparent);
+  background: linear-gradient(to left, var(--background-primary) 78%, color-mix(in srgb, var(--background-primary) 72%, transparent));
+}
+
+.arbor-view.is-rtl .arbor-breadcrumbs::after {
+  right: auto;
+  left: 0;
+  border-right: 1px solid color-mix(in srgb, var(--background-modifier-border) 74%, transparent);
+  border-left: 0;
+  background: linear-gradient(to right, var(--background-primary) 78%, color-mix(in srgb, var(--background-primary) 72%, transparent));
 }
 
 .arbor-breadcrumbs button,
@@ -766,6 +794,7 @@
   direction: rtl;
   flex-direction: row;
   justify-content: flex-start;
+  margin-left: auto;
 }
 
 .arbor-view.is-rtl .arbor-column {

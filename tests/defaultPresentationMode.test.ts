@@ -68,7 +68,9 @@ describe("default presentation mode", () => {
       styles.indexOf(".arbor-breadcrumbs button,")
     );
 
-    expect(breadcrumbs).toContain("padding: 4px 132px 8px 14px;");
-    expect(rtlBreadcrumbs).toContain("padding: 4px 14px 8px 132px;");
+    expect(breadcrumbs).toContain("padding: 4px 168px 8px 14px;");
+    expect(rtlBreadcrumbs).toContain("padding: 4px 14px 8px 168px;");
+    expect(styles).toContain(".arbor-breadcrumbs::after");
+    expect(styles).toContain("width: 168px;");
   });
 });

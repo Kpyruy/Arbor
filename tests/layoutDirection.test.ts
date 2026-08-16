@@ -35,8 +35,8 @@ describe("Arbor layout direction", () => {
   });
 
   it("keeps the active breadcrumb clear of the controls on either edge", () => {
-    expect(getBreadcrumbScrollInsets("ltr")).toEqual({ left: 28, right: 132 });
-    expect(getBreadcrumbScrollInsets("rtl")).toEqual({ left: 132, right: 28 });
+    expect(getBreadcrumbScrollInsets("ltr")).toEqual({ left: 28, right: 168 });
+    expect(getBreadcrumbScrollInsets("rtl")).toEqual({ left: 168, right: 28 });
   });
 
   it("keeps RTL breadcrumbs in a scrollable left-to-right track", () => {
@@ -47,7 +47,7 @@ describe("Arbor layout direction", () => {
     );
 
     expect(rtlBreadcrumbs).not.toContain("flex-direction: row-reverse;");
-    expect(rtlBreadcrumbs).toContain("padding: 4px 14px 8px 132px;");
+    expect(rtlBreadcrumbs).toContain("padding: 4px 14px 8px 168px;");
   });
 
   it("exposes a top-level setting that refreshes every open Arbor view", () => {
@@ -89,6 +89,7 @@ describe("Arbor layout direction", () => {
 
     expect(rtlColumns).toContain("justify-content: flex-start;");
     expect(rtlColumns).toContain("flex-direction: row;");
+    expect(rtlColumns).toContain("margin-left: auto;");
   });
 
   it("snaps the selected card after changing direction instead of animating from stale scroll coordinates", () => {
