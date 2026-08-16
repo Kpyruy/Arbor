@@ -10,7 +10,7 @@ export interface ArborReleaseNote {
 
 export const ARBOR_RELEASE_NOTES: readonly ArborReleaseNote[] = [
   {
-    version: "0.3.0",
+    version: "0.2.6",
     title: "Write in your direction",
     changes: [
       "Choose a left-to-right or right-to-left Arbor layout in settings.",

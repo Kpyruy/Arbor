@@ -2,7 +2,7 @@
 
 All notable changes to Arbor should be documented in this file.
 
-## 0.3.0 - 2026-08-16
+## 0.2.6 - 2026-08-16
 
 ### Added
 
