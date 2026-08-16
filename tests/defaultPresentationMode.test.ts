@@ -26,4 +26,21 @@ describe("default presentation mode", () => {
     expect(source).toContain("this.shouldCenterOverviewOnNextRender = true;\n      this.presentationMode = \"overview\";");
     expect(source).toContain("if (this.shouldCenterOverviewOnNextRender) {");
   });
+
+  it("keeps Arbor floating controls in the left corner", () => {
+    const styles = readProjectFile("styles.css");
+    const topControls = styles.slice(
+      styles.indexOf(".arbor-zoom-indicator,"),
+      styles.indexOf(".arbor-breadcrumb-connector::before")
+    );
+    const overviewControls = styles.slice(
+      styles.indexOf(".arbor-overview-exit,"),
+      styles.indexOf(".arbor-overview-exit svg")
+    );
+
+    expect(topControls).toContain("left: 4px;");
+    expect(topControls).toContain("left: 84px;");
+    expect(overviewControls).toContain("left: 12px;");
+    expect(overviewControls).not.toContain("right: 12px;");
+  });
 });

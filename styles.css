@@ -146,7 +146,7 @@
 .arbor-view-menu-button {
   position: absolute;
   top: 2px;
-  right: 4px;
+  left: 4px;
   z-index: 2;
   border: 1px solid color-mix(in srgb, var(--interactive-accent) 42%, var(--background-modifier-border));
   background: color-mix(in srgb, var(--background-secondary) 96%, black 4%);
@@ -167,7 +167,7 @@
 }
 
 .arbor-zoom-indicator {
-  right: 84px;
+  left: 84px;
 }
 
 .arbor-markdown-button,
@@ -178,11 +178,11 @@
   width: 34px;
   height: 32px;
   padding: 0;
-  right: 4px;
+  left: 4px;
 }
 
 .arbor-markdown-button {
-  right: 44px;
+  left: 44px;
 }
 
 .arbor-markdown-button svg,
@@ -396,7 +396,7 @@
   position: absolute;
   z-index: 3;
   top: 12px;
-  right: 12px;
+  left: 12px;
   display: grid;
   width: 32px;
   height: 32px;
