@@ -64,7 +64,7 @@ import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
 import { resolveNumericChildTarget } from "../numericNavigation";
-import { getBreadcrumbScrollInsets, getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey } from "../layoutDirection";
+import { getBreadcrumbScrollInsets, getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey, getVisualBreadcrumbOrder } from "../layoutDirection";
 import { buildOverviewLayout, buildOverviewLinkPath } from "../model/overviewLayout";
 import { resolveOverviewArrowTarget } from "../overviewNavigation";
 import {
@@ -1321,15 +1321,16 @@ export class ArborView extends FileView {
   }
 
   private renderBreadcrumbItems(container: HTMLElement, path: BranchBlock[]): void {
-    path.forEach((block, index) => {
+    const visualPath = getVisualBreadcrumbOrder(path, this.plugin.settings.layoutDirection);
+    visualPath.forEach((block, index) => {
       const button = container.createEl("button", {
-        cls: index === path.length - 1 ? "is-active" : "",
+        cls: block.id === this.state?.selectedBlockId ? "is-active" : "",
         text: this.getBreadcrumbLabel(block.content)
       });
       button.setCssProps({ "--bw-crumb-index": String(index) });
       button.addEventListener("click", () => this.selectBlock(block.id, { focus: true }));
 
-      if (this.plugin.settings.showBreadcrumbFlow && index < path.length - 1) {
+      if (this.plugin.settings.showBreadcrumbFlow && index < visualPath.length - 1) {
         const connector = container.createSpan({ cls: "arbor-breadcrumb-connector" });
         connector.setCssProps({ "--bw-crumb-index": String(index + 0.45) });
       }

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import {
   getChildArrowKey,
   getBreadcrumbScrollInsets,
+  getVisualBreadcrumbOrder,
   getHorizontalWheelDelta,
   getParentArrowKey,
   getVisualColumnOrder,
@@ -32,6 +33,14 @@ describe("Arbor layout direction", () => {
     expect(semanticColumns).toEqual([0, 1, 2]);
     expect(getHorizontalWheelDelta(24, "ltr")).toBe(24);
     expect(getHorizontalWheelDelta(24, "rtl")).toBe(-24);
+  });
+
+  it("places the breadcrumb root at the physical right edge in RTL", () => {
+    const semanticPath = ["root", "child", "selected"];
+
+    expect(getVisualBreadcrumbOrder(semanticPath, "ltr")).toEqual(["root", "child", "selected"]);
+    expect(getVisualBreadcrumbOrder(semanticPath, "rtl")).toEqual(["selected", "child", "root"]);
+    expect(semanticPath).toEqual(["root", "child", "selected"]);
   });
 
   it("keeps the active breadcrumb clear of the controls on either edge", () => {

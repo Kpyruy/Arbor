@@ -42,6 +42,10 @@ export function getVisualColumnOrder<T>(columns: readonly T[], direction: ArborL
   return direction === "rtl" ? [...columns].reverse() : [...columns];
 }
 
+export function getVisualBreadcrumbOrder<T>(path: readonly T[], direction: ArborLayoutDirection): T[] {
+  return direction === "rtl" ? [...path].reverse() : [...path];
+}
+
 export function getHorizontalWheelDelta(delta: number, direction: ArborLayoutDirection): number {
   return direction === "rtl" ? -delta : delta;
 }

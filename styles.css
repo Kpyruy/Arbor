@@ -289,6 +289,16 @@
   transform: translateY(-50%) rotate(45deg);
 }
 
+.arbor-view.is-rtl .arbor-breadcrumb-connector::before {
+  background: linear-gradient(to left, color-mix(in srgb, var(--interactive-accent) 18%, transparent), color-mix(in srgb, var(--interactive-accent) 42%, transparent));
+}
+
+.arbor-view.is-rtl .arbor-breadcrumb-connector::after {
+  right: auto;
+  left: 4px;
+  transform: translateY(-50%) rotate(-135deg);
+}
+
 .arbor-banner {
   border: 1px solid color-mix(in srgb, var(--interactive-accent) 35%, var(--background-modifier-border));
   background: color-mix(in srgb, var(--background-secondary) 82%, var(--interactive-accent) 18%);
