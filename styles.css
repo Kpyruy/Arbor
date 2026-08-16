@@ -73,6 +73,18 @@
   height: 100%;
 }
 
+.arbor-view.is-rtl .arbor-frame::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 2px;
+  left: 168px;
+  width: 1px;
+  height: 32px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--background-modifier-border) 82%, transparent);
+}
+
 .workspace-leaf.is-arbor-auto-opening-source {
   opacity: 0;
   transition: none;
@@ -95,6 +107,7 @@
 
 .arbor-view.is-rtl .arbor-breadcrumbs {
   padding: 4px 14px 8px 168px;
+  clip-path: inset(0 0 0 168px);
 }
 
 .arbor-view.is-rtl .arbor-breadcrumbs::before {

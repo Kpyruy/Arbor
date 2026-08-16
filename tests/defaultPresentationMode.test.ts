@@ -72,5 +72,7 @@ describe("default presentation mode", () => {
     expect(rtlBreadcrumbs).toContain("padding: 4px 14px 8px 168px;");
     expect(styles).toContain(".arbor-breadcrumbs::after");
     expect(styles).toContain("width: 168px;");
+    expect(rtlBreadcrumbs).toContain("clip-path: inset(0 0 0 168px);");
+    expect(styles).toContain(".arbor-view.is-rtl .arbor-frame::before");
   });
 });
