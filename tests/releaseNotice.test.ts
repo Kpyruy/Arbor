@@ -5,20 +5,20 @@ import { getReleaseNote, shouldShowReleaseNotice } from "../src/releaseNotice";
 
 describe("release notice", () => {
   it("does not show a release note on a fresh install", () => {
-    expect(shouldShowReleaseNotice(undefined, "0.2.5", true)).toBe(false);
+    expect(shouldShowReleaseNotice(undefined, "0.3.0", true)).toBe(false);
   });
 
   it("shows only the current registered release after an update", () => {
-    expect(shouldShowReleaseNotice("0.2.3", "0.2.5", false)).toBe(true);
-    const releaseNote = getReleaseNote("0.2.5");
-    expect(releaseNote?.version).toBe("0.2.5");
+    expect(shouldShowReleaseNotice("0.2.5", "0.3.0", false)).toBe(true);
+    const releaseNote = getReleaseNote("0.3.0");
+    expect(releaseNote?.version).toBe("0.3.0");
     expect(typeof releaseNote?.title).toBe("string");
     expect(Array.isArray(releaseNote?.changes)).toBe(true);
   });
 
   it("does not repeat a seen, downgraded, or unregistered release", () => {
-    expect(shouldShowReleaseNotice("0.2.5", "0.2.5", false)).toBe(false);
-    expect(shouldShowReleaseNotice("0.2.6", "0.2.5", false)).toBe(false);
+    expect(shouldShowReleaseNotice("0.3.0", "0.3.0", false)).toBe(false);
+    expect(shouldShowReleaseNotice("0.3.1", "0.3.0", false)).toBe(false);
     expect(shouldShowReleaseNotice("0.2.4", "9.9.9", false)).toBe(false);
   });
 

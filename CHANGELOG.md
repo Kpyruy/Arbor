@@ -2,6 +2,24 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.3.0 - 2026-08-16
+
+### Added
+
+- added a Layout direction setting with Left to right and Right to left modes
+- new installations use Obsidian's interface direction as their initial Arbor layout
+
+### Changed
+
+- mirrored the branch editor and Tree Overview for right-to-left writing while preserving normal Markdown and text direction
+- mirrored directional keyboard navigation, create shortcuts, breadcrumbs, controls and horizontal wheel movement
+- kept the active card visible during deep branch navigation, with smoother focus and breadcrumb transitions
+
+### Fixed
+
+- stabilized viewport movement when moving between visible cards or revealing a new branch column
+- kept branch alignment stable in both layout directions
+
 ## 0.2.5 - 2026-08-06
 
 ### Fixed

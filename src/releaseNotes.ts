@@ -10,11 +10,11 @@ export interface ArborReleaseNote {
 
 export const ARBOR_RELEASE_NOTES: readonly ArborReleaseNote[] = [
   {
-    version: "0.2.5",
-    title: "Tree Overview",
+    version: "0.3.0",
+    title: "Write in your direction",
     changes: [
-      "Explore the full note as a smooth, editable visual tree.",
-      "Navigate, zoom, pan and create branches without leaving Arbor."
+      "Choose a left-to-right or right-to-left Arbor layout in settings.",
+      "The editor, Tree Overview and keyboard navigation now mirror the selected direction while your Markdown stays unchanged."
     ],
     action: {
       label: "Open Arbor settings",

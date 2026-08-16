@@ -135,6 +135,7 @@ These work inside Arbor itself. They are not command-palette bindings.
 
 Notes:
 
+- The table describes the `Left to right` layout. In `Right to left`, horizontal arrows and Ctrl/Cmd + horizontal-arrow creation mirror visually: `ArrowLeft` selects a child and `ArrowRight` selects the parent.
 - `Ctrl/Cmd + ArrowLeft` is intentionally conservative and does nothing when the selected block is already at the root level.
 - Arbor uses `event.code` for view-level shortcuts where needed, so layout-dependent bindings like search remain stable across keyboard layouts.
 - `Delete subtree` shows a confirmation modal. Normal `Delete block` does not.
@@ -210,6 +211,8 @@ Current menu actions:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
+| Layout direction | `Left to right` | Choose which physical side the root starts on; right-to-left also mirrors directional navigation and controls |
+| Default opening mode | `Branch editor` | Choose whether Arbor notes open in the branch editor or Tree Overview |
 | Split direction | `Vertical split` | Where Arbor opens relative to the current note |
 | Card width | `300 px` | Base card width in the branching scene |
 | Card minimum height | `120 px` | Minimum card height before content expands it |
