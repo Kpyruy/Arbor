@@ -75,4 +75,25 @@ describe("default presentation mode", () => {
     expect(rtlBreadcrumbs).toContain("clip-path: inset(0 0 0 168px);");
     expect(styles).toContain(".arbor-view.is-rtl .arbor-frame::before");
   });
+
+  it("animates only the newly active breadcrumb", () => {
+    const styles = readProjectFile("styles.css");
+    const breadcrumbButton = styles.slice(
+      styles.indexOf(".arbor-breadcrumbs button,"),
+      styles.indexOf(".arbor-breadcrumbs button {")
+    );
+    const activeBreadcrumb = styles.slice(
+      styles.indexOf(".arbor-breadcrumbs button.is-active"),
+      styles.indexOf(".arbor-breadcrumb-connector {")
+    );
+    const connector = styles.slice(
+      styles.indexOf(".arbor-breadcrumb-connector {"),
+      styles.indexOf(".arbor-breadcrumb-connector::before")
+    );
+
+    expect(breadcrumbButton).not.toContain("animation:");
+    expect(connector).not.toContain("animation:");
+    expect(activeBreadcrumb).toContain("animation: arbor-breadcrumb-enter");
+    expect(activeBreadcrumb).not.toContain("animation-delay:");
+  });
 });
