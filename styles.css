@@ -86,7 +86,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   min-width: 0;
-  padding: 4px 14px 8px 132px;
+  padding: 4px 132px 8px 14px;
   mask-image: linear-gradient(to right, transparent 0, black 18px, black calc(100% - 18px), transparent 100%);
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -94,7 +94,7 @@
 
 .arbor-view.is-rtl .arbor-breadcrumbs {
   flex-direction: row-reverse;
-  padding: 4px 132px 8px 14px;
+  padding: 4px 14px 8px 132px;
 }
 
 .arbor-breadcrumbs button,
@@ -146,7 +146,7 @@
 .arbor-view-menu-button {
   position: absolute;
   top: 2px;
-  left: 4px;
+  right: 4px;
   z-index: 2;
   border: 1px solid color-mix(in srgb, var(--interactive-accent) 42%, var(--background-modifier-border));
   background: color-mix(in srgb, var(--background-secondary) 96%, black 4%);
@@ -167,7 +167,7 @@
 }
 
 .arbor-zoom-indicator {
-  left: 84px;
+  right: 84px;
 }
 
 .arbor-markdown-button,
@@ -178,26 +178,26 @@
   width: 34px;
   height: 32px;
   padding: 0;
-  left: 4px;
+  right: 4px;
 }
 
 .arbor-markdown-button {
-  left: 44px;
+  right: 44px;
 }
 
 .arbor-view.is-rtl .arbor-zoom-indicator,
 .arbor-view.is-rtl .arbor-markdown-button,
 .arbor-view.is-rtl .arbor-view-menu-button {
-  left: auto;
-  right: 4px;
+  right: auto;
+  left: 4px;
 }
 
 .arbor-view.is-rtl .arbor-markdown-button {
-  right: 44px;
+  left: 44px;
 }
 
 .arbor-view.is-rtl .arbor-zoom-indicator {
-  right: 84px;
+  left: 84px;
 }
 
 .arbor-markdown-button svg,
@@ -411,7 +411,7 @@
   position: absolute;
   z-index: 3;
   top: 12px;
-  left: 12px;
+  right: 12px;
   display: grid;
   width: 32px;
   height: 32px;
@@ -421,8 +421,8 @@
 
 .arbor-view.is-rtl .arbor-overview-exit,
 .arbor-view.is-rtl .arbor-overview-button {
-  left: auto;
-  right: 12px;
+  right: auto;
+  left: 12px;
 }
 
 .arbor-overview-exit svg,

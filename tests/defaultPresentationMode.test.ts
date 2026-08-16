@@ -27,7 +27,7 @@ describe("default presentation mode", () => {
     expect(source).toContain("if (this.shouldCenterOverviewOnNextRender) {");
   });
 
-  it("keeps Arbor floating controls at the tree origin in both directions", () => {
+  it("places floating controls opposite the reading direction", () => {
     const styles = readProjectFile("styles.css");
     const topControls = styles.slice(
       styles.indexOf(".arbor-zoom-indicator,"),
@@ -38,14 +38,23 @@ describe("default presentation mode", () => {
       styles.indexOf(".arbor-overview-exit svg")
     );
     const baseOverviewControls = overviewControls.slice(0, overviewControls.indexOf(".arbor-view.is-rtl"));
+    const rtlTopControls = styles.slice(
+      styles.indexOf(".arbor-view.is-rtl .arbor-zoom-indicator,"),
+      styles.indexOf(".arbor-markdown-button svg,")
+    );
+    const rtlOverviewControls = styles.slice(
+      styles.indexOf(".arbor-view.is-rtl .arbor-overview-exit,"),
+      styles.indexOf(".arbor-overview-exit svg,")
+    );
 
-    expect(topControls).toContain("left: 4px;");
-    expect(topControls).toContain("left: 84px;");
-    expect(overviewControls).toContain("left: 12px;");
-    expect(baseOverviewControls).not.toContain("right: 12px;");
+    expect(topControls).toContain("right: 4px;");
+    expect(topControls).toContain("right: 84px;");
+    expect(overviewControls).toContain("right: 12px;");
+    expect(baseOverviewControls).not.toContain("left: 12px;");
     expect(styles).toContain(".arbor-view.is-rtl .arbor-zoom-indicator");
-    expect(styles).toContain("right: 84px;");
+    expect(rtlTopControls).toContain("left: 84px;");
     expect(styles).toContain(".arbor-view.is-rtl .arbor-overview-button");
+    expect(rtlOverviewControls).toContain("left: 12px;");
   });
 
   it("reserves the control edge before laying out breadcrumbs", () => {
@@ -59,7 +68,7 @@ describe("default presentation mode", () => {
       styles.indexOf(".arbor-breadcrumbs button,")
     );
 
-    expect(breadcrumbs).toContain("padding: 4px 14px 8px 132px;");
-    expect(rtlBreadcrumbs).toContain("padding: 4px 132px 8px 14px;");
+    expect(breadcrumbs).toContain("padding: 4px 132px 8px 14px;");
+    expect(rtlBreadcrumbs).toContain("padding: 4px 14px 8px 132px;");
   });
 });
