@@ -44,7 +44,7 @@ describe("Arbor layout direction", () => {
   });
 
   it("keeps the active breadcrumb clear of the controls on either edge", () => {
-    expect(getBreadcrumbScrollInsets("ltr")).toEqual({ left: 28, right: 168 });
+    expect(getBreadcrumbScrollInsets("ltr")).toEqual({ left: 28, right: 180 });
     expect(getBreadcrumbScrollInsets("rtl")).toEqual({ left: 180, right: 28 });
   });
 

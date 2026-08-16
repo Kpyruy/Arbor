@@ -73,16 +73,21 @@
   height: 100%;
 }
 
-.arbor-view.is-rtl .arbor-frame::before {
+.arbor-frame::before {
   content: "";
   position: absolute;
   z-index: 1;
   top: 2px;
-  left: 168px;
+  right: 168px;
   width: 1px;
   height: 32px;
   pointer-events: none;
   background: color-mix(in srgb, var(--background-modifier-border) 82%, transparent);
+}
+
+.arbor-view.is-rtl .arbor-frame::before {
+  right: auto;
+  left: 168px;
 }
 
 .workspace-leaf.is-arbor-auto-opening-source {
@@ -99,7 +104,8 @@
   overflow-x: auto;
   overflow-y: hidden;
   min-width: 0;
-  padding: 4px 168px 8px 14px;
+  padding: 4px 180px 8px 14px;
+  clip-path: inset(0 168px 0 0);
   mask-image: linear-gradient(to right, transparent 0, black 18px, black calc(100% - 18px), transparent 100%);
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -115,27 +121,6 @@
   content: "";
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.arbor-breadcrumbs::after {
-  content: "";
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 168px;
-  pointer-events: none;
-  border-left: 1px solid color-mix(in srgb, var(--background-modifier-border) 74%, transparent);
-  background: linear-gradient(to left, var(--background-primary) 78%, color-mix(in srgb, var(--background-primary) 72%, transparent));
-}
-
-.arbor-view.is-rtl .arbor-breadcrumbs::after {
-  right: auto;
-  left: 0;
-  border-right: 1px solid color-mix(in srgb, var(--background-modifier-border) 74%, transparent);
-  border-left: 0;
-  background: linear-gradient(to right, var(--background-primary) 78%, color-mix(in srgb, var(--background-primary) 72%, transparent));
 }
 
 .arbor-breadcrumbs button,

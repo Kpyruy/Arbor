@@ -68,12 +68,12 @@ describe("default presentation mode", () => {
       styles.indexOf(".arbor-breadcrumbs button,")
     );
 
-    expect(breadcrumbs).toContain("padding: 4px 168px 8px 14px;");
+    expect(breadcrumbs).toContain("padding: 4px 180px 8px 14px;");
     expect(rtlBreadcrumbs).toContain("padding: 4px 14px 8px 180px;");
-    expect(styles).toContain(".arbor-breadcrumbs::after");
-    expect(styles).toContain("width: 168px;");
+    expect(breadcrumbs).toContain("clip-path: inset(0 168px 0 0);");
+    expect(styles).not.toContain(".arbor-breadcrumbs::after");
     expect(rtlBreadcrumbs).toContain("clip-path: inset(0 0 0 168px);");
-    expect(styles).toContain(".arbor-view.is-rtl .arbor-frame::before");
+    expect(styles).toContain(".arbor-frame::before");
   });
 
   it("animates only the newly active breadcrumb", () => {
