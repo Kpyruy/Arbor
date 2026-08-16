@@ -163,15 +163,14 @@ describe("default presentation mode", () => {
     expect(styles).toContain(".arbor-breadcrumb-exiting.is-active {\n  animation: arbor-breadcrumb-exit");
   });
 
-  it("keeps rendered card text on a 2D layout layer for sharper type", () => {
+  it("keeps vertical column alignment on its transform layer", () => {
     const styles = readProjectFile("styles.css");
     const cardList = styles.slice(
       styles.indexOf(".arbor-card-list {"),
       styles.indexOf(".arbor-card-list.is-rebinding {")
     );
 
-    expect(cardList).toContain("position: relative;");
-    expect(cardList).toContain("top: var(--arbor-card-list-offset-y, 0px);");
-    expect(cardList).not.toContain("translate3d(");
+    expect(cardList).toContain("transform: translate3d(0, var(--arbor-card-list-offset-y, 0px), 0);");
+    expect(cardList).not.toContain("top: var(--arbor-card-list-offset-y, 0px);");
   });
 });
