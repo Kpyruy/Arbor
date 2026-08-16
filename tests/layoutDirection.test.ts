@@ -59,6 +59,17 @@ describe("Arbor layout direction", () => {
     expect(rtlBreadcrumbs).toContain("padding: 4px 14px 8px 168px;");
   });
 
+  it("keeps RTL breadcrumb steps compact around their directional connector", () => {
+    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const rtlBreadcrumbs = styles.slice(
+      styles.indexOf(".arbor-view.is-rtl .arbor-breadcrumbs"),
+      styles.indexOf(".arbor-breadcrumbs::after")
+    );
+
+    expect(rtlBreadcrumbs).toContain("gap: 6px;");
+    expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumb-connector {\n  width: 18px;");
+  });
+
   it("exposes a top-level setting that refreshes every open Arbor view", () => {
     const settings = readFileSync(fileURLToPath(new URL("../src/settings.ts", import.meta.url)), "utf8");
     const main = readFileSync(fileURLToPath(new URL("../src/main.ts", import.meta.url)), "utf8");

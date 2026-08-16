@@ -106,6 +106,7 @@
 }
 
 .arbor-view.is-rtl .arbor-breadcrumbs {
+  gap: 6px;
   padding: 4px 14px 8px 168px;
   clip-path: inset(0 0 0 168px);
 }
@@ -291,6 +292,11 @@
 
 .arbor-view.is-rtl .arbor-breadcrumb-connector::before {
   background: linear-gradient(to left, color-mix(in srgb, var(--interactive-accent) 18%, transparent), color-mix(in srgb, var(--interactive-accent) 42%, transparent));
+}
+
+.arbor-view.is-rtl .arbor-breadcrumb-connector {
+  width: 18px;
+  min-width: 18px;
 }
 
 .arbor-view.is-rtl .arbor-breadcrumb-connector::after {
