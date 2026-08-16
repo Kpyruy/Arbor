@@ -66,8 +66,15 @@ describe("Arbor layout direction", () => {
       styles.indexOf(".arbor-breadcrumbs::after")
     );
 
-    expect(rtlBreadcrumbs).toContain("gap: 6px;");
-    expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumb-connector {\n  width: 18px;");
+    expect(rtlBreadcrumbs).toContain("gap: 3px;");
+    expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumb-connector {\n  width: 24px;");
+  });
+
+  it("mirrors the full LTR breadcrumb arrow in RTL instead of collapsing its line into the chevron", () => {
+    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+
+    expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumb-connector::before {\n  left: 8px;\n  right: 2px;");
+    expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumb-connector::after {\n  right: auto;\n  left: 4px;");
   });
 
   it("exposes a top-level setting that refreshes every open Arbor view", () => {

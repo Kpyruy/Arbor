@@ -278,6 +278,7 @@ export class ArborView extends FileView {
   private lastViewportScroll = { left: 0, top: 0 };
   private frameEl: HTMLElement | null = null;
   private breadcrumbsEl: HTMLElement | null = null;
+  private breadcrumbExitLayerEl: HTMLElement | null = null;
   private zoomIndicatorEl: HTMLButtonElement | null = null;
   private overviewButtonEl: HTMLButtonElement | null = null;
   private markdownButtonEl: HTMLButtonElement | null = null;
@@ -1178,6 +1179,7 @@ export class ArborView extends FileView {
       this.columnsEl &&
       this.bodyEl &&
       this.breadcrumbsEl &&
+      this.breadcrumbExitLayerEl &&
       this.bannerEl &&
       this.loadingOverlayEl
     ) {
@@ -1191,6 +1193,7 @@ export class ArborView extends FileView {
 
     this.frameEl = contentEl.createDiv({ cls: "arbor-frame" });
     this.breadcrumbsEl = this.frameEl.createDiv({ cls: "arbor-breadcrumbs" });
+    this.breadcrumbExitLayerEl = this.frameEl.createDiv({ cls: "arbor-breadcrumb-exit-layer" });
     this.zoomIndicatorEl = this.frameEl.createEl("button", {
       cls: "arbor-zoom-indicator",
       attr: {
@@ -1263,6 +1266,7 @@ export class ArborView extends FileView {
     this.contentEl.empty();
     this.frameEl = null;
     this.breadcrumbsEl = null;
+    this.breadcrumbExitLayerEl = null;
     this.zoomIndicatorEl = null;
     this.markdownButtonEl = null;
     this.overviewButtonEl = null;
@@ -1301,8 +1305,9 @@ export class ArborView extends FileView {
       return;
     }
 
-    this.breadcrumbsEl.empty();
     const path = getActivePath(this.state.metadata, this.state.selectedBlockId);
+    this.animateRemovedBreadcrumbs(path);
+    this.breadcrumbsEl.empty();
     if (path.length === 0) {
       this.breadcrumbsEl.createSpan({ cls: "arbor-breadcrumb-empty", text: this.file?.basename ?? "Arbor" });
       return;
@@ -1326,7 +1331,8 @@ export class ArborView extends FileView {
     visualPath.forEach((block, index) => {
       const button = container.createEl("button", {
         cls: block.id === this.state?.selectedBlockId ? "is-active" : "",
-        text: this.getBreadcrumbLabel(block.content)
+        text: this.getBreadcrumbLabel(block.content),
+        attr: { "data-block-id": block.id }
       });
       button.setCssProps({ "--bw-crumb-index": String(index) });
       button.addEventListener("click", () => this.selectBlock(block.id, { focus: true }));
@@ -1335,6 +1341,42 @@ export class ArborView extends FileView {
         const connector = container.createSpan({ cls: "arbor-breadcrumb-connector" });
         connector.setCssProps({ "--bw-crumb-index": String(index + 0.45) });
       }
+    });
+  }
+
+  private animateRemovedBreadcrumbs(nextPath: BranchBlock[]): void {
+    const breadcrumbsEl = this.breadcrumbsEl;
+    const exitLayerEl = this.breadcrumbExitLayerEl;
+    const frameEl = this.frameEl;
+    if (!breadcrumbsEl || !exitLayerEl || !frameEl) {
+      return;
+    }
+
+    exitLayerEl.empty();
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    const nextPathIds = new Set(nextPath.map((block) => block.id));
+    const frameRect = frameEl.getBoundingClientRect();
+    breadcrumbsEl.querySelectorAll<HTMLButtonElement>("button[data-block-id]").forEach((button) => {
+      if (nextPathIds.has(button.dataset.blockId ?? "")) {
+        return;
+      }
+
+      const buttonRect = button.getBoundingClientRect();
+      const exitButton = exitLayerEl.createEl("button", {
+        cls: "arbor-breadcrumb-exiting",
+        text: button.textContent ?? ""
+      });
+      exitButton.toggleClass("is-active", button.hasClass("is-active"));
+      exitButton.setCssProps({
+        left: `${buttonRect.left - frameRect.left}px`,
+        top: `${buttonRect.top - frameRect.top}px`,
+        width: `${buttonRect.width}px`,
+        height: `${buttonRect.height}px`
+      });
+      exitButton.addEventListener("animationend", () => exitButton.remove(), { once: true });
     });
   }
 

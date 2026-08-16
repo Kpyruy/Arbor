@@ -111,8 +111,15 @@
   -ms-overflow-style: none;
 }
 
+.arbor-breadcrumb-exit-layer {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+}
+
 .arbor-view.is-rtl .arbor-breadcrumbs {
-  gap: 6px;
+  gap: 3px;
   padding: 4px 14px 8px 180px;
   clip-path: inset(0 0 0 168px);
 }
@@ -124,7 +131,8 @@
 }
 
 .arbor-breadcrumbs button,
-.arbor-root-empty button {
+.arbor-root-empty button,
+.arbor-breadcrumb-exiting {
   flex: 0 0 auto;
   border: 1px solid color-mix(in srgb, var(--background-modifier-border) 75%, transparent);
   background: color-mix(in srgb, var(--background-secondary) 94%, transparent);
@@ -134,6 +142,14 @@
   cursor: pointer;
   white-space: nowrap;
   transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.arbor-breadcrumb-exiting {
+  position: absolute;
+  margin: 0;
+  font: inherit;
+  pointer-events: none;
+  animation: arbor-breadcrumb-exit 220ms cubic-bezier(0.22, 0.8, 0.3, 1) both;
 }
 
 .arbor-breadcrumbs button {
@@ -148,7 +164,8 @@
   max-width: 220px;
 }
 
-.arbor-breadcrumbs button.is-active {
+.arbor-breadcrumbs button.is-active,
+.arbor-breadcrumb-exiting.is-active {
   border-color: var(--interactive-accent);
   color: var(--text-normal);
   background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-secondary));
@@ -276,12 +293,14 @@
 }
 
 .arbor-view.is-rtl .arbor-breadcrumb-connector::before {
+  left: 8px;
+  right: 2px;
   background: linear-gradient(to left, color-mix(in srgb, var(--interactive-accent) 18%, transparent), color-mix(in srgb, var(--interactive-accent) 42%, transparent));
 }
 
 .arbor-view.is-rtl .arbor-breadcrumb-connector {
-  width: 18px;
-  min-width: 18px;
+  width: 24px;
+  min-width: 24px;
 }
 
 .arbor-view.is-rtl .arbor-breadcrumb-connector::after {
@@ -1655,6 +1674,24 @@
   }
 }
 
+@keyframes arbor-breadcrumb-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: none;
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(var(--arbor-breadcrumb-exit-x, 10px), -2px, 0) scale(0.94);
+    filter: saturate(0.72);
+  }
+}
+
+.arbor-view.is-rtl .arbor-breadcrumb-exiting {
+  --arbor-breadcrumb-exit-x: -10px;
+}
+
 @keyframes arbor-card-focus-enter {
   from {
     transform: translate3d(0, 10px, 0) scale(0.972);
@@ -1674,6 +1711,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .arbor-view .arbor-breadcrumbs button,
+  .arbor-view .arbor-breadcrumb-exiting,
   .arbor-view .arbor-breadcrumb-connector,
   .arbor-view .arbor-zoom-indicator,
   .arbor-view .arbor-card,

@@ -80,7 +80,7 @@ describe("default presentation mode", () => {
     const styles = readProjectFile("styles.css");
     const breadcrumbButton = styles.slice(
       styles.indexOf(".arbor-breadcrumbs button,"),
-      styles.indexOf(".arbor-breadcrumbs button {")
+      styles.indexOf(".arbor-breadcrumb-exiting {")
     );
     const activeBreadcrumb = styles.slice(
       styles.indexOf(".arbor-breadcrumbs button.is-active"),
@@ -128,5 +128,16 @@ describe("default presentation mode", () => {
     expect(styles).toContain(".arbor-card.is-selection-entering");
     expect(styles).toContain("animation: arbor-card-focus-enter");
     expect(styles).toContain("@keyframes arbor-card-focus-enter");
+  });
+
+  it("lets removed breadcrumbs exit instead of disappearing during parent navigation", () => {
+    const view = readProjectFile("src/view/ArborView.ts");
+    const styles = readProjectFile("styles.css");
+
+    expect(view).toContain("this.animateRemovedBreadcrumbs(path)");
+    expect(view).toContain('cls: "arbor-breadcrumb-exiting"');
+    expect(styles).toContain(".arbor-breadcrumb-exit-layer");
+    expect(styles).toContain(".arbor-breadcrumb-exiting");
+    expect(styles).toContain("@keyframes arbor-breadcrumb-exit");
   });
 });
