@@ -6,6 +6,7 @@ import { ArborFileExplorerBadge } from "./fileExplorerBadge";
 import { canExportCleanCopy } from "./exportCommand";
 import { FILE_EXPLORER_CREATION_SECTION, shouldShowNewArborMenuItem } from "./fileExplorerMenu";
 import { captureOriginalSetViewState, invokeOriginalSetViewState } from "./leafOpenInterception";
+import { resolveInitialLayoutDirection } from "./layoutDirection";
 import { buildAvailableMarkdownPath } from "./markdownPaths";
 import { createEmptyTree } from "./model/tree";
 import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
@@ -108,6 +109,11 @@ export default class ArborPlugin extends Plugin {
     this.isFreshPluginInstall = raw === null || raw === undefined;
     const payload = this.normalizePluginData(raw);
     this.settings = { ...DEFAULT_SETTINGS, ...payload.settings };
+    this.settings.layoutDirection = resolveInitialLayoutDirection({
+      hasStoredPluginData: !this.isFreshPluginInstall,
+      savedDirection: this.getStoredLayoutDirection(raw),
+      documentDirection: document.documentElement.dir || window.getComputedStyle(document.body).direction
+    });
     this.lastSeenReleaseVersion = payload.lastSeenReleaseVersion;
     this.managedNotePaths.clear();
     payload.managedPaths.forEach((path) => this.managedNotePaths.add(path));
@@ -767,6 +773,19 @@ export default class ArborPlugin extends Plugin {
       managedPaths: [],
       lastSeenReleaseVersion: undefined
     };
+  }
+
+  private getStoredLayoutDirection(raw: unknown): unknown {
+    if (!raw || typeof raw !== "object") {
+      return undefined;
+    }
+
+    const candidate = raw as Record<string, unknown>;
+    if (candidate.settings && typeof candidate.settings === "object") {
+      return (candidate.settings as Record<string, unknown>).layoutDirection;
+    }
+
+    return candidate.layoutDirection;
   }
 
   private async savePluginData(): Promise<void> {

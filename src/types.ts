@@ -62,6 +62,7 @@ export interface BranchHistoryEntry {
 }
 
 export type ArborPresentationMode = "editor" | "overview";
+export type ArborLayoutDirection = "ltr" | "rtl";
 
 export interface ArborOverviewNode {
   id: BranchBlockId;
@@ -93,6 +94,7 @@ export type SplitPaneDirection = "vertical" | "horizontal";
 export type BreadcrumbLabelFallbackMode = "firstLine" | "snippet" | "none";
 
 export interface ArborSettings {
+  layoutDirection: ArborLayoutDirection;
   defaultPresentationMode: ArborPresentationMode;
   splitDirection: SplitPaneDirection;
   cardWidth: number;

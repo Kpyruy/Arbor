@@ -15,6 +15,7 @@ interface ArborSettingDefinition {
 }
 
 export const DEFAULT_SETTINGS: ArborSettings = {
+  layoutDirection: "ltr",
   defaultPresentationMode: "editor",
   splitDirection: "vertical",
   cardWidth: 300,
@@ -41,6 +42,16 @@ export class ArborSettingTab extends PluginSettingTab {
 
   getSettingDefinitions(): ArborSettingDefinition[] {
     return [
+      {
+        name: "Layout direction",
+        desc: "Choose which side the root starts on. Text and Markdown stay unchanged.",
+        control: {
+          type: "dropdown",
+          key: "layoutDirection",
+          options: { ltr: "Left to right", rtl: "Right to left" },
+          defaultValue: DEFAULT_SETTINGS.layoutDirection
+        }
+      },
       {
         name: "Default opening mode",
         desc: "Choose whether Arbor notes open in the branch editor or the full tree overview.",
@@ -116,7 +127,7 @@ export class ArborSettingTab extends PluginSettingTab {
         : value;
     await this.plugin.saveSettings();
 
-    if (["cardWidth", "cardMinHeight", "horizontalSpacing", "verticalSpacing", "zoomLevel", "previewSnippetLength", "dragAndDrop", "showBreadcrumb", "showBreadcrumbFlow", "breadcrumbLabelPreferredPrefix", "breadcrumbLabelFallback", "liveLinearPreview"].includes(key)) {
+    if (["layoutDirection", "cardWidth", "cardMinHeight", "horizontalSpacing", "verticalSpacing", "zoomLevel", "previewSnippetLength", "dragAndDrop", "showBreadcrumb", "showBreadcrumbFlow", "breadcrumbLabelPreferredPrefix", "breadcrumbLabelFallback", "liveLinearPreview"].includes(key)) {
       this.plugin.refreshAllBranchViews();
     }
   }
@@ -124,6 +135,21 @@ export class ArborSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+
+    new Setting(containerEl)
+      .setName("Layout direction")
+      .setDesc("Choose which side the root starts on. Text and Markdown stay unchanged.")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("ltr", "Left to right")
+          .addOption("rtl", "Right to left")
+          .setValue(this.plugin.settings.layoutDirection)
+          .onChange(async (value) => {
+            this.plugin.settings.layoutDirection = value as ArborSettings["layoutDirection"];
+            await this.plugin.saveSettings();
+            this.plugin.refreshAllBranchViews();
+          })
+      );
 
     new Setting(containerEl)
       .setName("Default opening mode")

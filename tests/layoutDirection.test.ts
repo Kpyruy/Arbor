@@ -1,0 +1,45 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import {
+  getChildArrowKey,
+  getHorizontalWheelDelta,
+  getParentArrowKey,
+  getVisualColumnOrder,
+  resolveInitialLayoutDirection
+} from "../src/layoutDirection";
+
+describe("Arbor layout direction", () => {
+  it("uses Obsidian UI direction only for a genuinely fresh install", () => {
+    expect(resolveInitialLayoutDirection({ hasStoredPluginData: false, documentDirection: "rtl" })).toBe("rtl");
+    expect(resolveInitialLayoutDirection({ hasStoredPluginData: false, documentDirection: "ltr" })).toBe("ltr");
+    expect(resolveInitialLayoutDirection({ hasStoredPluginData: true, documentDirection: "rtl" })).toBe("ltr");
+    expect(resolveInitialLayoutDirection({ hasStoredPluginData: true, savedDirection: "rtl", documentDirection: "ltr" })).toBe("rtl");
+  });
+
+  it("maps physical arrows to the visual parent and child direction", () => {
+    expect(getParentArrowKey("ltr")).toBe("ArrowLeft");
+    expect(getChildArrowKey("ltr")).toBe("ArrowRight");
+    expect(getParentArrowKey("rtl")).toBe("ArrowRight");
+    expect(getChildArrowKey("rtl")).toBe("ArrowLeft");
+  });
+
+  it("reverses only visual placement and horizontal wheel direction in RTL", () => {
+    const semanticColumns = [0, 1, 2];
+    expect(getVisualColumnOrder(semanticColumns, "ltr")).toEqual([0, 1, 2]);
+    expect(getVisualColumnOrder(semanticColumns, "rtl")).toEqual([2, 1, 0]);
+    expect(semanticColumns).toEqual([0, 1, 2]);
+    expect(getHorizontalWheelDelta(24, "ltr")).toBe(24);
+    expect(getHorizontalWheelDelta(24, "rtl")).toBe(-24);
+  });
+
+  it("exposes a top-level setting that refreshes every open Arbor view", () => {
+    const settings = readFileSync(fileURLToPath(new URL("../src/settings.ts", import.meta.url)), "utf8");
+    const main = readFileSync(fileURLToPath(new URL("../src/main.ts", import.meta.url)), "utf8");
+
+    expect(settings).toContain('layoutDirection: "ltr"');
+    expect(settings.indexOf('name: "Layout direction"')).toBeLessThan(settings.indexOf('name: "Default opening mode"'));
+    expect(settings).toContain('"layoutDirection"');
+    expect(main).toContain("resolveInitialLayoutDirection");
+  });
+});
