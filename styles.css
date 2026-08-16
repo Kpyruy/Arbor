@@ -93,7 +93,6 @@
 }
 
 .arbor-view.is-rtl .arbor-breadcrumbs {
-  flex-direction: row-reverse;
   padding: 4px 14px 8px 132px;
 }
 
@@ -250,18 +249,6 @@
   border-top: 1px solid color-mix(in srgb, var(--interactive-accent) 54%, transparent);
   border-right: 1px solid color-mix(in srgb, var(--interactive-accent) 54%, transparent);
   transform: translateY(-50%) rotate(45deg);
-}
-
-.arbor-view.is-rtl .arbor-breadcrumb-connector::before {
-  left: 8px;
-  right: 2px;
-  background: linear-gradient(to left, color-mix(in srgb, var(--interactive-accent) 18%, transparent), color-mix(in srgb, var(--interactive-accent) 42%, transparent));
-}
-
-.arbor-view.is-rtl .arbor-breadcrumb-connector::after {
-  left: 4px;
-  right: auto;
-  transform: translateY(-50%) rotate(-135deg);
 }
 
 .arbor-banner {

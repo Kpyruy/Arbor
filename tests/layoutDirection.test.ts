@@ -39,6 +39,17 @@ describe("Arbor layout direction", () => {
     expect(getBreadcrumbScrollInsets("rtl")).toEqual({ left: 132, right: 28 });
   });
 
+  it("keeps RTL breadcrumbs in a scrollable left-to-right track", () => {
+    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const rtlBreadcrumbs = styles.slice(
+      styles.indexOf(".arbor-view.is-rtl .arbor-breadcrumbs"),
+      styles.indexOf(".arbor-breadcrumbs button,")
+    );
+
+    expect(rtlBreadcrumbs).not.toContain("flex-direction: row-reverse;");
+    expect(rtlBreadcrumbs).toContain("padding: 4px 14px 8px 132px;");
+  });
+
   it("exposes a top-level setting that refreshes every open Arbor view", () => {
     const settings = readFileSync(fileURLToPath(new URL("../src/settings.ts", import.meta.url)), "utf8");
     const main = readFileSync(fileURLToPath(new URL("../src/main.ts", import.meta.url)), "utf8");
