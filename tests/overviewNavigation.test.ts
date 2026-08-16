@@ -29,6 +29,11 @@ describe("overview arrow navigation", () => {
     expect(resolveOverviewArrowTarget(tree, "first", "ArrowUp")).toBeNull();
   });
 
+  it("mirrors parent and child keys in RTL", () => {
+    expect(resolveOverviewArrowTarget(tree, "first", "ArrowRight", "rtl")).toBe("root");
+    expect(resolveOverviewArrowTarget(tree, "first", "ArrowLeft", "rtl")).toBe("leaf");
+  });
+
   it("reuses numeric child navigation inside the overview keyboard handler", () => {
     const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
     const handlerStart = source.indexOf("private handleOverviewKeyDown");

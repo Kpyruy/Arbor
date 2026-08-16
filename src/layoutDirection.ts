@@ -30,6 +30,14 @@ export function getChildArrowKey(direction: ArborLayoutDirection): "ArrowLeft" |
   return direction === "rtl" ? "ArrowLeft" : "ArrowRight";
 }
 
+export function getChildArrowIcon(direction: ArborLayoutDirection): "arrow-left" | "arrow-right" {
+  return direction === "rtl" ? "arrow-left" : "arrow-right";
+}
+
+export function getParentArrowIcon(direction: ArborLayoutDirection): "arrow-left" | "arrow-right" {
+  return direction === "rtl" ? "arrow-right" : "arrow-left";
+}
+
 export function getVisualColumnOrder<T>(columns: readonly T[], direction: ArborLayoutDirection): T[] {
   return direction === "rtl" ? [...columns].reverse() : [...columns];
 }

@@ -64,7 +64,7 @@ import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
 import { resolveNumericChildTarget } from "../numericNavigation";
-import { getChildArrowKey, getHorizontalWheelDelta, getParentArrowKey, getVisualColumnOrder } from "../layoutDirection";
+import { getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey, getVisualColumnOrder } from "../layoutDirection";
 import { buildOverviewLayout, buildOverviewLinkPath } from "../model/overviewLayout";
 import { resolveOverviewArrowTarget } from "../overviewNavigation";
 import {
@@ -309,6 +309,7 @@ export class ArborView extends FileView {
   private viewContext: BranchViewContext | null = null;
   private loadingState: LoadingOverlayState | null = null;
   private presentationMode: ArborPresentationMode = "editor";
+  private renderedLayoutDirection: ArborSettings["layoutDirection"] = "ltr";
   private shouldCenterOverviewOnNextRender = false;
   private shouldRestoreOverviewKeyboardFocusAfterMutation = false;
   private overviewRenderVersion = 0;
@@ -456,7 +457,11 @@ export class ArborView extends FileView {
       return;
     }
 
+    const directionChanged = this.renderedLayoutDirection !== this.plugin.settings.layoutDirection;
     this.state = prepared;
+    if (directionChanged && this.presentationMode === "overview") {
+      this.shouldCenterOverviewOnNextRender = true;
+    }
     this.pendingFocusBlockId = this.state.selectedBlockId;
     this.pendingScrollBlockId = this.state.selectedBlockId;
     this.render();
@@ -1663,7 +1668,7 @@ export class ArborView extends FileView {
           this.selectBlock(column.parentId);
           const menu = new Menu();
           menu.addItem((item) =>
-            item.setTitle("Create child block").setIcon("arrow-right").onClick(() => void this.createChild())
+            item.setTitle("Create child block").setIcon(getChildArrowIcon(this.plugin.settings.layoutDirection)).onClick(() => void this.createChild())
           );
           menu.showAtMouseEvent(event);
         });
@@ -1961,7 +1966,8 @@ export class ArborView extends FileView {
     const zoom = this.plugin.settings.zoomLevel;
 
     const initialLayout = buildOverviewLayout(this.state.metadata, {
-      cardWidth: this.plugin.settings.cardWidth
+      cardWidth: this.plugin.settings.cardWidth,
+      direction: this.plugin.settings.layoutDirection
     });
     const selectedBlockId = this.state.selectedBlockId;
     const activePathIds = new Set(getActivePath(this.state.metadata, selectedBlockId).map((block) => block.id));
@@ -2050,7 +2056,8 @@ export class ArborView extends FileView {
 
     const layout = buildOverviewLayout(this.state.metadata, {
       cardWidth: this.plugin.settings.cardWidth,
-      cardHeights: measuredHeights
+      cardHeights: measuredHeights,
+      direction: this.plugin.settings.layoutDirection
     });
     this.applyOverviewLayout(scene, surface, cardsById, layout, zoom);
     previousSurface.remove();
@@ -2114,7 +2121,7 @@ export class ArborView extends FileView {
       }
       svg.createSvg("path", {
         cls: "arbor-overview-link",
-        attr: { d: buildOverviewLinkPath(parent, child) }
+        attr: { d: buildOverviewLinkPath(parent, child, this.plugin.settings.layoutDirection) }
       });
     });
   }
@@ -2201,7 +2208,7 @@ export class ArborView extends FileView {
     }
 
     event.preventDefault();
-    const targetId = resolveOverviewArrowTarget(this.state.metadata, this.state.selectedBlockId, event.key);
+    const targetId = resolveOverviewArrowTarget(this.state.metadata, this.state.selectedBlockId, event.key, this.plugin.settings.layoutDirection);
     if (!targetId) {
       return;
     }
@@ -3217,7 +3224,7 @@ export class ArborView extends FileView {
           this.state!.selectedBlockId = column.parentId;
           const menu = new Menu();
           menu.addItem((item) =>
-            item.setTitle("Create child block").setIcon("arrow-right").onClick(() => void this.createChild())
+            item.setTitle("Create child block").setIcon(getChildArrowIcon(this.plugin.settings.layoutDirection)).onClick(() => void this.createChild())
           );
           menu.showAtMouseEvent(event);
         });
@@ -3789,6 +3796,7 @@ export class ArborView extends FileView {
   private applyViewClasses(root: HTMLElement): void {
     root.classList.add("is-context-dim-mode");
     root.classList.toggle("is-rtl", this.plugin.settings.layoutDirection === "rtl");
+    this.renderedLayoutDirection = this.plugin.settings.layoutDirection;
   }
 
   private buildBlockMenu(blockId: BranchBlockId): Menu {
@@ -3799,12 +3807,12 @@ export class ArborView extends FileView {
 
     menu
       .addItem((item) =>
-        item.setTitle("Continue to the right").setIcon("arrow-right").onClick(() => void this.runWithSelectedBlock(blockId, () => this.createChild()))
+        item.setTitle("Create child").setIcon(getChildArrowIcon(this.plugin.settings.layoutDirection)).onClick(() => void this.runWithSelectedBlock(blockId, () => this.createChild()))
       );
 
     if (canCreateLeft) {
       menu.addItem((item) =>
-        item.setTitle("Create block to the left").setIcon("arrow-left").onClick(() => void this.runWithSelectedBlock(blockId, () => this.createParentLevelBlock()))
+        item.setTitle("Create at parent level").setIcon(getParentArrowIcon(this.plugin.settings.layoutDirection)).onClick(() => void this.runWithSelectedBlock(blockId, () => this.createParentLevelBlock()))
       );
     }
 

@@ -14,6 +14,7 @@ interface OverviewLayoutOptions {
   rowGap: number;
   labelLength: number;
   snippetLength: number;
+  direction: "ltr" | "rtl";
 }
 
 const DEFAULT_OPTIONS: OverviewLayoutOptions = {
@@ -23,7 +24,8 @@ const DEFAULT_OPTIONS: OverviewLayoutOptions = {
   columnGap: 104,
   rowGap: 30,
   labelLength: 46,
-  snippetLength: 92
+  snippetLength: 92,
+  direction: "ltr"
 };
 
 export function buildOverviewLayout(
@@ -95,22 +97,29 @@ export function buildOverviewLayout(
 
   visit(null, 0);
 
+  const width = Math.max(config.cardWidth, ...nodes.map((node) => node.x + node.width));
+  if (config.direction === "rtl") {
+    nodes.forEach((node) => {
+      node.x = width - node.x - node.width;
+    });
+  }
+
   return {
     nodes,
     links,
-    width: Math.max(config.cardWidth, ...nodes.map((node) => node.x + node.width)),
+    width,
     height: Math.max(config.cardHeight, ...nodes.map((node) => node.y + node.height))
   };
 }
 
-export function buildOverviewLinkPath(parent: ArborOverviewNode, child: ArborOverviewNode): string {
-  const startX = parent.x + parent.width;
+export function buildOverviewLinkPath(parent: ArborOverviewNode, child: ArborOverviewNode, direction: "ltr" | "rtl" = "ltr"): string {
+  const startX = direction === "rtl" ? parent.x : parent.x + parent.width;
   const startY = parent.y + parent.height / 2;
-  const endX = child.x;
+  const endX = direction === "rtl" ? child.x + child.width : child.x;
   const endY = child.y + child.height / 2;
-  const controlOffset = Math.max(36, (endX - startX) * 0.5);
-  const firstControlX = startX + controlOffset;
-  const secondControlX = endX - controlOffset;
+  const controlOffset = Math.max(36, Math.abs(endX - startX) * 0.5);
+  const firstControlX = direction === "rtl" ? startX - controlOffset : startX + controlOffset;
+  const secondControlX = direction === "rtl" ? endX + controlOffset : endX - controlOffset;
 
   return `M ${startX} ${startY} C ${firstControlX} ${startY}, ${secondControlX} ${endY}, ${endX} ${endY}`;
 }

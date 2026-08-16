@@ -83,4 +83,17 @@ describe("overview layout", () => {
     expect(buildOverviewLinkPath(parent, child)).toContain(`M ${parent.x + parent.width}`);
     expect(buildOverviewLinkPath(parent, child)).toContain(`${child.x} ${child.y + child.height / 2}`);
   });
+
+  it("mirrors node positions and connector endpoints for RTL without changing tree order", () => {
+    const ltr = buildOverviewLayout(tree);
+    const rtl = buildOverviewLayout(tree, { direction: "rtl" });
+    const ltrRoot = ltr.nodes.find((node) => node.id === "root")!;
+    const rtlRoot = rtl.nodes.find((node) => node.id === "root")!;
+    const rtlChild = rtl.nodes.find((node) => node.id === "a")!;
+
+    expect(rtl.nodes.map((node) => node.id)).toEqual(ltr.nodes.map((node) => node.id));
+    expect(rtlRoot.x).toBe(rtl.width - ltrRoot.x - ltrRoot.width);
+    expect(buildOverviewLinkPath(rtlRoot, rtlChild, "rtl")).toContain(`M ${rtlRoot.x}`);
+    expect(buildOverviewLinkPath(rtlRoot, rtlChild, "rtl")).toContain(`${rtlChild.x + rtlChild.width} ${rtlChild.y + rtlChild.height / 2}`);
+  });
 });
