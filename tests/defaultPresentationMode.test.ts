@@ -118,4 +118,15 @@ describe("default presentation mode", () => {
       view.indexOf("await this.syncColumns(columns, this.viewContext);")
     );
   });
+
+  it("gives the newly selected card an explicit focus-entry animation", () => {
+    const view = readProjectFile("src/view/ArborView.ts");
+    const styles = readProjectFile("styles.css");
+
+    expect(view).toContain("this.animateSelectedCard(pendingScrollBlockId)");
+    expect(view).toContain('card.addClass("is-selection-entering")');
+    expect(styles).toContain(".arbor-card.is-selection-entering");
+    expect(styles).toContain("animation: arbor-card-focus-enter");
+    expect(styles).toContain("@keyframes arbor-card-focus-enter");
+  });
 });

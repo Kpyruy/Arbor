@@ -2911,6 +2911,7 @@ export class ArborView extends FileView {
       if (pendingScrollBlockId) {
         const scrollCard = columnsEl.querySelector<HTMLElement>(`.arbor-card[data-block-id="${pendingScrollBlockId}"]`) ?? activeCard;
         if (scrollCard) {
+          this.animateSelectedCard(pendingScrollBlockId);
           this.scrollCardIntoHorizontalView(scrollCard, columnsViewportEl, preservedSceneWidth, snapViewport);
         }
       } else {
@@ -4250,6 +4251,24 @@ export class ArborView extends FileView {
     if (releasePreservedWidth) {
       this.releasePreservedSceneWidth();
     }
+  }
+
+  private animateSelectedCard(blockId: BranchBlockId): void {
+    this.contentEl.querySelectorAll<HTMLElement>(".arbor-card.is-selection-entering").forEach((card) => {
+      card.removeClass("is-selection-entering");
+    });
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    const card = this.columnsEl?.querySelector<HTMLElement>(`.arbor-card[data-block-id="${blockId}"]`);
+    if (!card) {
+      return;
+    }
+
+    card.addClass("is-selection-entering");
+    card.addEventListener("animationend", () => card.removeClass("is-selection-entering"), { once: true });
   }
 
   private clearBreadcrumbScrollFrame(): void {
