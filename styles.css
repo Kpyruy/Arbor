@@ -92,6 +92,11 @@
   -ms-overflow-style: none;
 }
 
+.arbor-view.is-rtl .arbor-breadcrumbs {
+  flex-direction: row-reverse;
+  padding: 4px 14px 8px 132px;
+}
+
 .arbor-breadcrumbs button,
 .arbor-root-empty button {
   flex: 0 0 auto;
@@ -230,6 +235,18 @@
   border-top: 1px solid color-mix(in srgb, var(--interactive-accent) 54%, transparent);
   border-right: 1px solid color-mix(in srgb, var(--interactive-accent) 54%, transparent);
   transform: translateY(-50%) rotate(45deg);
+}
+
+.arbor-view.is-rtl .arbor-breadcrumb-connector::before {
+  left: 8px;
+  right: 2px;
+  background: linear-gradient(to left, color-mix(in srgb, var(--interactive-accent) 18%, transparent), color-mix(in srgb, var(--interactive-accent) 42%, transparent));
+}
+
+.arbor-view.is-rtl .arbor-breadcrumb-connector::after {
+  left: 4px;
+  right: auto;
+  transform: translateY(-50%) rotate(-135deg);
 }
 
 .arbor-banner {
@@ -1163,6 +1180,13 @@
   min-height: 0;
 }
 
+.arbor-view.is-rtl .arbor-preview-pane {
+  border-left: 0;
+  border-right: 1px solid color-mix(in srgb, var(--background-modifier-border) 68%, transparent);
+  padding-left: 0;
+  padding-right: 16px;
+}
+
 .arbor-preview-title {
   font-size: 0.82rem;
   text-transform: uppercase;
@@ -1244,6 +1268,17 @@
   cursor: pointer;
   text-align: left;
   transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease, opacity 140ms ease;
+}
+
+.arbor-view.is-rtl .arbor-preview-minimap-node {
+  padding: 6px calc(10px + var(--bw-preview-depth, 0) * 10px) 6px 10px;
+  text-align: right;
+}
+
+.arbor-view.is-rtl .arbor-preview-minimap-node.is-collapsed::before {
+  margin-left: 6px;
+  margin-right: 0;
+  transform: rotate(180deg);
 }
 
 .arbor-preview-minimap-node.is-on-path,

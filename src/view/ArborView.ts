@@ -64,6 +64,7 @@ import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
 import { resolveNumericChildTarget } from "../numericNavigation";
+import { getChildArrowKey, getHorizontalWheelDelta, getParentArrowKey, getVisualColumnOrder } from "../layoutDirection";
 import { buildOverviewLayout, buildOverviewLinkPath } from "../model/overviewLayout";
 import { resolveOverviewArrowTarget } from "../overviewNavigation";
 import {
@@ -1577,11 +1578,13 @@ export class ArborView extends FileView {
       }
     }
 
-    for (let index = 0; index < columns.length; index += 1) {
-      const column = columns[index];
+    const visualColumns = getVisualColumnOrder(columns, this.plugin.settings.layoutDirection);
+    for (let index = 0; index < visualColumns.length; index += 1) {
+      const column = visualColumns[index];
       const columnEl = this.ensureColumnElement(column.key);
       columnEl.dataset.columnKey = column.key;
       columnEl.dataset.parentId = column.parentId ?? "";
+      columnEl.dataset.columnDepth = String(columns.indexOf(column));
 
       const siblingAtIndex = this.columnsEl.children[index] ?? null;
       if (siblingAtIndex !== columnEl) {
@@ -2989,13 +2992,13 @@ export class ArborView extends FileView {
       return;
     }
 
-    if (event.key === "ArrowLeft") {
+    if (event.key === getParentArrowKey(this.plugin.settings.layoutDirection)) {
       event.preventDefault();
       this.selectParentBlock();
       return;
     }
 
-    if (event.key === "ArrowRight") {
+    if (event.key === getChildArrowKey(this.plugin.settings.layoutDirection)) {
       event.preventDefault();
       this.selectPreferredChildBlock();
       return;
@@ -3064,13 +3067,13 @@ export class ArborView extends FileView {
       return;
     }
 
-    if (event.key === "ArrowLeft") {
+    if (event.key === getParentArrowKey(this.plugin.settings.layoutDirection)) {
       event.preventDefault();
       this.selectParentBlock();
       return;
     }
 
-    if (event.key === "ArrowRight") {
+    if (event.key === getChildArrowKey(this.plugin.settings.layoutDirection)) {
       event.preventDefault();
       this.selectPreferredChildBlock();
       return;
@@ -3310,13 +3313,13 @@ export class ArborView extends FileView {
         return;
       }
 
-      if (event.key === "ArrowLeft") {
+      if (event.key === getParentArrowKey(this.plugin.settings.layoutDirection)) {
         event.preventDefault();
         this.selectParentBlock();
         return;
       }
 
-      if (event.key === "ArrowRight") {
+      if (event.key === getChildArrowKey(this.plugin.settings.layoutDirection)) {
         event.preventDefault();
         this.selectPreferredChildBlock();
         return;
@@ -3785,6 +3788,7 @@ export class ArborView extends FileView {
 
   private applyViewClasses(root: HTMLElement): void {
     root.classList.add("is-context-dim-mode");
+    root.classList.toggle("is-rtl", this.plugin.settings.layoutDirection === "rtl");
   }
 
   private buildBlockMenu(blockId: BranchBlockId): Menu {
@@ -3970,7 +3974,7 @@ export class ArborView extends FileView {
 
     event.preventDefault();
     viewport.scrollBy({
-      left: event.deltaY,
+      left: getHorizontalWheelDelta(event.deltaY, this.plugin.settings.layoutDirection),
       behavior: "auto"
     });
   }
@@ -4089,7 +4093,7 @@ export class ArborView extends FileView {
       return false;
     }
 
-    if (event.key === "ArrowRight") {
+    if (event.key === getChildArrowKey(this.plugin.settings.layoutDirection)) {
       event.preventDefault();
       void this.createChild();
       return true;
@@ -4107,7 +4111,7 @@ export class ArborView extends FileView {
       return true;
     }
 
-    if (event.key === "ArrowLeft") {
+    if (event.key === getParentArrowKey(this.plugin.settings.layoutDirection)) {
       const parent = getParentBlock(this.state.metadata, this.state.selectedBlockId);
       if (!parent) {
         return false;
@@ -4318,7 +4322,7 @@ export class ArborView extends FileView {
     const rootAnchorCenterY = viewportRect.top - columnsRootRect.top + viewport.clientHeight * 0.44;
     const resolvedCenterYByColumn = new Map<number, number>();
 
-    columns.forEach((columnEl, index) => {
+    columns.forEach((columnEl) => {
       const listEl = columnEl.querySelector<HTMLElement>(".arbor-card-list");
       if (!listEl) {
         return;
@@ -4328,7 +4332,8 @@ export class ArborView extends FileView {
       const preferredFallbackCard =
         fallbackCards[Math.floor((Math.max(fallbackCards.length, 1) - 1) / 2)] ?? null;
 
-      const pathBlock = path[index];
+      const depth = Number(columnEl.dataset.columnDepth);
+      const pathBlock = path[depth];
       const alignmentTarget =
         (pathBlock
           ? columnEl.querySelector<HTMLElement>(`.arbor-card[data-block-id="${pathBlock.id}"]`)
@@ -4343,9 +4348,9 @@ export class ArborView extends FileView {
       const naturalCenterY =
         this.getElementOffsetTopWithin(alignmentTarget, columnsRoot) +
         alignmentTarget.offsetHeight / 2;
-      const preferredCenterY = index === 0
+      const preferredCenterY = depth === 0
         ? rootAnchorCenterY
-        : (resolvedCenterYByColumn.get(index - 1) ?? naturalCenterY);
+        : (resolvedCenterYByColumn.get(depth - 1) ?? naturalCenterY);
       const anchorCenterY = alignmentTarget.hasClass("is-active")
         ? clampCardCenter(
             preferredCenterY,
@@ -4368,7 +4373,7 @@ export class ArborView extends FileView {
         });
       }
 
-      resolvedCenterYByColumn.set(index, naturalCenterY + shift);
+      resolvedCenterYByColumn.set(depth, naturalCenterY + shift);
     });
   }
 

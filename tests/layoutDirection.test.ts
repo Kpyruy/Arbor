@@ -42,4 +42,17 @@ describe("Arbor layout direction", () => {
     expect(settings).toContain('"layoutDirection"');
     expect(main).toContain("resolveInitialLayoutDirection");
   });
+
+  it("renders RTL as a visual mirror while keeping semantic depth for alignment", () => {
+    const view = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+
+    expect(view).toContain("getVisualColumnOrder(columns, this.plugin.settings.layoutDirection)");
+    expect(view).toContain("columnEl.dataset.columnDepth");
+    expect(view).toContain("getParentArrowKey(this.plugin.settings.layoutDirection)");
+    expect(view).toContain("getChildArrowKey(this.plugin.settings.layoutDirection)");
+    expect(view).toContain("getHorizontalWheelDelta(event.deltaY, this.plugin.settings.layoutDirection)");
+    expect(view).toContain('root.classList.toggle("is-rtl", this.plugin.settings.layoutDirection === "rtl")');
+    expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumbs");
+  });
 });
