@@ -63,6 +63,9 @@ export class ArborFileExplorerBadge {
     this.workspaceEventRefs.forEach((eventRef) => this.app.workspace.offref(eventRef));
     this.observedDocuments.forEach((document) => {
       document.querySelectorAll(".arbor-file-badge").forEach((badge) => badge.remove());
+      document.querySelectorAll<HTMLElement>(".nav-file-title.has-arbor-file-badge").forEach((title) => {
+        title.removeClass("has-arbor-file-badge");
+      });
       document.querySelectorAll<HTMLElement>(".nav-file-title-content.has-arbor-file-badge").forEach((content) => {
         content.removeClass("has-arbor-file-badge");
       });
@@ -78,15 +81,8 @@ export class ArborFileExplorerBadge {
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         const target = mutation.target as HTMLElement;
-        if (mutation.type === "attributes" && target.matches?.(".nav-file-title")) {
+        if (mutation.type === "attributes" && mutation.attributeName === "data-path" && target.matches?.(".nav-file-title")) {
           this.removeBadge(target);
-          return;
-        }
-        if (mutation.type === "attributes" && target.matches?.(".nav-file-title-content.is-being-renamed")) {
-          const title = target.closest<HTMLElement>(".nav-file-title");
-          if (title) {
-            this.removeBadge(title);
-          }
         }
       });
       this.scheduleRefresh();
@@ -121,34 +117,24 @@ export class ArborFileExplorerBadge {
       return;
     }
 
-    const content = title.querySelector<HTMLElement>(".nav-file-title-content");
-    if (!content) {
-      return;
-    }
-    if (this.isInlineRenameActive(title, content)) {
-      this.removeBadge(title);
-      return;
-    }
     if (!isArborManagedText(text)) {
       this.removeBadge(title);
       return;
     }
 
-    content.addClass("has-arbor-file-badge");
-    if (!content.querySelector(".arbor-file-badge")) {
-      content.createSpan({ cls: "arbor-file-badge", text: "ARBOR" });
+    const content = title.querySelector<HTMLElement>(".nav-file-title-content");
+    const inner = content?.parentElement;
+    if (!inner) {
+      return;
     }
-  }
-
-  private isInlineRenameActive(title: HTMLElement, content: HTMLElement): boolean {
-    return title.hasClass("is-being-renamed") ||
-      content.hasClass("is-being-renamed") ||
-      content.matches("[contenteditable='true']") ||
-      Boolean(content.querySelector("input, textarea, [contenteditable='true']"));
+    if (!inner.querySelector(".arbor-file-badge")) {
+      inner.createSpan({ cls: "nav-file-tag arbor-file-badge", text: "ARBOR" });
+    }
   }
 
   private removeBadge(title: HTMLElement): void {
     title.querySelectorAll(".arbor-file-badge").forEach((badge) => badge.remove());
+    title.removeClass("has-arbor-file-badge");
     title.querySelector<HTMLElement>(".nav-file-title-content")?.removeClass("has-arbor-file-badge");
   }
 }
