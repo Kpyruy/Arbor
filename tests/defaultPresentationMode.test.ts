@@ -128,6 +128,22 @@ describe("default presentation mode", () => {
     expect(styles).toContain(".arbor-card.is-selection-entering");
     expect(styles).toContain("animation: arbor-card-focus-enter");
     expect(styles).toContain("@keyframes arbor-card-focus-enter");
+    const focusAnimation = styles.slice(
+      styles.indexOf("@keyframes arbor-card-focus-enter"),
+      styles.indexOf("@media (prefers-reduced-motion: reduce)")
+    );
+    expect(focusAnimation).not.toContain("filter:");
+  });
+
+  it("keeps an already visible child card still during arrow navigation", () => {
+    const view = readProjectFile("src/view/ArborView.ts");
+    const scrollIntoView = view.slice(
+      view.indexOf("  private scrollCardIntoHorizontalView("),
+      view.indexOf("  private alignColumnsToActivePath()")
+    );
+
+    expect(scrollIntoView).toContain("if (!shouldScrollLeft && !shouldScrollRight)");
+    expect(scrollIntoView).not.toContain("shouldCenterSelectedBlock");
   });
 
   it("lets removed breadcrumbs exit instead of disappearing during parent navigation", () => {
@@ -139,5 +155,23 @@ describe("default presentation mode", () => {
     expect(styles).toContain(".arbor-breadcrumb-exit-layer");
     expect(styles).toContain(".arbor-breadcrumb-exiting");
     expect(styles).toContain("@keyframes arbor-breadcrumb-exit");
+  });
+
+  it("keeps the selected breadcrumb on its exit animation instead of replaying its enter animation", () => {
+    const styles = readProjectFile("styles.css");
+
+    expect(styles).toContain(".arbor-breadcrumb-exiting.is-active {\n  animation: arbor-breadcrumb-exit");
+  });
+
+  it("keeps rendered card text on a 2D layout layer for sharper type", () => {
+    const styles = readProjectFile("styles.css");
+    const cardList = styles.slice(
+      styles.indexOf(".arbor-card-list {"),
+      styles.indexOf(".arbor-card-list.is-rebinding {")
+    );
+
+    expect(cardList).toContain("position: relative;");
+    expect(cardList).toContain("top: var(--arbor-card-list-offset-y, 0px);");
+    expect(cardList).not.toContain("translate3d(");
   });
 });

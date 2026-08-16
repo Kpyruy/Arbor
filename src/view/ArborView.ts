@@ -4360,17 +4360,11 @@ export class ArborView extends FileView {
   private scrollCardIntoHorizontalView(card: HTMLElement, viewport: HTMLElement, preservedSceneWidth = 0, snap = false): void {
     const viewportRect = viewport.getBoundingClientRect();
     const cardRect = card.getBoundingClientRect();
-    const blockId = card.dataset.blockId ?? null;
-    const activeBlock = this.state ? getBlock(this.state.metadata, this.state.selectedBlockId) : null;
-    const shouldCenterSelectedBlock =
-      Boolean(blockId) &&
-      this.state?.selectedBlockId === blockId &&
-      Boolean(activeBlock?.parentId);
     const safePadding = Math.min(96, viewport.clientWidth * 0.18);
     const shouldScrollLeft = cardRect.left < viewportRect.left + safePadding;
     const shouldScrollRight = cardRect.right > viewportRect.right - safePadding;
 
-    if (!shouldCenterSelectedBlock && !shouldScrollLeft && !shouldScrollRight) {
+    if (!shouldScrollLeft && !shouldScrollRight) {
       this.syncViewportEdgeFades();
       this.releasePreservedSceneWidth();
       return;
@@ -4382,29 +4376,22 @@ export class ArborView extends FileView {
       });
     }
 
-    const cardCenter =
-      viewport.scrollLeft +
-      (cardRect.left - viewportRect.left) +
-      cardRect.width / 2;
     const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-    const centeredTargetLeft = Math.max(0, Math.min(cardCenter - viewport.clientWidth / 2, maxScrollLeft));
-    const targetLeft = shouldCenterSelectedBlock
-      ? centeredTargetLeft
-      : shouldScrollLeft
-        ? Math.max(
-            0,
-            Math.min(
-              viewport.scrollLeft - ((viewportRect.left + safePadding) - cardRect.left),
-              maxScrollLeft
-            )
+    const targetLeft = shouldScrollLeft
+      ? Math.max(
+          0,
+          Math.min(
+            viewport.scrollLeft - ((viewportRect.left + safePadding) - cardRect.left),
+            maxScrollLeft
           )
-        : Math.max(
-            0,
-            Math.min(
-              viewport.scrollLeft + (cardRect.right - (viewportRect.right - safePadding)),
-              maxScrollLeft
-            )
-          );
+        )
+      : Math.max(
+          0,
+          Math.min(
+            viewport.scrollLeft + (cardRect.right - (viewportRect.right - safePadding)),
+            maxScrollLeft
+          )
+        );
     if (snap) {
       this.stopHorizontalScrollMotion(false);
       viewport.scrollLeft = targetLeft;
