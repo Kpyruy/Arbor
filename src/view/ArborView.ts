@@ -310,6 +310,7 @@ export class ArborView extends FileView {
   private loadingState: LoadingOverlayState | null = null;
   private presentationMode: ArborPresentationMode = "editor";
   private renderedLayoutDirection: ArborSettings["layoutDirection"] = "ltr";
+  private shouldSnapViewportAfterDirectionChange = false;
   private shouldCenterOverviewOnNextRender = false;
   private shouldRestoreOverviewKeyboardFocusAfterMutation = false;
   private overviewRenderVersion = 0;
@@ -459,6 +460,7 @@ export class ArborView extends FileView {
 
     const directionChanged = this.renderedLayoutDirection !== this.plugin.settings.layoutDirection;
     this.state = prepared;
+    this.shouldSnapViewportAfterDirectionChange = directionChanged;
     if (directionChanged && this.presentationMode === "overview") {
       this.shouldCenterOverviewOnNextRender = true;
     }
@@ -2826,8 +2828,10 @@ export class ArborView extends FileView {
   private applyPendingFocusAndScroll(preservedSceneWidth = 0): void {
     const pendingFocusBlockId = this.pendingFocusBlockId;
     const pendingScrollBlockId = this.pendingScrollBlockId;
+    const snapViewport = this.shouldSnapViewportAfterDirectionChange;
     this.pendingFocusBlockId = null;
     this.pendingScrollBlockId = null;
+    this.shouldSnapViewportAfterDirectionChange = false;
 
     if (this.pendingFocusFrame !== null) {
       window.cancelAnimationFrame(this.pendingFocusFrame);
@@ -2881,7 +2885,7 @@ export class ArborView extends FileView {
       if (pendingScrollBlockId) {
         const scrollCard = columnsEl.querySelector<HTMLElement>(`.arbor-card[data-block-id="${pendingScrollBlockId}"]`) ?? activeCard;
         if (scrollCard) {
-          this.scrollCardIntoHorizontalView(scrollCard, columnsViewportEl, preservedSceneWidth);
+          this.scrollCardIntoHorizontalView(scrollCard, columnsViewportEl, preservedSceneWidth, snapViewport);
         }
       } else {
         this.releasePreservedSceneWidth();
@@ -4257,7 +4261,7 @@ export class ArborView extends FileView {
     this.horizontalScrollFrame = window.requestAnimationFrame(tick);
   }
 
-  private scrollCardIntoHorizontalView(card: HTMLElement, viewport: HTMLElement, preservedSceneWidth = 0): void {
+  private scrollCardIntoHorizontalView(card: HTMLElement, viewport: HTMLElement, preservedSceneWidth = 0, snap = false): void {
     const viewportRect = viewport.getBoundingClientRect();
     const cardRect = card.getBoundingClientRect();
     const blockId = card.dataset.blockId ?? null;
@@ -4305,6 +4309,14 @@ export class ArborView extends FileView {
               maxScrollLeft
             )
           );
+    if (snap) {
+      this.stopHorizontalScrollMotion(false);
+      viewport.scrollLeft = targetLeft;
+      this.syncViewportEdgeFades();
+      this.releasePreservedSceneWidth();
+      return;
+    }
+
     this.animateViewportScrollTo(viewport, targetLeft);
   }
 

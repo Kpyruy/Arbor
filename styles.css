@@ -756,6 +756,7 @@
 
 .arbor-view.is-rtl .arbor-columns {
   margin-left: auto;
+  justify-content: flex-end;
 }
 
 .arbor-column {

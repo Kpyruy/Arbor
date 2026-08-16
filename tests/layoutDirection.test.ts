@@ -56,7 +56,7 @@ describe("Arbor layout direction", () => {
     expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumbs");
   });
 
-  it("anchors the mirrored editor scene to the right edge instead of leaving it on the LTR origin", () => {
+  it("anchors the mirrored editor scene to the right edge even while Arbor preserves viewport width", () => {
     const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
     const rtlColumns = styles.slice(
       styles.indexOf(".arbor-view.is-rtl .arbor-columns"),
@@ -64,5 +64,13 @@ describe("Arbor layout direction", () => {
     );
 
     expect(rtlColumns).toContain("margin-left: auto;");
+    expect(rtlColumns).toContain("justify-content: flex-end;");
+  });
+
+  it("snaps the selected card after changing direction instead of animating from stale scroll coordinates", () => {
+    const view = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+
+    expect(view).toContain("shouldSnapViewportAfterDirectionChange");
+    expect(view).toContain("this.scrollCardIntoHorizontalView(scrollCard, columnsViewportEl, preservedSceneWidth, snapViewport);");
   });
 });
