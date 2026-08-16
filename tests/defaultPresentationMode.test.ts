@@ -68,11 +68,10 @@ describe("default presentation mode", () => {
       styles.indexOf(".arbor-breadcrumbs button,")
     );
 
-    expect(breadcrumbs).toContain("padding: 4px 180px 8px 14px;");
-    expect(rtlBreadcrumbs).toContain("padding: 4px 14px 8px 180px;");
-    expect(breadcrumbs).toContain("clip-path: inset(0 168px 0 0);");
+    expect(breadcrumbs).toContain("margin-right: 168px;");
+    expect(rtlBreadcrumbs).toContain("margin-left: 168px;");
+    expect(styles).not.toContain("clip-path:");
     expect(styles).not.toContain(".arbor-breadcrumbs::after");
-    expect(rtlBreadcrumbs).toContain("clip-path: inset(0 0 0 168px);");
     expect(styles).toContain(".arbor-frame::before");
   });
 

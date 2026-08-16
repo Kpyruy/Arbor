@@ -44,8 +44,8 @@ describe("Arbor layout direction", () => {
   });
 
   it("keeps the active breadcrumb clear of the controls on either edge", () => {
-    expect(getBreadcrumbScrollInsets("ltr")).toEqual({ left: 28, right: 180 });
-    expect(getBreadcrumbScrollInsets("rtl")).toEqual({ left: 180, right: 28 });
+    expect(getBreadcrumbScrollInsets("ltr")).toEqual({ left: 28, right: 28 });
+    expect(getBreadcrumbScrollInsets("rtl")).toEqual({ left: 28, right: 28 });
   });
 
   it("keeps RTL breadcrumbs in a scrollable left-to-right track", () => {
@@ -56,7 +56,8 @@ describe("Arbor layout direction", () => {
     );
 
     expect(rtlBreadcrumbs).not.toContain("flex-direction: row-reverse;");
-    expect(rtlBreadcrumbs).toContain("padding: 4px 14px 8px 180px;");
+    expect(rtlBreadcrumbs).toContain("margin-left: 168px;");
+    expect(rtlBreadcrumbs).not.toContain("clip-path:");
   });
 
   it("keeps RTL breadcrumb steps compact around their directional connector", () => {
