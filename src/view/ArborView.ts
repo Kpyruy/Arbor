@@ -680,6 +680,7 @@ export class ArborView extends FileView {
       this.pendingFocusBlockId = this.state.selectedBlockId;
     }
     if (selectionChanged) {
+      this.stopHorizontalScrollMotion(false);
       this.pendingScrollBlockId = this.state.selectedBlockId;
     }
 

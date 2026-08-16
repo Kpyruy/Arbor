@@ -96,4 +96,17 @@ describe("default presentation mode", () => {
     expect(activeBreadcrumb).toContain("animation: arbor-breadcrumb-enter");
     expect(activeBreadcrumb).not.toContain("animation-delay:");
   });
+
+  it("cancels an in-flight editor scroll before arrow navigation renders the next selection", () => {
+    const view = readProjectFile("src/view/ArborView.ts");
+    const selectBlock = view.slice(
+      view.indexOf("  selectBlock(blockId:"),
+      view.indexOf("  async createRootBlock()")
+    );
+
+    expect(selectBlock).toContain("if (selectionChanged) {\n      this.stopHorizontalScrollMotion(false);");
+    expect(selectBlock.indexOf("this.stopHorizontalScrollMotion(false);")).toBeLessThan(
+      selectBlock.indexOf("this.pendingScrollBlockId = this.state.selectedBlockId;")
+    );
+  });
 });
