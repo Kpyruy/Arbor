@@ -441,13 +441,11 @@
   user-select: none;
 }
 
-.arbor-release-notice {
-  width: min(360px, calc(100vw - 32px));
-  padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--interactive-accent) 42%, var(--background-modifier-border));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--background-secondary) 94%, black 6%);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.3);
+.arbor-release-notice-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .arbor-release-notice-title {
@@ -470,13 +468,14 @@
 }
 
 .arbor-release-notice-body {
-  margin-top: 7px;
+  margin: 0;
+  padding-inline-start: 18px;
   color: var(--text-muted);
   line-height: 1.4;
 }
 
 .arbor-release-notice-action {
-  margin-top: 12px;
+  align-self: flex-start;
   padding: 6px 10px;
   border: 1px solid color-mix(in srgb, var(--interactive-accent) 46%, var(--background-modifier-border));
   border-radius: 7px;

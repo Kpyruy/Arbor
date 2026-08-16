@@ -12,7 +12,7 @@ import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRoute
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { buildBranchDocument } from "./storage/document";
 import { normalizeMetadata } from "./storage/serializer";
-import { shouldShowReleaseNotice } from "./releaseNotice";
+import { getReleaseNote, shouldShowReleaseNotice } from "./releaseNotice";
 import { ArborSettings } from "./types";
 import { getNextNumberedName } from "./utils";
 import { ArborLoadingView } from "./view/ArborLoadingView";
@@ -31,6 +31,7 @@ export default class ArborPlugin extends Plugin {
   private readonly managedNotePaths = new Set<string>();
   private readonly explicitArborOpenPaths = new Map<string, number>();
   private lastSeenReleaseVersion: string | undefined;
+  private isFreshPluginInstall = false;
   private originalLeafSetViewState: typeof WorkspaceLeaf.prototype.setViewState | null = null;
 
   async onload(): Promise<void> {
@@ -104,6 +105,7 @@ export default class ArborPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     const raw: unknown = await this.loadData();
+    this.isFreshPluginInstall = raw === null || raw === undefined;
     const payload = this.normalizePluginData(raw);
     this.settings = { ...DEFAULT_SETTINGS, ...payload.settings };
     this.lastSeenReleaseVersion = payload.lastSeenReleaseVersion;
@@ -778,31 +780,49 @@ export default class ArborPlugin extends Plugin {
 
   private async showReleaseNoticeIfNeeded(): Promise<void> {
     const version = this.manifest.version;
-    if (!shouldShowReleaseNotice(this.lastSeenReleaseVersion, version)) {
+    if (this.isFreshPluginInstall) {
+      this.lastSeenReleaseVersion = version;
+      await this.savePluginData();
       return;
     }
 
-    this.lastSeenReleaseVersion = version;
-    await this.savePluginData();
+    if (!shouldShowReleaseNotice(this.lastSeenReleaseVersion, version, false)) {
+      return;
+    }
+
+    const releaseNote = getReleaseNote(version);
+    if (!releaseNote) {
+      return;
+    }
 
     const notice = new Notice("", 12_000);
     const noticeEl = (notice as unknown as { noticeEl: HTMLElement }).noticeEl;
     noticeEl.empty();
-    noticeEl.addClass("arbor-release-notice");
-    const title = noticeEl.createDiv({ cls: "arbor-release-notice-title", text: `Arbor ${version}` });
+    const content = noticeEl.createDiv({ cls: "arbor-release-notice-content" });
+    const title = content.createDiv({ cls: "arbor-release-notice-title", text: `Arbor ${releaseNote.title}` });
     title.createSpan({ cls: "arbor-release-notice-badge", text: "New" });
-    noticeEl.createDiv({
-      cls: "arbor-release-notice-body",
-      text: "Tree Overview is here — a clean, interactive map of your whole note."
-    });
-    const action = noticeEl.createEl("button", {
-      cls: "arbor-release-notice-action",
-      text: "Open tree overview"
-    });
-    action.addEventListener("click", () => {
-      this.getBranchViews()[0]?.openTreeOverview();
-      notice.hide();
-    });
+    const changes = content.createEl("ul", { cls: "arbor-release-notice-body" });
+    releaseNote.changes.forEach((change) => changes.createEl("li", { text: change }));
+
+    if (releaseNote.action) {
+      const action = content.createEl("button", {
+        cls: "arbor-release-notice-action",
+        text: releaseNote.action.label
+      });
+      action.addEventListener("click", () => {
+        this.openArborSettings();
+        notice.hide();
+      });
+    }
+
+    this.lastSeenReleaseVersion = version;
+    await this.savePluginData();
+  }
+
+  private openArborSettings(): void {
+    const settingManager = (this.app as typeof this.app & { setting?: { open?: () => void; openTabById?: (id: string) => void } }).setting;
+    settingManager?.open?.();
+    settingManager?.openTabById?.(this.manifest.id);
   }
 
   private async refreshManagedStatus(file: TFile): Promise<void> {
