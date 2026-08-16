@@ -107,7 +107,7 @@
 
 .arbor-view.is-rtl .arbor-breadcrumbs {
   gap: 6px;
-  padding: 4px 14px 8px 168px;
+  padding: 4px 14px 8px 180px;
   clip-path: inset(0 0 0 168px);
 }
 

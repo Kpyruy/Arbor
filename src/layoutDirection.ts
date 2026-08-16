@@ -52,6 +52,6 @@ export function getHorizontalWheelDelta(delta: number, direction: ArborLayoutDir
 
 export function getBreadcrumbScrollInsets(direction: ArborLayoutDirection): { left: number; right: number } {
   return direction === "rtl"
-    ? { left: 168, right: 28 }
+    ? { left: 180, right: 28 }
     : { left: 28, right: 168 };
 }
