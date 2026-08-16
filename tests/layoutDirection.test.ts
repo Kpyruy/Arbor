@@ -55,4 +55,14 @@ describe("Arbor layout direction", () => {
     expect(view).toContain('root.classList.toggle("is-rtl", this.plugin.settings.layoutDirection === "rtl")');
     expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumbs");
   });
+
+  it("anchors the mirrored editor scene to the right edge instead of leaving it on the LTR origin", () => {
+    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const rtlColumns = styles.slice(
+      styles.indexOf(".arbor-view.is-rtl .arbor-columns"),
+      styles.indexOf(".arbor-column {")
+    );
+
+    expect(rtlColumns).toContain("margin-left: auto;");
+  });
 });

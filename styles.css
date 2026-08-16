@@ -754,6 +754,10 @@
   padding: 11vh 7vw 21vh 7vw;
 }
 
+.arbor-view.is-rtl .arbor-columns {
+  margin-left: auto;
+}
+
 .arbor-column {
   width: calc(var(--bw-card-width) * var(--bw-zoom));
   min-width: calc(var(--bw-card-width) * var(--bw-zoom));
