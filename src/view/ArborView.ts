@@ -63,6 +63,7 @@ import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
+import { resolveBranchCardInteraction } from "../cardInteraction";
 import { resolveNumericChildTarget } from "../numericNavigation";
 import { getBreadcrumbScrollInsets, getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey, getVisualBreadcrumbOrder } from "../layoutDirection";
 import { buildOverviewLayout, buildOverviewLinkPath } from "../model/overviewLayout";
@@ -2999,24 +3000,39 @@ export class ArborView extends FileView {
   }
 
   private handleCardClick(event: MouseEvent): void {
-    event.preventDefault();
     const card = event.currentTarget as HTMLElement;
     const blockId = card.dataset.blockId;
     if (!blockId) {
       return;
     }
 
-    const isActive = this.state?.selectedBlockId === blockId;
-    if (isActive && this.editingSession?.blockId !== blockId) {
+    const interaction = resolveBranchCardInteraction({
+      target: event.target,
+      isActive: this.state?.selectedBlockId === blockId,
+      clickCount: 1
+    });
+    if (interaction.preserveDefault) {
+      return;
+    }
+
+    event.preventDefault();
+    if (interaction.edit) {
       this.beginEditingBlock(blockId);
       return;
     }
-    this.selectBlock(blockId, { focus: true });
+    if (interaction.select) {
+      this.selectBlock(blockId, { focus: true });
+    }
   }
 
   private handleCardDoubleClick(event: MouseEvent): void {
     const blockId = (event.currentTarget as HTMLElement).dataset.blockId;
-    if (blockId) {
+    const interaction = resolveBranchCardInteraction({
+      target: event.target,
+      isActive: this.state?.selectedBlockId === blockId,
+      clickCount: 2
+    });
+    if (blockId && interaction.edit) {
       this.beginEditingBlock(blockId);
     }
   }
