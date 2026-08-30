@@ -41,6 +41,8 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "diff": "^8.0.4"
+    "diff": "^8.0.4",
+    "html-to-image": "^1.11.13",
+    "pdf-lib": "^1.17.1"
   }
 }

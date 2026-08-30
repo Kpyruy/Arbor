@@ -13,6 +13,7 @@ export const COMMANDS = {
   createNoteMarkdown: "create-note-markdown",
   createDemo: "create-demo-note",
   exportCleanCopy: "export-clean-copy",
+  exportTreeOverview: "export-tree-overview",
   openTreeOverview: "open-tree-overview",
   closeTreeOverview: "close-tree-overview",
   newRoot: "new-root-block",

@@ -3,11 +3,12 @@ import { AutoOpenSuppression } from "./autoOpenSuppression";
 import { COMMANDS, VIEW_TYPE_ARBOR, VIEW_TYPE_ARBOR_LOADING } from "./constants";
 import { ARBOR_DEMO_NOTE } from "./demoNote";
 import { ArborFileExplorerBadge } from "./fileExplorerBadge";
-import { canExportCleanCopy } from "./exportCommand";
+import { canExportCleanCopy, canExportTreeOverview } from "./exportCommand";
 import { FILE_EXPLORER_CREATION_SECTION, shouldShowNewArborMenuItem } from "./fileExplorerMenu";
 import { captureOriginalSetViewState, invokeOriginalSetViewState } from "./leafOpenInterception";
 import { resolveInitialLayoutDirection } from "./layoutDirection";
 import { buildAvailableMarkdownPath } from "./markdownPaths";
+import { buildAvailableTreeOverviewExportPath, TreeOverviewExportFormat } from "./treeOverviewExport";
 import { createEmptyTree } from "./model/tree";
 import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
@@ -348,6 +349,21 @@ export default class ArborPlugin extends Plugin {
       }
     });
 
+    this.addCommand({
+      id: COMMANDS.exportTreeOverview,
+      name: "Export tree overview",
+      checkCallback: (checking) => {
+        const view = this.getActiveBranchView();
+        if (!canExportTreeOverview({ hasActiveArborView: Boolean(view), hasFile: Boolean(view?.file) })) {
+          return false;
+        }
+        if (!checking && view) {
+          void view.exportTreeOverview();
+        }
+        return true;
+      }
+    });
+
     this.addBranchCommand(COMMANDS.openTreeOverview, "Open tree overview", (view) => {
       view.openTreeOverview();
       return Promise.resolve();
@@ -569,6 +585,21 @@ export default class ArborPlugin extends Plugin {
       (candidate) => this.app.vault.getAbstractFileByPath(candidate) !== null
     );
     return this.app.vault.create(path, contents);
+  }
+
+  async createTreeOverviewExport(
+    source: TFile,
+    format: TreeOverviewExportFormat,
+    contents: Uint8Array
+  ): Promise<TFile> {
+    const folderPath = source.parent?.path ?? "";
+    const path = buildAvailableTreeOverviewExportPath(
+      folderPath,
+      source.basename,
+      format,
+      (candidate) => this.app.vault.getAbstractFileByPath(candidate) !== null
+    );
+    return this.app.vault.createBinary(path, new Uint8Array(contents).buffer);
   }
 
   private getCreationFolderPath(): string {

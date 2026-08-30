@@ -599,6 +599,30 @@
   pointer-events: none;
 }
 
+.arbor-tree-overview-export {
+  position: fixed;
+  top: 0;
+  left: -100000px;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.arbor-tree-overview-export-frame {
+  overflow: hidden;
+  background: var(--background-primary);
+}
+
+.arbor-tree-overview-export .arbor-overview-card {
+  max-height: none;
+  overflow: visible;
+  cursor: default;
+  transition: none;
+}
+
+.arbor-tree-overview-export .arbor-overview-surface {
+  transform: none;
+}
+
 .arbor-overview-links {
   position: absolute;
   inset: 0;
@@ -1553,6 +1577,15 @@
   display: grid;
   gap: 8px;
   margin-top: 14px;
+}
+
+.arbor-tree-export-choice-heading {
+  margin: 8px 2px 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .arbor-clean-export-choice {
