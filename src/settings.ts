@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type ArborPlugin from "./main";
-import { ArborSettings } from "./types";
+import { ArborCustomTheme, ArborSettings, ArborThemeMode } from "./types";
+import { DEFAULT_CUSTOM_THEME } from "./theme";
 
 type ArborSettingControl =
   | { type: "dropdown"; key: keyof ArborSettings; options: Record<string, string>; defaultValue?: string }
@@ -16,6 +17,8 @@ interface ArborSettingDefinition {
 
 export const DEFAULT_SETTINGS: ArborSettings = {
   layoutDirection: "ltr",
+  themeMode: "automatic",
+  customTheme: { ...DEFAULT_CUSTOM_THEME },
   defaultPresentationMode: "editor",
   splitDirection: "vertical",
   cardWidth: 300,
@@ -42,6 +45,16 @@ export class ArborSettingTab extends PluginSettingTab {
 
   getSettingDefinitions(): ArborSettingDefinition[] {
     return [
+      {
+        name: "Theme mode",
+        desc: "Use the active Obsidian theme automatically or apply your own palette.",
+        control: {
+          type: "dropdown",
+          key: "themeMode",
+          options: { automatic: "Automatic", custom: "Custom" },
+          defaultValue: DEFAULT_SETTINGS.themeMode
+        }
+      },
       {
         name: "Layout direction",
         desc: "Choose which side the root starts on. Text and Markdown stay unchanged.",
@@ -129,7 +142,7 @@ export class ArborSettingTab extends PluginSettingTab {
 
     if (key === "layoutDirection") {
       this.plugin.refreshAllBranchViews({ layoutDirectionChanged: true });
-    } else if (["cardWidth", "cardMinHeight", "horizontalSpacing", "verticalSpacing", "zoomLevel", "previewSnippetLength", "dragAndDrop", "showBreadcrumb", "showBreadcrumbFlow", "breadcrumbLabelPreferredPrefix", "breadcrumbLabelFallback", "liveLinearPreview"].includes(key)) {
+    } else if (["themeMode", "cardWidth", "cardMinHeight", "horizontalSpacing", "verticalSpacing", "zoomLevel", "previewSnippetLength", "dragAndDrop", "showBreadcrumb", "showBreadcrumbFlow", "breadcrumbLabelPreferredPrefix", "breadcrumbLabelFallback", "liveLinearPreview"].includes(key)) {
       this.plugin.refreshAllBranchViews();
     }
   }
@@ -137,6 +150,31 @@ export class ArborSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+
+    new Setting(containerEl)
+      .setName("Theme mode")
+      .setDesc("Use the active Obsidian theme automatically or apply your own palette.")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("automatic", "Automatic")
+          .addOption("custom", "Custom")
+          .setValue(this.plugin.settings.themeMode)
+          .onChange(async (value) => {
+            this.plugin.settings.themeMode = value as ArborThemeMode;
+            await this.plugin.saveSettings();
+            this.plugin.refreshAllBranchViews();
+            this.display();
+          })
+      );
+
+    if (this.plugin.settings.themeMode === "custom") {
+      new Setting(containerEl).setName("Custom palette").setHeading();
+      this.addThemeColorSetting(containerEl, "Canvas", "Background behind the Arbor workspace.", "canvas");
+      this.addThemeColorSetting(containerEl, "Card surface", "Background used by Arbor cards and panels.", "card");
+      this.addThemeColorSetting(containerEl, "Text", "Primary text color inside Arbor.", "text");
+      this.addThemeColorSetting(containerEl, "Muted text", "Secondary text and connector color.", "muted");
+      this.addThemeColorSetting(containerEl, "Accent", "Selection, focus and interactive accent color.", "accent");
+    }
 
     new Setting(containerEl)
       .setName("Layout direction")
@@ -308,6 +346,26 @@ export class ArborSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             const nextValue = key === "zoomLevel" ? value / 100 : value;
             this.plugin.settings[key] = nextValue;
+            await this.plugin.saveSettings();
+            this.plugin.refreshAllBranchViews();
+          })
+      );
+  }
+
+  private addThemeColorSetting(
+    container: HTMLElement,
+    name: string,
+    description: string,
+    key: keyof ArborCustomTheme
+  ): void {
+    new Setting(container)
+      .setName(name)
+      .setDesc(description)
+      .addColorPicker((picker) =>
+        picker
+          .setValue(this.plugin.settings.customTheme[key])
+          .onChange(async (value) => {
+            this.plugin.settings.customTheme[key] = value;
             await this.plugin.saveSettings();
             this.plugin.refreshAllBranchViews();
           })

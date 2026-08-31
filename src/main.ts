@@ -109,7 +109,11 @@ export default class ArborPlugin extends Plugin {
     const raw: unknown = await this.loadData();
     this.isFreshPluginInstall = raw === null || raw === undefined;
     const payload = this.normalizePluginData(raw);
-    this.settings = { ...DEFAULT_SETTINGS, ...payload.settings };
+    this.settings = {
+      ...DEFAULT_SETTINGS,
+      ...payload.settings,
+      customTheme: { ...DEFAULT_SETTINGS.customTheme, ...payload.settings.customTheme }
+    };
     this.settings.layoutDirection = resolveInitialLayoutDirection({
       hasStoredPluginData: !this.isFreshPluginInstall,
       savedDirection: this.getStoredLayoutDirection(raw),

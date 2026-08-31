@@ -76,6 +76,7 @@ import { buildSinglePageTreeOverviewPdf } from "../treeOverviewPdf";
 import { getBreadcrumbScrollInsets, getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey, getVisualBreadcrumbOrder } from "../layoutDirection";
 import { buildOverviewLayout, buildOverviewLinkPath } from "../model/overviewLayout";
 import { resolveOverviewArrowTarget } from "../overviewNavigation";
+import { ARBOR_THEME_VARIABLES, resolveArborThemeVariables } from "../theme";
 import {
   canDragCard,
   canStartCardDrag,
@@ -820,6 +821,7 @@ export class ArborView extends FileView {
     });
     const root = document.body.createDiv({ cls: "arbor-tree-overview-export arbor-view" });
     root.toggleClass("is-rtl", this.plugin.settings.layoutDirection === "rtl");
+    this.applyThemeVariables(root);
     try {
       const frame = root.createDiv({ cls: "arbor-tree-overview-export-frame" });
       const scene = frame.createDiv({ cls: "arbor-overview-scene" });
@@ -4179,7 +4181,18 @@ export class ArborView extends FileView {
   private applyViewClasses(root: HTMLElement): void {
     root.classList.add("is-context-dim-mode");
     root.classList.toggle("is-rtl", this.plugin.settings.layoutDirection === "rtl");
+    this.applyThemeVariables(root);
     this.renderedLayoutDirection = this.plugin.settings.layoutDirection;
+  }
+
+  private applyThemeVariables(root: HTMLElement): void {
+    const customVariables = resolveArborThemeVariables(
+      this.plugin.settings.themeMode,
+      this.plugin.settings.customTheme
+    );
+    root.setCssProps(Object.fromEntries(
+      ARBOR_THEME_VARIABLES.map((name) => [name, customVariables[name] ?? ""])
+    ));
   }
 
   private buildBlockMenu(blockId: BranchBlockId): Menu {

@@ -63,6 +63,15 @@ export interface BranchHistoryEntry {
 
 export type ArborPresentationMode = "editor" | "overview";
 export type ArborLayoutDirection = "ltr" | "rtl";
+export type ArborThemeMode = "automatic" | "custom";
+
+export interface ArborCustomTheme {
+  canvas: string;
+  card: string;
+  text: string;
+  muted: string;
+  accent: string;
+}
 
 export interface ArborOverviewNode {
   id: BranchBlockId;
@@ -95,6 +104,8 @@ export type BreadcrumbLabelFallbackMode = "firstLine" | "snippet" | "none";
 
 export interface ArborSettings {
   layoutDirection: ArborLayoutDirection;
+  themeMode: ArborThemeMode;
+  customTheme: ArborCustomTheme;
   defaultPresentationMode: ArborPresentationMode;
   splitDirection: SplitPaneDirection;
   cardWidth: number;

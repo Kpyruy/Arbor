@@ -1,6 +1,7 @@
 import { FileView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { VIEW_TYPE_ARBOR_LOADING } from "../constants";
 import type ArborPlugin from "../main";
+import { ARBOR_THEME_VARIABLES, resolveArborThemeVariables } from "../theme";
 
 export class ArborLoadingView extends FileView {
   navigation = true;
@@ -160,6 +161,13 @@ export class ArborLoadingView extends FileView {
   private render(): void {
     const { contentEl } = this;
     contentEl.empty();
+    const themeVariables = resolveArborThemeVariables(
+      this.plugin.settings.themeMode,
+      this.plugin.settings.customTheme
+    );
+    contentEl.setCssProps(Object.fromEntries(
+      ARBOR_THEME_VARIABLES.map((name) => [name, themeVariables[name] ?? ""])
+    ));
     contentEl.addClass("arbor-loading-view");
     contentEl.removeClass("is-resolving");
 
