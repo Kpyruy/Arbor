@@ -68,6 +68,7 @@ import { resolveNumericChildTarget } from "../numericNavigation";
 import {
   resolveTreeOverviewExportSize,
   resolveTreeOverviewExportLinkStyle,
+  DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY,
   TreeOverviewExportFormat,
   TreeOverviewExportQuality
 } from "../treeOverviewExport";
@@ -277,7 +278,7 @@ class CleanExportModal extends Modal {
 class TreeOverviewExportModal extends Modal {
   private resolved = false;
   private format: TreeOverviewExportFormat = "png";
-  private quality: TreeOverviewExportQuality = "high";
+  private quality: TreeOverviewExportQuality = DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY;
   private resolver: (value: TreeOverviewExportOptions | null) => void = () => undefined;
 
   waitForChoice(): Promise<TreeOverviewExportOptions | null> {

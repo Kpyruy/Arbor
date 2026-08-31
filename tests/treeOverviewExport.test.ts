@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAvailableTreeOverviewExportPath,
+  DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY,
   resolveTreeOverviewExportLinkStyle,
   resolveTreeOverviewExportSize
 } from "../src/treeOverviewExport";
 
 describe("Tree Overview export", () => {
+  it("defaults to Standard quality so large trees remain exportable", () => {
+    expect(DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY).toBe("standard");
+  });
+
   it("maps quality presets to lossless export dimensions", () => {
     expect(resolveTreeOverviewExportSize(800, 600, "standard")).toEqual({
       scale: 2,
