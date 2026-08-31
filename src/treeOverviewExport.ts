@@ -1,12 +1,12 @@
 export type TreeOverviewExportFormat = "png" | "pdf";
 export type TreeOverviewExportQuality = "standard" | "high" | "ultra";
 
-export const DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY: TreeOverviewExportQuality = "standard";
+export const DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY: TreeOverviewExportQuality = "high";
 
 const QUALITY_SCALE: Record<TreeOverviewExportQuality, number> = {
-  standard: 2,
-  high: 4,
-  ultra: 8
+  standard: 1,
+  high: 2,
+  ultra: 4
 };
 
 const MAX_EXPORT_DIMENSION_PX = 16_384;

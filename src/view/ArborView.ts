@@ -301,9 +301,9 @@ class TreeOverviewExportModal extends Modal {
     this.addFormatChoice(choicesEl, "png", "PNG image");
     this.addFormatChoice(choicesEl, "pdf", "PDF — one large page");
     choicesEl.createDiv({ cls: "arbor-tree-export-choice-heading", text: "Quality" });
-    this.addQualityChoice(choicesEl, "standard", "Standard — 2×");
-    this.addQualityChoice(choicesEl, "high", "High — 4× (recommended)");
-    this.addQualityChoice(choicesEl, "ultra", "Ultra — 8×");
+    this.addQualityChoice(choicesEl, "standard", "Standard — 1×");
+    this.addQualityChoice(choicesEl, "high", "High — 2× (recommended)");
+    this.addQualityChoice(choicesEl, "ultra", "Ultra — 4×");
 
     const actionsEl = contentEl.createDiv({ cls: "arbor-confirm-actions" });
     new ButtonComponent(actionsEl)

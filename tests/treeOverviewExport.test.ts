@@ -7,34 +7,34 @@ import {
 } from "../src/treeOverviewExport";
 
 describe("Tree Overview export", () => {
-  it("defaults to Standard quality so large trees remain exportable", () => {
-    expect(DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY).toBe("standard");
+  it("defaults to recommended High quality", () => {
+    expect(DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY).toBe("high");
   });
 
   it("maps quality presets to lossless export dimensions", () => {
     expect(resolveTreeOverviewExportSize(800, 600, "standard")).toEqual({
+      scale: 1,
+      width: 800,
+      height: 600
+    });
+    expect(resolveTreeOverviewExportSize(800, 600, "high")).toEqual({
       scale: 2,
       width: 1600,
       height: 1200
     });
-    expect(resolveTreeOverviewExportSize(800, 600, "high")).toEqual({
+    expect(resolveTreeOverviewExportSize(800, 600, "ultra")).toEqual({
       scale: 4,
       width: 3200,
       height: 2400
     });
-    expect(resolveTreeOverviewExportSize(800, 600, "ultra")).toEqual({
-      scale: 8,
-      width: 6400,
-      height: 4800
-    });
   });
 
   it("rejects an export larger than the browser canvas limit", () => {
-    expect(resolveTreeOverviewExportSize(3_000, 1_000, "ultra")).toBeNull();
+    expect(resolveTreeOverviewExportSize(5_000, 5_000, "ultra")).toBeNull();
   });
 
-  it("keeps Standard usable for large but supported trees", () => {
-    expect(resolveTreeOverviewExportSize(6_400, 4_700, "standard")).toEqual({
+  it("keeps High usable for large but supported trees", () => {
+    expect(resolveTreeOverviewExportSize(6_400, 4_700, "high")).toEqual({
       scale: 2,
       width: 12_800,
       height: 9_400
