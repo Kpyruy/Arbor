@@ -8,24 +8,32 @@ import {
 describe("Tree Overview export", () => {
   it("maps quality presets to lossless export dimensions", () => {
     expect(resolveTreeOverviewExportSize(800, 600, "standard")).toEqual({
-      scale: 1,
-      width: 800,
-      height: 600
-    });
-    expect(resolveTreeOverviewExportSize(800, 600, "high")).toEqual({
       scale: 2,
       width: 1600,
       height: 1200
     });
+    expect(resolveTreeOverviewExportSize(800, 600, "high")).toEqual({
+      scale: 4,
+      width: 3200,
+      height: 2400
+    });
     expect(resolveTreeOverviewExportSize(800, 600, "ultra")).toEqual({
-      scale: 3,
-      width: 2400,
-      height: 1800
+      scale: 8,
+      width: 6400,
+      height: 4800
     });
   });
 
   it("rejects an export larger than the browser canvas limit", () => {
-    expect(resolveTreeOverviewExportSize(6_000, 1_000, "ultra")).toBeNull();
+    expect(resolveTreeOverviewExportSize(3_000, 1_000, "ultra")).toBeNull();
+  });
+
+  it("keeps Standard usable for large but supported trees", () => {
+    expect(resolveTreeOverviewExportSize(6_400, 4_700, "standard")).toEqual({
+      scale: 2,
+      width: 12_800,
+      height: 9_400
+    });
   });
 
   it("uses an explicit theme color for export connectors instead of CSS color mixing", () => {

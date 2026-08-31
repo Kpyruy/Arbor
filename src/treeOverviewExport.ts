@@ -2,13 +2,13 @@ export type TreeOverviewExportFormat = "png" | "pdf";
 export type TreeOverviewExportQuality = "standard" | "high" | "ultra";
 
 const QUALITY_SCALE: Record<TreeOverviewExportQuality, number> = {
-  standard: 1,
-  high: 2,
-  ultra: 3
+  standard: 2,
+  high: 4,
+  ultra: 8
 };
 
 const MAX_EXPORT_DIMENSION_PX = 16_384;
-const MAX_EXPORT_PIXELS = 64_000_000;
+const MAX_EXPORT_PIXELS = 128_000_000;
 
 export interface TreeOverviewExportSize {
   scale: number;
