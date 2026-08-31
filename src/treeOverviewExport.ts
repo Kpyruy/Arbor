@@ -16,6 +16,10 @@ export interface TreeOverviewExportSize {
   height: number;
 }
 
+export function resolveTreeOverviewExportLinkStyle(textMuted: string): { fill: string; stroke: string; opacity: string } {
+  return { fill: "none", stroke: textMuted, opacity: "0.52" };
+}
+
 export function resolveTreeOverviewExportSize(
   sourceWidth: number,
   sourceHeight: number,

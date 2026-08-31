@@ -67,6 +67,7 @@ import { resolveBranchCardInteraction } from "../cardInteraction";
 import { resolveNumericChildTarget } from "../numericNavigation";
 import {
   resolveTreeOverviewExportSize,
+  resolveTreeOverviewExportLinkStyle,
   TreeOverviewExportFormat,
   TreeOverviewExportQuality
 } from "../treeOverviewExport";
@@ -860,6 +861,7 @@ export class ArborView extends FileView {
       });
       this.prepareTreeOverviewExportFrame(frame, scene, surface, layout.width, layout.height, padding);
       this.applyOverviewLayout(scene, surface, cardsById, layout, 1);
+      this.applyTreeOverviewExportLinkStyle(surface);
       await this.waitForTreeOverviewExportAssets(surface);
 
       return {
@@ -893,6 +895,23 @@ export class ArborView extends FileView {
       width: `${width}px`
     });
     surface.setCssProps({ "--arbor-overview-zoom": "1" });
+  }
+
+  private applyTreeOverviewExportLinkStyle(surface: HTMLElement): void {
+    const textMuted = window.getComputedStyle(this.contentEl).getPropertyValue("--text-muted").trim();
+    if (!textMuted) {
+      return;
+    }
+
+    const style = resolveTreeOverviewExportLinkStyle(textMuted);
+    surface.querySelectorAll<SVGPathElement>(".arbor-overview-link").forEach((link) => {
+      link.setCssProps({
+        fill: style.fill,
+        stroke: style.stroke,
+        "stroke-opacity": style.opacity,
+        "vector-effect": "none"
+      });
+    });
   }
 
   private async waitForTreeOverviewExportAssets(container: HTMLElement): Promise<void> {

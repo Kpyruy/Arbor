@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAvailableTreeOverviewExportPath,
+  resolveTreeOverviewExportLinkStyle,
   resolveTreeOverviewExportSize
 } from "../src/treeOverviewExport";
 
@@ -25,6 +26,14 @@ describe("Tree Overview export", () => {
 
   it("rejects an export larger than the browser canvas limit", () => {
     expect(resolveTreeOverviewExportSize(6_000, 1_000, "ultra")).toBeNull();
+  });
+
+  it("uses an explicit theme color for export connectors instead of CSS color mixing", () => {
+    expect(resolveTreeOverviewExportLinkStyle("#b3b3b3")).toEqual({
+      fill: "none",
+      opacity: "0.52",
+      stroke: "#b3b3b3"
+    });
   });
 
   it("creates a numbered PNG or PDF next to the source note without overwriting a file", () => {
