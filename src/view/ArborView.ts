@@ -4187,8 +4187,8 @@ export class ArborView extends FileView {
 
   private applyThemeVariables(root: HTMLElement): void {
     const customVariables = resolveArborThemeVariables(
-      this.plugin.settings.themeMode,
-      this.plugin.settings.customTheme
+      this.plugin.settings.activeThemeId,
+      this.plugin.settings.customThemes
     );
     root.setCssProps(Object.fromEntries(
       ARBOR_THEME_VARIABLES.map((name) => [name, customVariables[name] ?? ""])

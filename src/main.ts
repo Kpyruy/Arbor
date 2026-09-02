@@ -16,6 +16,7 @@ import { buildBranchDocument } from "./storage/document";
 import { normalizeMetadata } from "./storage/serializer";
 import { getReleaseNote, shouldShowReleaseNotice } from "./releaseNotice";
 import { ArborSettings } from "./types";
+import { normalizeThemeSettings } from "./theme";
 import { getNextNumberedName } from "./utils";
 import { ArborLoadingView } from "./view/ArborLoadingView";
 import { ArborView } from "./view/ArborView";
@@ -109,11 +110,15 @@ export default class ArborPlugin extends Plugin {
     const raw: unknown = await this.loadData();
     this.isFreshPluginInstall = raw === null || raw === undefined;
     const payload = this.normalizePluginData(raw);
-    this.settings = {
+    const themeSettings = normalizeThemeSettings(payload.settings as unknown as Record<string, unknown>);
+    const settings = {
       ...DEFAULT_SETTINGS,
       ...payload.settings,
-      customTheme: { ...DEFAULT_SETTINGS.customTheme, ...payload.settings.customTheme }
-    };
+      ...themeSettings
+    } as ArborSettings & Record<string, unknown>;
+    delete settings.themeMode;
+    delete settings.customTheme;
+    this.settings = settings;
     this.settings.layoutDirection = resolveInitialLayoutDirection({
       hasStoredPluginData: !this.isFreshPluginInstall,
       savedDirection: this.getStoredLayoutDirection(raw),

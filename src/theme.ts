@@ -1,4 +1,6 @@
-import { ArborCustomTheme, ArborThemeMode } from "./types";
+import { ArborCustomTheme, ArborSavedTheme } from "./types";
+
+export const AUTOMATIC_THEME_ID = "automatic";
 
 export const DEFAULT_CUSTOM_THEME: ArborCustomTheme = {
   canvas: "#15161c",
@@ -7,6 +9,47 @@ export const DEFAULT_CUSTOM_THEME: ArborCustomTheme = {
   muted: "#afb2c1",
   accent: "#8f6bff"
 };
+
+export const BUILT_IN_THEMES: readonly ArborSavedTheme[] = [
+  {
+    id: "builtin:midnight",
+    name: "Midnight",
+    palette: { ...DEFAULT_CUSTOM_THEME }
+  },
+  {
+    id: "builtin:paper",
+    name: "Paper",
+    palette: {
+      canvas: "#f6f2e8",
+      card: "#fffdf6",
+      text: "#2a2520",
+      muted: "#746a5f",
+      accent: "#7c4dff"
+    }
+  },
+  {
+    id: "builtin:forest",
+    name: "Forest",
+    palette: {
+      canvas: "#101b17",
+      card: "#192a23",
+      text: "#eef7f2",
+      muted: "#9eb8aa",
+      accent: "#56c596"
+    }
+  },
+  {
+    id: "builtin:rose",
+    name: "Rose",
+    palette: {
+      canvas: "#21151c",
+      card: "#322029",
+      text: "#fff2f7",
+      muted: "#c8a7b7",
+      accent: "#f16aa2"
+    }
+  }
+];
 
 export const ARBOR_THEME_VARIABLES = [
   "--background-primary",
@@ -18,21 +61,111 @@ export const ARBOR_THEME_VARIABLES = [
   "--background-modifier-border"
 ] as const;
 
+interface RawThemeSettings {
+  activeThemeId?: unknown;
+  customThemes?: unknown;
+  themeMode?: unknown;
+  customTheme?: unknown;
+}
+
+export function normalizeThemeSettings(raw: RawThemeSettings): {
+  activeThemeId: string;
+  customThemes: ArborSavedTheme[];
+} {
+  const customThemes = Array.isArray(raw.customThemes)
+    ? raw.customThemes.map(normalizeSavedTheme).filter((theme): theme is ArborSavedTheme => theme !== null)
+    : [];
+  const legacyPalette = normalizePalette(raw.customTheme);
+  const legacyWasCustomized = legacyPalette && !palettesEqual(legacyPalette, DEFAULT_CUSTOM_THEME);
+  if (raw.themeMode === "custom" || legacyWasCustomized) {
+    const migrated: ArborSavedTheme = {
+      id: "custom:migrated",
+      name: "My theme",
+      palette: legacyPalette ?? { ...DEFAULT_CUSTOM_THEME }
+    };
+    return {
+      activeThemeId: raw.themeMode === "custom" ? migrated.id : AUTOMATIC_THEME_ID,
+      customThemes: [...customThemes, migrated]
+    };
+  }
+
+  const requestedId = typeof raw.activeThemeId === "string" ? raw.activeThemeId : null;
+  if (requestedId) {
+    return {
+      activeThemeId: isAvailableThemeId(requestedId, customThemes) ? requestedId : AUTOMATIC_THEME_ID,
+      customThemes
+    };
+  }
+
+  return { activeThemeId: AUTOMATIC_THEME_ID, customThemes };
+}
+
+export function findThemeById(themeId: string, customThemes: readonly ArborSavedTheme[]): ArborSavedTheme | null {
+  return BUILT_IN_THEMES.find((theme) => theme.id === themeId)
+    ?? customThemes.find((theme) => theme.id === themeId)
+    ?? null;
+}
+
 export function resolveArborThemeVariables(
-  mode: ArborThemeMode,
-  theme: ArborCustomTheme
+  themeId: string,
+  customThemes: readonly ArborSavedTheme[]
 ): Record<string, string> {
-  if (mode === "automatic") {
+  if (themeId === AUTOMATIC_THEME_ID) {
     return {};
   }
 
+  const theme = findThemeById(themeId, customThemes);
+  if (!theme) {
+    return {};
+  }
+
+  const { palette } = theme;
   return {
-    "--background-primary": theme.canvas,
-    "--background-secondary": theme.card,
-    "--text-normal": theme.text,
-    "--text-muted": theme.muted,
-    "--text-faint": `color-mix(in srgb, ${theme.muted} 72%, transparent)`,
-    "--interactive-accent": theme.accent,
-    "--background-modifier-border": `color-mix(in srgb, ${theme.muted} 30%, ${theme.card})`
+    "--background-primary": palette.canvas,
+    "--background-secondary": palette.card,
+    "--text-normal": palette.text,
+    "--text-muted": palette.muted,
+    "--text-faint": `color-mix(in srgb, ${palette.muted} 72%, transparent)`,
+    "--interactive-accent": palette.accent,
+    "--background-modifier-border": `color-mix(in srgb, ${palette.muted} 30%, ${palette.card})`
   };
+}
+
+function isAvailableThemeId(themeId: string, customThemes: readonly ArborSavedTheme[]): boolean {
+  return themeId === AUTOMATIC_THEME_ID || findThemeById(themeId, customThemes) !== null;
+}
+
+function normalizeSavedTheme(raw: unknown): ArborSavedTheme | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const candidate = raw as Record<string, unknown>;
+  const id = typeof candidate.id === "string" && candidate.id.startsWith("custom:") ? candidate.id : null;
+  const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+  const palette = normalizePalette(candidate.palette);
+  if (!id || !name || !palette) {
+    return null;
+  }
+
+  return { id, name, palette };
+}
+
+function normalizePalette(raw: unknown): ArborCustomTheme | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const candidate = raw as Record<string, unknown>;
+  const palette = { ...DEFAULT_CUSTOM_THEME };
+  (Object.keys(palette) as Array<keyof ArborCustomTheme>).forEach((key) => {
+    if (typeof candidate[key] === "string" && candidate[key].trim().length > 0) {
+      palette[key] = candidate[key].trim();
+    }
+  });
+  return palette;
+}
+
+function palettesEqual(left: ArborCustomTheme, right: ArborCustomTheme): boolean {
+  return (Object.keys(left) as Array<keyof ArborCustomTheme>).every((key) => left[key] === right[key]);
 }
