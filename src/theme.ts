@@ -58,8 +58,20 @@ export const ARBOR_THEME_VARIABLES = [
   "--text-muted",
   "--text-faint",
   "--interactive-accent",
+  "--interactive-accent-hover",
+  "--interactive-normal",
+  "--interactive-hover",
+  "--background-modifier-hover",
+  "--icon-color",
+  "--icon-color-hover",
+  "--text-on-accent",
   "--background-modifier-border"
 ] as const;
+
+export interface ArborThemeState {
+  activeThemeId: string;
+  customThemes: ArborSavedTheme[];
+}
 
 interface RawThemeSettings {
   activeThemeId?: unknown;
@@ -106,6 +118,16 @@ export function findThemeById(themeId: string, customThemes: readonly ArborSaved
     ?? null;
 }
 
+export function cloneThemeState(state: ArborThemeState): ArborThemeState {
+  return {
+    activeThemeId: state.activeThemeId,
+    customThemes: state.customThemes.map((theme) => ({
+      ...theme,
+      palette: { ...theme.palette }
+    }))
+  };
+}
+
 export function resolveArborThemeVariables(
   themeId: string,
   customThemes: readonly ArborSavedTheme[]
@@ -127,8 +149,31 @@ export function resolveArborThemeVariables(
     "--text-muted": palette.muted,
     "--text-faint": `color-mix(in srgb, ${palette.muted} 72%, transparent)`,
     "--interactive-accent": palette.accent,
+    "--interactive-accent-hover": `color-mix(in srgb, ${palette.accent} 88%, ${palette.text})`,
+    "--interactive-normal": palette.card,
+    "--interactive-hover": `color-mix(in srgb, ${palette.card} 84%, ${palette.text})`,
+    "--background-modifier-hover": `color-mix(in srgb, ${palette.card} 88%, ${palette.text})`,
+    "--icon-color": palette.muted,
+    "--icon-color-hover": palette.text,
+    "--text-on-accent": textColorForBackground(palette.accent),
     "--background-modifier-border": `color-mix(in srgb, ${palette.muted} 30%, ${palette.card})`
   };
+}
+
+function textColorForBackground(color: string): "#000000" | "#ffffff" {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) {
+    return "#ffffff";
+  }
+  const value = Number.parseInt(match[1], 16);
+  const channels = [value >> 16, (value >> 8) & 0xff, value & 0xff].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  return luminance > 0.36 ? "#000000" : "#ffffff";
 }
 
 function isAvailableThemeId(themeId: string, customThemes: readonly ArborSavedTheme[]): boolean {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BUILT_IN_THEMES,
+  cloneThemeState,
   DEFAULT_CUSTOM_THEME,
   normalizeThemeSettings,
   resolveArborThemeVariables
@@ -21,7 +22,11 @@ describe("Arbor theme presets", () => {
   });
 
   it("resolves both built-in and user-created presets", () => {
-    expect(resolveArborThemeVariables("builtin:paper", [])["--background-primary"]).toBe("#f6f2e8");
+    const paper = resolveArborThemeVariables("builtin:paper", []);
+    expect(paper["--background-primary"]).toBe("#f6f2e8");
+    expect(paper["--interactive-normal"]).toBe("#fffdf6");
+    expect(paper["--icon-color"]).toBe("#746a5f");
+    expect(paper["--icon-color-hover"]).toBe("#2a2520");
     expect(resolveArborThemeVariables("custom:violet", [{
       id: "custom:violet",
       name: "Violet",
@@ -34,13 +39,36 @@ describe("Arbor theme presets", () => {
       }
     }])).toEqual({
       "--background-modifier-border": "color-mix(in srgb, #aab4c4 30%, #1c2330)",
+      "--background-modifier-hover": "color-mix(in srgb, #1c2330 88%, #f6f7fb)",
       "--background-primary": "#10131a",
       "--background-secondary": "#1c2330",
+      "--icon-color": "#aab4c4",
+      "--icon-color-hover": "#f6f7fb",
       "--interactive-accent": "#7c5cff",
+      "--interactive-accent-hover": "color-mix(in srgb, #7c5cff 88%, #f6f7fb)",
+      "--interactive-hover": "color-mix(in srgb, #1c2330 84%, #f6f7fb)",
+      "--interactive-normal": "#1c2330",
       "--text-faint": "color-mix(in srgb, #aab4c4 72%, transparent)",
       "--text-muted": "#aab4c4",
-      "--text-normal": "#f6f7fb"
+      "--text-normal": "#f6f7fb",
+      "--text-on-accent": "#ffffff"
     });
+  });
+
+  it("clones custom themes deeply for cancellable live previews", () => {
+    const source = {
+      activeThemeId: "custom:violet",
+      customThemes: [{
+        id: "custom:violet",
+        name: "Violet",
+        palette: { ...DEFAULT_CUSTOM_THEME }
+      }]
+    };
+    const draft = cloneThemeState(source);
+    draft.customThemes[0].palette.accent = "#ff00aa";
+
+    expect(source.customThemes[0].palette.accent).toBe(DEFAULT_CUSTOM_THEME.accent);
+    expect(draft.customThemes[0].palette.accent).toBe("#ff00aa");
   });
 
   it("migrates an active legacy Custom palette into My theme", () => {

@@ -384,6 +384,7 @@ export class ArborView extends FileView {
   private zoomIndicatorEl: HTMLButtonElement | null = null;
   private overviewButtonEl: HTMLButtonElement | null = null;
   private markdownButtonEl: HTMLButtonElement | null = null;
+  private themeButtonEl: HTMLButtonElement | null = null;
   private viewMenuButtonEl: HTMLButtonElement | null = null;
   private searchOverlayEl: HTMLElement | null = null;
   private searchDialogEl: HTMLElement | null = null;
@@ -1504,6 +1505,13 @@ export class ArborView extends FileView {
     setIcon(this.markdownButtonEl, "file-text");
     this.markdownButtonEl.addEventListener("click", () => void this.openCurrentFileInMarkdown());
     this.markdownButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
+    this.themeButtonEl = this.frameEl.createEl("button", {
+      cls: "arbor-theme-button",
+      attr: { type: "button", "aria-label": "Open theme studio" }
+    });
+    setIcon(this.themeButtonEl, "palette");
+    this.themeButtonEl.addEventListener("click", () => this.plugin.openThemeStudio());
+    this.themeButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
     this.viewMenuButtonEl = this.frameEl.createEl("button", {
       cls: "arbor-view-menu-button",
       attr: {
@@ -1563,6 +1571,7 @@ export class ArborView extends FileView {
     this.breadcrumbExitLayerEl = null;
     this.zoomIndicatorEl = null;
     this.markdownButtonEl = null;
+    this.themeButtonEl = null;
     this.overviewButtonEl = null;
     this.viewMenuButtonEl = null;
     this.searchOverlayEl = null;
@@ -4186,9 +4195,10 @@ export class ArborView extends FileView {
   }
 
   private applyThemeVariables(root: HTMLElement): void {
+    const theme = this.plugin.getEffectiveThemeState();
     const customVariables = resolveArborThemeVariables(
-      this.plugin.settings.activeThemeId,
-      this.plugin.settings.customThemes
+      theme.activeThemeId,
+      theme.customThemes
     );
     root.setCssProps(Object.fromEntries(
       ARBOR_THEME_VARIABLES.map((name) => [name, customVariables[name] ?? ""])

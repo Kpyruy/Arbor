@@ -16,7 +16,8 @@ import { buildBranchDocument } from "./storage/document";
 import { normalizeMetadata } from "./storage/serializer";
 import { getReleaseNote, shouldShowReleaseNotice } from "./releaseNotice";
 import { ArborSettings } from "./types";
-import { normalizeThemeSettings } from "./theme";
+import { ArborThemeState, cloneThemeState, normalizeThemeSettings } from "./theme";
+import { ThemeStudioModal } from "./themeStudio";
 import { getNextNumberedName } from "./utils";
 import { ArborLoadingView } from "./view/ArborLoadingView";
 import { ArborView } from "./view/ArborView";
@@ -34,6 +35,8 @@ export default class ArborPlugin extends Plugin {
   private readonly managedNotePaths = new Set<string>();
   private readonly explicitArborOpenPaths = new Map<string, number>();
   private lastSeenReleaseVersion: string | undefined;
+  private themePreviewState: ArborThemeState | null = null;
+  private themeStudioModal: ThemeStudioModal | null = null;
   private isFreshPluginInstall = false;
   private originalLeafSetViewState: typeof WorkspaceLeaf.prototype.setViewState | null = null;
 
@@ -99,6 +102,8 @@ export default class ArborPlugin extends Plugin {
   }
 
   override onunload(): void {
+    this.themeStudioModal?.close();
+    this.themeStudioModal = null;
     [VIEW_TYPE_ARBOR, VIEW_TYPE_ARBOR_LOADING].forEach((viewType) => {
       this.app.workspace.getLeavesOfType(viewType).forEach((leaf) => {
         void leaf.detach();
@@ -131,6 +136,49 @@ export default class ArborPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.savePluginData();
+  }
+
+  getEffectiveThemeState(): ArborThemeState {
+    return this.themePreviewState ?? {
+      activeThemeId: this.settings.activeThemeId,
+      customThemes: this.settings.customThemes
+    };
+  }
+
+  openThemeStudio(): void {
+    if (this.themeStudioModal) {
+      return;
+    }
+    const initialState = cloneThemeState({
+      activeThemeId: this.settings.activeThemeId,
+      customThemes: this.settings.customThemes
+    });
+    let modal: ThemeStudioModal;
+    modal = new ThemeStudioModal(this.app, {
+      initialState,
+      preview: (state) => {
+        this.themePreviewState = cloneThemeState(state);
+        this.refreshAllBranchViews();
+      },
+      apply: async (state) => {
+        this.themePreviewState = null;
+        this.settings.activeThemeId = state.activeThemeId;
+        this.settings.customThemes = cloneThemeState(state).customThemes;
+        await this.saveSettings();
+        this.refreshAllBranchViews();
+      },
+      cancel: () => {
+        this.themePreviewState = null;
+        this.refreshAllBranchViews();
+      },
+      closed: () => {
+        if (this.themeStudioModal === modal) {
+          this.themeStudioModal = null;
+        }
+      }
+    });
+    this.themeStudioModal = modal;
+    modal.open();
   }
 
   getBranchViews(): ArborView[] {

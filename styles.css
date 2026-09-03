@@ -188,6 +188,7 @@
 
 .arbor-zoom-indicator,
 .arbor-markdown-button,
+.arbor-theme-button,
 .arbor-view-menu-button {
   position: absolute;
   top: 2px;
@@ -212,10 +213,11 @@
 }
 
 .arbor-zoom-indicator {
-  right: 84px;
+  right: 124px;
 }
 
 .arbor-markdown-button,
+.arbor-theme-button,
 .arbor-view-menu-button {
   display: inline-flex;
   align-items: center;
@@ -230,8 +232,13 @@
   right: 44px;
 }
 
+.arbor-theme-button {
+  right: 84px;
+}
+
 .arbor-view.is-rtl .arbor-zoom-indicator,
 .arbor-view.is-rtl .arbor-markdown-button,
+.arbor-view.is-rtl .arbor-theme-button,
 .arbor-view.is-rtl .arbor-view-menu-button {
   right: auto;
   left: 4px;
@@ -241,14 +248,21 @@
   left: 44px;
 }
 
-.arbor-view.is-rtl .arbor-zoom-indicator {
+.arbor-view.is-rtl .arbor-theme-button {
   left: 84px;
 }
 
+.arbor-view.is-rtl .arbor-zoom-indicator {
+  left: 124px;
+}
+
 .arbor-markdown-button svg,
+.arbor-theme-button svg,
 .arbor-view-menu-button svg {
   width: 15px;
   height: 15px;
+  color: currentColor;
+  stroke: currentColor;
 }
 
 .arbor-zoom-indicator:hover,
@@ -256,6 +270,8 @@
 .arbor-zoom-indicator.is-visible,
 .arbor-markdown-button:hover,
 .arbor-markdown-button:focus-visible,
+.arbor-theme-button:hover,
+.arbor-theme-button:focus-visible,
 .arbor-view-menu-button:hover,
 .arbor-view-menu-button:focus-visible {
   opacity: 0.92;
@@ -269,6 +285,7 @@
 
 .arbor-zoom-indicator:focus-visible,
 .arbor-markdown-button:focus-visible,
+.arbor-theme-button:focus-visible,
 .arbor-view-menu-button:focus-visible {
   outline: 1px solid color-mix(in srgb, var(--interactive-accent) 58%, transparent);
   outline-offset: 2px;
@@ -479,6 +496,217 @@
 .arbor-overview-button svg {
   width: 16px;
   height: 16px;
+  color: currentColor;
+  stroke: currentColor;
+}
+
+.arbor-theme-studio-modal {
+  width: min(920px, calc(100vw - 48px));
+  max-height: min(820px, calc(100vh - 48px));
+}
+
+.arbor-theme-studio-modal .modal-content {
+  overflow-y: auto;
+}
+
+.arbor-theme-studio-description {
+  margin: -4px 0 16px;
+  color: var(--text-muted);
+}
+
+.arbor-theme-studio-preview {
+  min-height: 190px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 16px;
+  background-color: var(--background-primary);
+  background-image: radial-gradient(color-mix(in srgb, var(--text-muted) 18%, transparent) 1px, transparent 1px);
+  background-size: 18px 18px;
+  color: var(--text-normal);
+}
+
+.arbor-theme-studio-preview-tree {
+  display: flex;
+  min-height: 190px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.arbor-theme-studio-preview-node {
+  display: flex;
+  width: 180px;
+  min-height: 72px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--background-secondary) 94%, black 6%);
+  color: var(--text-normal);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
+}
+
+.arbor-theme-studio-preview-node span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.arbor-theme-studio-preview-node.is-selected {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 28%, transparent);
+}
+
+.arbor-theme-studio-preview-connector {
+  width: 72px;
+  height: 1px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--text-muted) 52%, transparent);
+}
+
+.arbor-theme-studio-preview-branches {
+  display: grid;
+  gap: 12px;
+}
+
+.arbor-theme-studio-catalog {
+  display: grid;
+  gap: 18px;
+}
+
+.arbor-theme-studio-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.arbor-theme-studio-section-heading h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.arbor-theme-studio-section-heading span {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.arbor-theme-studio-my-themes {
+  align-items: center;
+}
+
+.arbor-theme-studio-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
+  gap: 10px;
+}
+
+.arbor-theme-studio-card {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 108px;
+  overflow: hidden;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.arbor-theme-studio-card:hover,
+.arbor-theme-studio-card:focus-visible {
+  border-color: color-mix(in srgb, var(--interactive-accent) 46%, var(--background-modifier-border));
+  transform: translateY(-1px);
+}
+
+.arbor-theme-studio-card.is-selected {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+}
+
+.arbor-theme-studio-card-visual {
+  display: flex;
+  height: 60px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--arbor-theme-swatch-canvas);
+}
+
+.arbor-theme-studio-card-node {
+  width: 34px;
+  height: 22px;
+  border: 1px solid var(--arbor-theme-swatch-muted);
+  border-radius: 5px;
+  background: var(--arbor-theme-swatch-card);
+}
+
+.arbor-theme-studio-card-node.is-root {
+  border-color: var(--arbor-theme-swatch-accent);
+}
+
+.arbor-theme-studio-card-line {
+  width: 22px;
+  height: 1px;
+  background: var(--arbor-theme-swatch-muted);
+}
+
+.arbor-theme-studio-card-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  color: var(--text-normal);
+  font-size: 0.8rem;
+}
+
+.arbor-theme-studio-card-kind {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.67rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arbor-theme-studio-editor {
+  margin-top: 20px;
+  padding-top: 6px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.arbor-theme-studio-footer {
+  position: sticky;
+  bottom: -1px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 20px -4px -4px;
+  padding: 14px 4px 4px;
+  background: linear-gradient(transparent, var(--background-primary) 28%);
+}
+
+@media (max-width: 700px) {
+  .arbor-theme-studio-preview-tree {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .arbor-theme-studio-preview-connector {
+    width: 1px;
+    height: 28px;
+  }
 }
 
 .arbor-overview-editor-actions button {

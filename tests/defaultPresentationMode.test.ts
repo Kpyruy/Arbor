@@ -48,13 +48,23 @@ describe("default presentation mode", () => {
     );
 
     expect(topControls).toContain("right: 4px;");
+    expect(topControls).toContain("right: 124px;");
     expect(topControls).toContain("right: 84px;");
     expect(overviewControls).toContain("right: 12px;");
     expect(baseOverviewControls).not.toContain("left: 12px;");
     expect(styles).toContain(".arbor-view.is-rtl .arbor-zoom-indicator");
+    expect(rtlTopControls).toContain("left: 124px;");
     expect(rtlTopControls).toContain("left: 84px;");
     expect(styles).toContain(".arbor-view.is-rtl .arbor-overview-button");
     expect(rtlOverviewControls).toContain("left: 12px;");
+  });
+
+  it("opens Theme studio from a dedicated toolbar button", () => {
+    const source = readProjectFile("src/view/ArborView.ts");
+
+    expect(source).toContain('cls: "arbor-theme-button"');
+    expect(source).toContain('"aria-label": "Open theme studio"');
+    expect(source).toContain('this.plugin.openThemeStudio()');
   });
 
   it("reserves the control edge before laying out breadcrumbs", () => {

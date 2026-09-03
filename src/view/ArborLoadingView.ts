@@ -161,9 +161,10 @@ export class ArborLoadingView extends FileView {
   private render(): void {
     const { contentEl } = this;
     contentEl.empty();
+    const theme = this.plugin.getEffectiveThemeState();
     const themeVariables = resolveArborThemeVariables(
-      this.plugin.settings.activeThemeId,
-      this.plugin.settings.customThemes
+      theme.activeThemeId,
+      theme.customThemes
     );
     contentEl.setCssProps(Object.fromEntries(
       ARBOR_THEME_VARIABLES.map((name) => [name, themeVariables[name] ?? ""])

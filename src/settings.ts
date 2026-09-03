@@ -1,11 +1,9 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type ArborPlugin from "./main";
-import { ArborCustomTheme, ArborSavedTheme, ArborSettings } from "./types";
+import { ArborSettings } from "./types";
 import {
   AUTOMATIC_THEME_ID,
-  BUILT_IN_THEMES,
-  DEFAULT_CUSTOM_THEME,
-  findThemeById
+  BUILT_IN_THEMES
 } from "./theme";
 
 type ArborSettingControl =
@@ -316,14 +314,7 @@ export class ArborSettingTab extends PluginSettingTab {
   }
 
   private renderThemeSettings(container: HTMLElement): void {
-    const selectedTheme = findThemeById(
-      this.plugin.settings.activeThemeId,
-      this.plugin.settings.customThemes
-    );
-    const selectedCustomTheme = this.plugin.settings.customThemes.find(
-      (theme) => theme.id === this.plugin.settings.activeThemeId
-    ) ?? null;
-    const themeSetting = new Setting(container)
+    new Setting(container)
       .setName("Theme")
       .setDesc("Follow Obsidian or choose a built-in or saved theme.")
       .addDropdown((dropdown) => {
@@ -336,102 +327,14 @@ export class ArborSettingTab extends PluginSettingTab {
             this.plugin.settings.activeThemeId = value;
             await this.plugin.saveSettings();
             this.plugin.refreshAllBranchViews();
-            this.display();
           });
       })
       .addButton((button) =>
         button
-          .setButtonText("New theme")
-          .onClick(() => void this.createCustomTheme(selectedTheme))
+          .setButtonText("Theme studio…")
+          .setCta()
+          .onClick(() => this.plugin.openThemeStudio())
       );
-
-    if (selectedTheme) {
-      themeSetting.addButton((button) =>
-        button
-          .setButtonText("Duplicate")
-          .onClick(() => void this.createCustomTheme(selectedTheme, `${selectedTheme.name} copy`))
-      );
-    }
-
-    if (selectedCustomTheme) {
-      let deleteArmed = false;
-      themeSetting.addButton((button) =>
-        button
-          .setButtonText("Delete")
-          .setWarning()
-          .onClick(async () => {
-            if (!deleteArmed) {
-              deleteArmed = true;
-              button.setButtonText("Confirm delete");
-              return;
-            }
-            this.plugin.settings.customThemes = this.plugin.settings.customThemes.filter(
-              (theme) => theme.id !== selectedCustomTheme.id
-            );
-            this.plugin.settings.activeThemeId = AUTOMATIC_THEME_ID;
-            await this.plugin.saveSettings();
-            this.plugin.refreshAllBranchViews();
-            this.display();
-          })
-      );
-    }
-
-    if (!selectedCustomTheme) {
-      if (selectedTheme) {
-        new Setting(container)
-          .setName(`${selectedTheme.name} preset`)
-          .setDesc("Built-in themes are read-only. Duplicate this preset to customize it.");
-      }
-      return;
-    }
-
-    new Setting(container).setName("Edit custom theme").setHeading();
-    new Setting(container)
-      .setName("Theme name")
-      .setDesc("Name shown in the theme menu.")
-      .addText((text) =>
-        text
-          .setValue(selectedCustomTheme.name)
-          .onChange(async (value) => {
-            const name = value.trim();
-            if (!name) {
-              return;
-            }
-            selectedCustomTheme.name = name;
-            await this.plugin.saveSettings();
-          })
-      );
-    this.addThemeColorSetting(container, selectedCustomTheme, "Canvas", "Background behind the Arbor workspace.", "canvas");
-    this.addThemeColorSetting(container, selectedCustomTheme, "Card surface", "Background used by Arbor cards and panels.", "card");
-    this.addThemeColorSetting(container, selectedCustomTheme, "Text", "Primary text color inside Arbor.", "text");
-    this.addThemeColorSetting(container, selectedCustomTheme, "Muted text", "Secondary text and connector color.", "muted");
-    this.addThemeColorSetting(container, selectedCustomTheme, "Accent", "Selection, focus and interactive accent color.", "accent");
-  }
-
-  private async createCustomTheme(source: ArborSavedTheme | null, requestedName = "My theme"): Promise<void> {
-    const theme: ArborSavedTheme = {
-      id: `custom:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      name: this.uniqueThemeName(requestedName),
-      palette: { ...(source?.palette ?? DEFAULT_CUSTOM_THEME) }
-    };
-    this.plugin.settings.customThemes.push(theme);
-    this.plugin.settings.activeThemeId = theme.id;
-    await this.plugin.saveSettings();
-    this.plugin.refreshAllBranchViews();
-    this.display();
-  }
-
-  private uniqueThemeName(requestedName: string): string {
-    const base = requestedName.trim() || "My theme";
-    const existing = new Set(this.plugin.settings.customThemes.map((theme) => theme.name.toLocaleLowerCase()));
-    if (!existing.has(base.toLocaleLowerCase())) {
-      return base;
-    }
-    let index = 2;
-    while (existing.has(`${base} ${index}`.toLocaleLowerCase())) {
-      index += 1;
-    }
-    return `${base} ${index}`;
   }
 
   private addNumericSetting(
@@ -458,27 +361,6 @@ export class ArborSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             const nextValue = key === "zoomLevel" ? value / 100 : value;
             this.plugin.settings[key] = nextValue;
-            await this.plugin.saveSettings();
-            this.plugin.refreshAllBranchViews();
-          })
-      );
-  }
-
-  private addThemeColorSetting(
-    container: HTMLElement,
-    theme: ArborSavedTheme,
-    name: string,
-    description: string,
-    key: keyof ArborCustomTheme
-  ): void {
-    new Setting(container)
-      .setName(name)
-      .setDesc(description)
-      .addColorPicker((picker) =>
-        picker
-          .setValue(theme.palette[key])
-          .onChange(async (value) => {
-            theme.palette[key] = value;
             await this.plugin.saveSettings();
             this.plugin.refreshAllBranchViews();
           })
