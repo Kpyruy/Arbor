@@ -128,6 +128,52 @@ export function cloneThemeState(state: ArborThemeState): ArborThemeState {
   };
 }
 
+export function applyThemeSelection(state: ArborThemeState, themeId: string): ArborThemeState {
+  const next = cloneThemeState(state);
+  next.activeThemeId = isAvailableThemeId(themeId, next.customThemes)
+    ? themeId
+    : AUTOMATIC_THEME_ID;
+  return next;
+}
+
+export function saveCustomTheme(state: ArborThemeState, theme: ArborSavedTheme): ArborThemeState {
+  const next = cloneThemeState(state);
+  const saved = { ...theme, palette: { ...theme.palette } };
+  const index = next.customThemes.findIndex((candidate) => candidate.id === saved.id);
+  if (index >= 0) {
+    next.customThemes[index] = saved;
+  } else {
+    next.customThemes.push(saved);
+  }
+  return next;
+}
+
+export function deleteCustomTheme(state: ArborThemeState, themeId: string): ArborThemeState {
+  const next = cloneThemeState(state);
+  next.customThemes = next.customThemes.filter((theme) => theme.id !== themeId);
+  if (next.activeThemeId === themeId) {
+    next.activeThemeId = AUTOMATIC_THEME_ID;
+  }
+  return next;
+}
+
+export function hasUnsavedThemeDraft(
+  original: ArborSavedTheme | null,
+  draft: ArborSavedTheme | null
+): boolean {
+  if (!draft) {
+    return false;
+  }
+  if (!original) {
+    return true;
+  }
+  if (original.id !== draft.id || original.name !== draft.name) {
+    return true;
+  }
+  return (Object.keys(original.palette) as Array<keyof ArborCustomTheme>)
+    .some((key) => original.palette[key] !== draft.palette[key]);
+}
+
 export function resolveArborThemeVariables(
   themeId: string,
   customThemes: readonly ArborSavedTheme[]
@@ -141,7 +187,10 @@ export function resolveArborThemeVariables(
     return {};
   }
 
-  const { palette } = theme;
+  return resolveArborPaletteVariables(theme.palette);
+}
+
+export function resolveArborPaletteVariables(palette: ArborCustomTheme): Record<string, string> {
   return {
     "--background-primary": palette.canvas,
     "--background-secondary": palette.card,

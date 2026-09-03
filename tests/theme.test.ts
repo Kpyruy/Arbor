@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   BUILT_IN_THEMES,
+  applyThemeSelection,
   cloneThemeState,
   DEFAULT_CUSTOM_THEME,
+  deleteCustomTheme,
+  hasUnsavedThemeDraft,
   normalizeThemeSettings,
-  resolveArborThemeVariables
+  resolveArborThemeVariables,
+  saveCustomTheme
 } from "../src/theme";
 
 describe("Arbor theme presets", () => {
@@ -69,6 +73,53 @@ describe("Arbor theme presets", () => {
 
     expect(source.customThemes[0].palette.accent).toBe(DEFAULT_CUSTOM_THEME.accent);
     expect(draft.customThemes[0].palette.accent).toBe("#ff00aa");
+  });
+
+  it("saves an edited preset without applying it", () => {
+    const state = {
+      activeThemeId: "builtin:paper",
+      customThemes: [{
+        id: "custom:violet",
+        name: "Violet",
+        palette: { ...DEFAULT_CUSTOM_THEME }
+      }]
+    };
+    const edited = {
+      ...state.customThemes[0],
+      palette: { ...state.customThemes[0].palette, accent: "#ff00aa" }
+    };
+    const saved = saveCustomTheme(state, edited);
+
+    expect(saved.activeThemeId).toBe("builtin:paper");
+    expect(saved.customThemes[0].palette.accent).toBe("#ff00aa");
+    expect(state.customThemes[0].palette.accent).toBe(DEFAULT_CUSTOM_THEME.accent);
+  });
+
+  it("applies and deletes themes independently", () => {
+    const state = {
+      activeThemeId: "automatic",
+      customThemes: [{
+        id: "custom:violet",
+        name: "Violet",
+        palette: { ...DEFAULT_CUSTOM_THEME }
+      }]
+    };
+    expect(applyThemeSelection(state, "custom:violet").activeThemeId).toBe("custom:violet");
+    expect(deleteCustomTheme(applyThemeSelection(state, "custom:violet"), "custom:violet")).toEqual({
+      activeThemeId: "automatic",
+      customThemes: []
+    });
+  });
+
+  it("prompts only when a theme editor contains unsaved changes", () => {
+    const saved = {
+      id: "custom:violet",
+      name: "Violet",
+      palette: { ...DEFAULT_CUSTOM_THEME }
+    };
+    expect(hasUnsavedThemeDraft(saved, { ...saved, palette: { ...saved.palette } })).toBe(false);
+    expect(hasUnsavedThemeDraft(saved, { ...saved, palette: { ...saved.palette, accent: "#ff00aa" } })).toBe(true);
+    expect(hasUnsavedThemeDraft(null, saved)).toBe(true);
   });
 
   it("migrates an active legacy Custom palette into My theme", () => {

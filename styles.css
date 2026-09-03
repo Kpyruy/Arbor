@@ -601,7 +601,7 @@
 
 .arbor-theme-studio-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -632,6 +632,17 @@
 .arbor-theme-studio-card.is-selected {
   border-color: var(--interactive-accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+}
+
+.arbor-theme-studio-card.is-active-theme .arbor-theme-studio-card-kind {
+  color: var(--interactive-accent);
+  font-weight: 650;
+}
+
+.arbor-theme-studio-card:disabled {
+  cursor: default;
+  opacity: 0.58;
+  transform: none;
 }
 
 .arbor-theme-studio-card-visual {
@@ -686,6 +697,13 @@
   border-top: 1px solid var(--background-modifier-border);
 }
 
+.arbor-theme-studio-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 .arbor-theme-studio-footer {
   position: sticky;
   bottom: -1px;
@@ -698,6 +716,10 @@
 }
 
 @media (max-width: 700px) {
+  .arbor-theme-studio-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .arbor-theme-studio-preview-tree {
     flex-direction: column;
     gap: 10px;
@@ -706,6 +728,12 @@
   .arbor-theme-studio-preview-connector {
     width: 1px;
     height: 28px;
+  }
+}
+
+@media (max-width: 460px) {
+  .arbor-theme-studio-grid {
+    grid-template-columns: 1fr;
   }
 }
 
