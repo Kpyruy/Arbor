@@ -76,6 +76,7 @@ import { buildSinglePageTreeOverviewPdf } from "../treeOverviewPdf";
 import { getBreadcrumbScrollInsets, getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey, getVisualBreadcrumbOrder } from "../layoutDirection";
 import { buildOverviewLayout, buildOverviewLinkPath } from "../model/overviewLayout";
 import { resolveOverviewArrowTarget } from "../overviewNavigation";
+import { resolveColumnWheelTarget } from "../columnWheelNavigation";
 import { ARBOR_THEME_VARIABLES, resolveArborThemeVariables } from "../theme";
 import {
   canDragCard,
@@ -4379,15 +4380,23 @@ export class ArborView extends FileView {
       return;
     }
 
+    const hoveredColumn = this.getColumnAtPointerX(event.clientX);
     const wheelNavigation = resolveColumnWheelNavigation(
       event.deltaX,
       event.deltaY,
       event.ctrlKey,
       event.metaKey,
-      this.isPointerOverColumn(event.clientX)
+      hoveredColumn !== null
     );
     if (wheelNavigation) {
       event.preventDefault();
+      const columnTarget = this.state && hoveredColumn
+        ? resolveColumnWheelTarget(this.state.metadata, this.state.selectedBlockId, hoveredColumn)
+        : null;
+      if (columnTarget) {
+        this.selectBlock(columnTarget, { focus: true });
+        return;
+      }
       if (wheelNavigation === "previous") {
         this.selectPreviousSiblingBlock();
       } else {
@@ -4411,11 +4420,14 @@ export class ArborView extends FileView {
     });
   }
 
-  private isPointerOverColumn(clientX: number): boolean {
-    return [...this.columnElementMap.values()].some((column) => {
-      const bounds = column.getBoundingClientRect();
-      return clientX >= bounds.left && clientX <= bounds.right;
-    });
+  private getColumnAtPointerX(clientX: number): BranchColumnModel | null {
+    for (const [columnKey, columnEl] of this.columnElementMap) {
+      const bounds = columnEl.getBoundingClientRect();
+      if (clientX >= bounds.left && clientX <= bounds.right) {
+        return this.currentColumnMap.get(columnKey) ?? null;
+      }
+    }
+    return null;
   }
 
   private syncViewportEdgeFades(): void {
