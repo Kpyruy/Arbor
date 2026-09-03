@@ -27,6 +27,23 @@ export function hasVerticalOverflow(scrollHeight: number, clientHeight: number):
   return scrollHeight > clientHeight;
 }
 
+export function isWithinHorizontalBounds(clientX: number, left: number, right: number): boolean {
+  return clientX >= left && clientX <= right;
+}
+
+export function resolveViewportWheelAxis(
+  deltaX: number,
+  deltaY: number,
+  ctrlKey: boolean,
+  metaKey: boolean,
+  isPointerOverColumn: boolean
+): "vertical" | "horizontal" | null {
+  if (ctrlKey || metaKey || Math.abs(deltaY) <= Math.abs(deltaX)) {
+    return null;
+  }
+  return isPointerOverColumn ? "vertical" : "horizontal";
+}
+
 export function clampCardCenter(preferredCenter: number, cardHeight: number, viewportTop: number, viewportHeight: number): number {
   const halfHeight = Math.min(cardHeight / 2, Math.max(0, viewportHeight / 2 - CARD_VIEWPORT_EDGE_PADDING_PX));
   const minimum = viewportTop + CARD_VIEWPORT_EDGE_PADDING_PX + halfHeight;

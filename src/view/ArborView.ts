@@ -83,7 +83,9 @@ import {
   CARD_PREVIEW_MAX_HEIGHT_PX,
   clampCardCenter,
   hasVerticalOverflow,
+  isWithinHorizontalBounds,
   reserveSceneWidthForColumns,
+  resolveViewportWheelAxis,
   resolveEditorHeight
 } from "../cardViewport";
 import { toBlob } from "html-to-image";
@@ -4378,7 +4380,20 @@ export class ArborView extends FileView {
       return;
     }
 
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || event.ctrlKey || event.metaKey) {
+    const wheelAxis = resolveViewportWheelAxis(
+      event.deltaX,
+      event.deltaY,
+      event.ctrlKey,
+      event.metaKey,
+      this.isPointerOverColumn(event.clientX)
+    );
+    if (!wheelAxis) {
+      return;
+    }
+
+    if (wheelAxis === "vertical") {
+      event.preventDefault();
+      viewport.scrollBy({ top: event.deltaY, behavior: "auto" });
       return;
     }
 
@@ -4390,6 +4405,13 @@ export class ArborView extends FileView {
     viewport.scrollBy({
       left: getHorizontalWheelDelta(event.deltaY, this.plugin.settings.layoutDirection),
       behavior: "auto"
+    });
+  }
+
+  private isPointerOverColumn(clientX: number): boolean {
+    return [...this.columnElementMap.values()].some((column) => {
+      const bounds = column.getBoundingClientRect();
+      return isWithinHorizontalBounds(clientX, bounds.left, bounds.right);
     });
   }
 

@@ -6,6 +6,8 @@ import {
   canStartCardDrag,
   clampCardCenter,
   hasVerticalOverflow,
+  isWithinHorizontalBounds,
+  resolveViewportWheelAxis,
   reserveSceneWidthForColumns,
   resolveEditorHeight
 } from "../src/cardViewport";
@@ -35,6 +37,20 @@ describe("bounded Arbor card viewport rules", () => {
   it("marks only content taller than its preview as truncated", () => {
     expect(hasVerticalOverflow(260, 260)).toBe(false);
     expect(hasVerticalOverflow(261, 260)).toBe(true);
+  });
+
+  it("detects pointer positions that fall inside a card column", () => {
+    expect(isWithinHorizontalBounds(120, 120, 420)).toBe(true);
+    expect(isWithinHorizontalBounds(420, 120, 420)).toBe(true);
+    expect(isWithinHorizontalBounds(119.9, 120, 420)).toBe(false);
+    expect(isWithinHorizontalBounds(420.1, 120, 420)).toBe(false);
+  });
+
+  it("routes a vertical wheel to the column under the pointer", () => {
+    expect(resolveViewportWheelAxis(0, 120, false, false, true)).toBe("vertical");
+    expect(resolveViewportWheelAxis(0, 120, false, false, false)).toBe("horizontal");
+    expect(resolveViewportWheelAxis(120, 30, false, false, true)).toBeNull();
+    expect(resolveViewportWheelAxis(0, 120, true, false, true)).toBeNull();
   });
 
   it("clamps a card center inside canvas safety bounds", () => {
