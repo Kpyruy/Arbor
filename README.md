@@ -19,7 +19,7 @@ The core idea:
 - reorganize ideas without copy-paste chaos
 - stay inside one note instead of splitting thoughts across many files
 
-Arbor is desktop-only. It currently requires Obsidian `>= 1.5.12` and was tested on Obsidian `1.12.4`.
+Arbor is desktop-only. It currently requires Obsidian `>= 1.7.2` and was tested on Obsidian `1.12.4`.
 
 ## Why Arbor
 
@@ -48,6 +48,9 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Search overlay for block-level search
 - Zoom, breadcrumbs, view menu, and context menus
 - Whole-tree Overview map with connected, fully rendered Markdown cards
+- Tree Overview export as a PNG or one-page PDF
+- Automatic and custom palettes through Theme Studio
+- Mouse-wheel navigation through sibling blocks and visible branch columns
 - Auto-open managed Arbor notes in Arbor view
 - File Explorer labels that mark managed notes with `ARBOR`
 - Clean Markdown export copies with an optional YAML frontmatter
@@ -148,11 +151,12 @@ Notes:
 | `Ctrl/Cmd + Z` | Undo the last Arbor structural/content change |
 | `Ctrl/Cmd + Shift + Z` | Redo the last undone Arbor change |
 | `Ctrl/Cmd + Mouse wheel` | Zoom the scene if zoom is enabled in settings |
+| Mouse wheel over a branch column | Move through sibling blocks, or enter the visible parent/child column under the pointer |
 | Click zoom indicator | Reset zoom to `100%` |
 
 ### Tree overview
 
-Use **Tree overview** from the view menu or Command Palette to see every block in one connected map. Drag empty space to pan; Ctrl/Cmd + mouse wheel changes zoom. Cards render normal Obsidian Markdown and grow to fit their content. Select a card, then press `Enter` or double-click it to edit directly in place. Overview always shows collapsed descendants and does not support drag-and-drop reparenting.
+Use **Tree overview** from the view menu or Command Palette to see every block in one connected map. Drag empty space to pan; Ctrl/Cmd + mouse wheel changes zoom. Cards render normal Obsidian Markdown and grow to fit their content. Select a card, then press `Enter` or double-click it to edit directly in place; Arbor smoothly reveals the editor when it is outside the viewport. Export the whole map as a PNG or one-page PDF from the overview menu. Overview always shows collapsed descendants and does not support drag-and-drop reparenting.
 
 ## Command Palette Actions
 
@@ -211,6 +215,7 @@ Current menu actions:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
+| Theme | `Automatic` | Follow Obsidian, choose a built-in palette, or open Theme Studio for custom themes |
 | Layout direction | `Left to right` | Choose which physical side the root starts on; right-to-left also mirrors directional navigation and controls |
 | Default opening mode | `Branch editor` | Choose whether Arbor notes open in the branch editor or Tree Overview |
 | Split direction | `Vertical split` | Where Arbor opens relative to the current note |

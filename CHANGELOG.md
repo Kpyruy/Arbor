@@ -2,6 +2,24 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## 0.2.7 - 2026-09-03
+
+### Added
+
+- exported the complete Tree Overview as a PNG or a single-page PDF with Standard (1×), High (2×) and Ultra (4×) quality
+- added Theme Studio with Automatic mode, Midnight, Paper, Forest and Rose presets, plus saved custom themes
+- added mouse-wheel navigation through sibling blocks and visible parent/child branch columns
+
+### Changed
+
+- moved custom-theme editing into its own live-preview modal, with explicit save, cancel and delete confirmation flows
+- Tree Overview now opens editing with Enter or double-click and smoothly reveals an off-screen edited card
+
+### Fixed
+
+- kept the Tree Overview camera stable while opening, saving or cancelling an in-place edit
+- kept breadcrumbs clear of the complete editor toolbar
+
 ## 0.2.6 - 2026-08-16
 
 ### Added
