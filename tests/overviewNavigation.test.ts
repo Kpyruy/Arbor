@@ -107,6 +107,9 @@ describe("overview arrow navigation", () => {
     const cancelStart = source.indexOf("private cancelEditingSession");
     const cancelEnd = source.indexOf("private async commitEditingSession", cancelStart);
     const cancelEditing = source.slice(cancelStart, cancelEnd);
+    const inPlaceStart = source.indexOf("private openOverviewEditorInPlace");
+    const inPlaceEnd = source.indexOf("private async restoreOverviewCardContentInPlace", inPlaceStart);
+    const inPlaceEditor = source.slice(inPlaceStart, inPlaceEnd);
 
     expect(overview).toContain('this.selectBlock(node.id, { focus: false, reveal: false })');
     expect(overview).toContain('this.beginEditingBlock(node.id, "overview")');
@@ -116,6 +119,7 @@ describe("overview arrow navigation", () => {
     expect(beginEditing).toContain('origin === "overview"');
     expect(beginEditing).toContain("this.preserveOverviewViewportPosition()");
     expect(beginEditing).toContain("this.openOverviewEditorInPlace(block)");
+    expect(inPlaceEditor).toContain("this.revealOverviewSelectedCard(card)");
     expect(commitEditing).toContain("this.restoreOverviewCardContentInPlace(session.blockId)");
     expect(cancelEditing).toContain("this.restoreOverviewCardContentInPlace(session.blockId)");
     expect(source).toContain("private restoreOverviewViewportPosition");

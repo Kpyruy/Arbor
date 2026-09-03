@@ -2500,6 +2500,7 @@ export class ArborView extends FileView {
       editor.focus({ preventScroll: true });
       editor.setSelectionRange(editor.value.length, editor.value.length);
       this.resizeEditor(editor);
+      this.revealOverviewSelectedCard(card);
       session.autofocus = false;
     });
     return true;
