@@ -10,13 +10,12 @@ export interface BranchCardInteraction {
   preserveDefault: boolean;
 }
 
-interface ClosestTarget extends EventTarget {
-  closest?: (selector: string) => unknown;
+function hasClosest(target: EventTarget | null): target is EventTarget & { closest: (selector: string) => unknown } {
+  return target !== null && "closest" in target && typeof target.closest === "function";
 }
 
 function isMarkdownLinkTarget(target: EventTarget | null): boolean {
-  const candidate = target as ClosestTarget | null;
-  return typeof candidate?.closest === "function" && candidate.closest("a") !== null;
+  return hasClosest(target) && target.closest("a") !== null;
 }
 
 export function resolveBranchCardInteraction({

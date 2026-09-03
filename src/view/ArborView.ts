@@ -912,13 +912,9 @@ export class ArborView extends FileView {
     }
 
     const style = resolveTreeOverviewExportLinkStyle(textMuted);
-    surface.querySelectorAll<SVGPathElement>(".arbor-overview-link").forEach((link) => {
-      link.setCssProps({
-        fill: style.fill,
-        stroke: style.stroke,
-        "stroke-opacity": style.opacity,
-        "vector-effect": "none"
-      });
+    surface.setCssProps({
+      "--arbor-tree-export-link-stroke": style.stroke,
+      "--arbor-tree-export-link-opacity": style.opacity
     });
   }
 

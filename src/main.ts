@@ -121,7 +121,7 @@ export default class ArborPlugin extends Plugin {
     const raw: unknown = await this.loadData();
     this.isFreshPluginInstall = raw === null || raw === undefined;
     const payload = this.normalizePluginData(raw);
-    const themeSettings = normalizeThemeSettings(payload.settings as unknown as Record<string, unknown>);
+    const themeSettings = normalizeThemeSettings(payload.settings);
     const settings = {
       ...DEFAULT_SETTINGS,
       ...payload.settings,

@@ -986,6 +986,13 @@
   vector-effect: non-scaling-stroke;
 }
 
+.arbor-tree-overview-export .arbor-overview-link {
+  fill: none;
+  stroke: var(--arbor-tree-export-link-stroke, var(--text-muted));
+  stroke-opacity: var(--arbor-tree-export-link-opacity, 0.52);
+  vector-effect: none;
+}
+
 .arbor-overview-card {
   position: absolute;
   left: var(--arbor-overview-x, 0px);

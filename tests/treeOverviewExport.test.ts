@@ -43,7 +43,6 @@ describe("Tree Overview export", () => {
 
   it("uses an explicit theme color for export connectors instead of CSS color mixing", () => {
     expect(resolveTreeOverviewExportLinkStyle("#b3b3b3")).toEqual({
-      fill: "none",
       opacity: "0.52",
       stroke: "#b3b3b3"
     });
