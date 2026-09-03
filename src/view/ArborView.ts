@@ -420,6 +420,7 @@ export class ArborView extends FileView {
   private shouldSnapViewportAfterDirectionChange = false;
   private shouldCenterOverviewOnNextRender = false;
   private shouldRestoreOverviewKeyboardFocusAfterMutation = false;
+  private pendingOverviewViewportPosition: { left: number; top: number } | null = null;
   private overviewRenderVersion = 0;
   private isExportingTreeOverview = false;
   private overviewPanState: {
@@ -516,6 +517,7 @@ export class ArborView extends FileView {
     this.loadingState = null;
     this.presentationMode = "editor";
     this.cleanupOverviewPan();
+    this.pendingOverviewViewportPosition = null;
     this.teardownShell();
   }
 
@@ -956,7 +958,7 @@ export class ArborView extends FileView {
     });
   }
 
-  selectBlock(blockId: BranchBlockId | null, options?: { focus?: boolean }): void {
+  selectBlock(blockId: BranchBlockId | null, options?: { focus?: boolean; reveal?: boolean }): void {
     if (!this.state) {
       return;
     }
@@ -989,7 +991,7 @@ export class ArborView extends FileView {
       this.syncBreadcrumbs();
       this.viewContext = this.buildViewContext();
       this.syncSearchOverlay(this.viewContext);
-      this.syncOverviewSelection(selectionChanged);
+      this.syncOverviewSelection(selectionChanged && options?.reveal !== false);
       return;
     }
 
@@ -1198,6 +1200,9 @@ export class ArborView extends FileView {
     }
 
     this.stopHorizontalScrollMotion();
+    if (origin === "overview") {
+      this.preserveOverviewViewportPosition();
+    }
     this.state.selectedBlockId = nextSelectedBlockId;
     this.pendingFocusBlockId = nextSelectedBlockId;
     this.editingSession = {
@@ -2372,7 +2377,7 @@ export class ArborView extends FileView {
         this.resizeEditor(editor);
         if (this.editingSession?.autofocus) {
           window.requestAnimationFrame(() => {
-            editor.focus();
+            editor.focus({ preventScroll: true });
             editor.setSelectionRange(editor.value.length, editor.value.length);
             this.resizeEditor(editor);
             if (this.editingSession) {
@@ -2396,7 +2401,7 @@ export class ArborView extends FileView {
         if ((event.target as HTMLElement).closest("a, button, input, textarea")) {
           return;
         }
-        this.selectBlock(node.id, { focus: false });
+        this.selectBlock(node.id, { focus: false, reveal: false });
       });
       card.addEventListener("dblclick", (event) => {
         event.stopPropagation();
@@ -2440,6 +2445,7 @@ export class ArborView extends FileView {
     this.overviewSurfaceEl = surface;
 
     viewport.toggleClass("is-zoomed-out", zoom < 0.78);
+    this.restoreOverviewViewportPosition();
     if (this.shouldCenterOverviewOnNextRender) {
       this.shouldCenterOverviewOnNextRender = false;
       window.requestAnimationFrame(() => this.centerOverviewOnSelectedBlock());
@@ -2569,6 +2575,12 @@ export class ArborView extends FileView {
     }
 
     if (this.tryHandleNumericChildNavigation(event, this.state.selectedBlockId)) {
+      return;
+    }
+
+    if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+      event.preventDefault();
+      this.beginEditingBlock(this.state.selectedBlockId, "overview");
       return;
     }
 
@@ -2714,6 +2726,29 @@ export class ArborView extends FileView {
     this.pendingFocusBlockId = null;
     window.requestAnimationFrame(() => {
       this.overviewViewportEl?.focus({ preventScroll: true });
+    });
+  }
+
+  private preserveOverviewViewportPosition(): void {
+    const viewport = this.overviewViewportEl;
+    if (!viewport) {
+      return;
+    }
+    viewport.scrollTo({ left: viewport.scrollLeft, top: viewport.scrollTop, behavior: "auto" });
+    this.pendingOverviewViewportPosition = { left: viewport.scrollLeft, top: viewport.scrollTop };
+  }
+
+  private restoreOverviewViewportPosition(): void {
+    const viewport = this.overviewViewportEl;
+    const position = this.pendingOverviewViewportPosition;
+    if (!viewport || !position) {
+      return;
+    }
+    this.pendingOverviewViewportPosition = null;
+    viewport.scrollTo({
+      left: Math.max(0, Math.min(position.left, viewport.scrollWidth - viewport.clientWidth)),
+      top: Math.max(0, Math.min(position.top, viewport.scrollHeight - viewport.clientHeight)),
+      behavior: "auto"
     });
   }
 
@@ -4032,6 +4067,9 @@ export class ArborView extends FileView {
 
   private cancelEditingSession(): void {
     this.clearBlurCommitTimer();
+    if (this.editingSession?.origin === "overview") {
+      this.preserveOverviewViewportPosition();
+    }
     this.pendingFocusBlockId = this.state?.selectedBlockId ?? null;
     this.editingSession = null;
     this.render();
@@ -4043,6 +4081,10 @@ export class ArborView extends FileView {
     }
 
     this.clearBlurCommitTimer();
+
+    if (session.origin === "overview") {
+      this.preserveOverviewViewportPosition();
+    }
 
     const { blockId, value } = session;
     if (value === session.originalContent) {
