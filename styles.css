@@ -1862,6 +1862,18 @@
   color: var(--text-error);
 }
 
+.arbor-theme-studio-menu-apply .menu-item-title,
+.arbor-theme-studio-menu-apply .menu-item-icon,
+.arbor-theme-studio-menu-apply .menu-item-icon svg {
+  color: var(--arbor-theme-studio-menu-accent, var(--interactive-accent));
+}
+
+.arbor-theme-studio-menu-danger .menu-item-title,
+.arbor-theme-studio-menu-danger .menu-item-icon,
+.arbor-theme-studio-menu-danger .menu-item-icon svg {
+  color: var(--text-error);
+}
+
 .arbor-clean-export-choices {
   display: grid;
   gap: 8px;

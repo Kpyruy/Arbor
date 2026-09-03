@@ -27,4 +27,19 @@ describe("Theme Studio preview", () => {
     expect(styles).toContain(".arbor-theme-studio-preview-connector::after");
     expect(styles).toContain(".arbor-theme-studio-preview-branches .arbor-theme-studio-preview-node::before");
   });
+
+  it("puts Apply and Edit ahead of duplication and marks deletion as dangerous", () => {
+    const studio = readProjectFile("src/themeStudio.ts");
+    const styles = readProjectFile("styles.css");
+    const menuStart = studio.indexOf("private openThemeMenu");
+    const menuEnd = studio.indexOf("private renderPreview", menuStart);
+    const menu = studio.slice(menuStart, menuEnd);
+
+    expect(menu.indexOf('setTitle("Apply theme")')).toBeLessThan(menu.indexOf('setTitle("Edit theme")'));
+    expect(menu.indexOf('setTitle("Edit theme")')).toBeLessThan(menu.indexOf('setTitle("Duplicate theme")'));
+    expect(menu).toContain('setTitle("Delete theme")\n          .setIcon("trash-2")\n          .setWarning(true)');
+    expect(menu).toContain("this.styleThemeMenu(menu, theme.palette.accent)");
+    expect(styles).toContain(".arbor-theme-studio-menu-apply");
+    expect(styles).toContain(".arbor-theme-studio-menu-danger");
+  });
 });

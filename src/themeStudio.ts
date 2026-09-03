@@ -183,6 +183,11 @@ export class ThemeStudioModal extends Modal {
     menu.addItem((item) =>
       item.setTitle("Apply theme").setIcon("check").onClick(() => void this.applyTheme(theme.id))
     );
+    if (theme.id.startsWith("custom:")) {
+      menu.addItem((item) =>
+        item.setTitle("Edit theme").setIcon("pencil").onClick(() => this.editTheme(theme))
+      );
+    }
     if (theme.id !== AUTOMATIC_THEME_ID) {
       menu.addItem((item) =>
         item.setTitle("Duplicate theme").setIcon("copy").onClick(() => this.createThemeDraft(theme, `${theme.name} copy`))
@@ -190,16 +195,36 @@ export class ThemeStudioModal extends Modal {
     }
     if (theme.id.startsWith("custom:")) {
       menu.addItem((item) =>
-        item.setTitle("Edit theme").setIcon("pencil").onClick(() => this.editTheme(theme))
-      );
-      menu.addItem((item) =>
         item
           .setTitle("Delete theme")
           .setIcon("trash-2")
+          .setWarning(true)
           .onClick(() => this.confirmDelete(theme))
       );
     }
     menu.showAtMouseEvent(event);
+    this.styleThemeMenu(menu, theme.palette.accent);
+  }
+
+  private styleThemeMenu(menu: Menu, accent: string): void {
+    const menuWithDom = menu as Menu & { dom?: HTMLElement };
+    window.requestAnimationFrame(() => {
+      const menuEl = menuWithDom.dom;
+      if (!menuEl) {
+        return;
+      }
+
+      menuEl.setCssProps({ "--arbor-theme-studio-menu-accent": accent });
+      menuEl.querySelectorAll<HTMLElement>(".menu-item-title").forEach((titleEl) => {
+        const itemEl = titleEl.closest(".menu-item");
+        if (titleEl.textContent?.trim() === "Apply theme") {
+          itemEl?.addClass("arbor-theme-studio-menu-apply");
+        }
+        if (titleEl.textContent?.trim() === "Delete theme") {
+          itemEl?.addClass("arbor-theme-studio-menu-danger");
+        }
+      });
+    });
   }
 
   private renderPreview(): void {
@@ -333,7 +358,7 @@ export class ThemeStudioModal extends Modal {
     new ThemeStudioConfirmModal(
       this.app,
       "Delete theme?",
-      `Delete “${theme.name}”? This cannot be undone after confirmation.`,
+      `Are you sure you want to delete “${theme.name}”? This cannot be undone.`,
       "Delete theme",
       async () => {
         this.state = cloneThemeState(await this.controller.deleteTheme(theme.id));
