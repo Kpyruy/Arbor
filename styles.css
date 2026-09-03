@@ -77,8 +77,8 @@
   content: "";
   position: absolute;
   z-index: 1;
-  top: 2px;
-  right: 208px;
+  top: 0;
+  right: 196px;
   width: 1px;
   height: 32px;
   pointer-events: none;
@@ -87,7 +87,7 @@
 
 .arbor-view.is-rtl .arbor-frame::before {
   right: auto;
-  left: 208px;
+  left: 196px;
 }
 
 .workspace-leaf.is-arbor-auto-opening-source {

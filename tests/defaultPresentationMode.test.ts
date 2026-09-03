@@ -82,7 +82,8 @@ describe("default presentation mode", () => {
     expect(rtlBreadcrumbs).toContain("margin-left: 208px;");
     expect(styles).not.toContain("clip-path:");
     expect(styles).not.toContain(".arbor-breadcrumbs::after");
-    expect(styles).toContain(".arbor-frame::before {\n  content: \"\";\n  position: absolute;\n  z-index: 1;\n  top: 2px;\n  right: 208px;");
+    expect(styles).toContain(".arbor-frame::before {\n  content: \"\";\n  position: absolute;\n  z-index: 1;\n  top: 0;\n  right: 196px;");
+    expect(styles).toContain(".arbor-view.is-rtl .arbor-frame::before {\n  right: auto;\n  left: 196px;");
   });
 
   it("animates only the newly active breadcrumb", () => {
