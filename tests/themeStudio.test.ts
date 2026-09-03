@@ -20,7 +20,7 @@ describe("Theme Studio preview", () => {
     const studio = readProjectFile("src/themeStudio.ts");
     const styles = readProjectFile("styles.css");
     const previewStart = studio.indexOf("private renderPreview()");
-    const previewEnd = studio.indexOf("private renderEditor", previewStart);
+    const previewEnd = studio.indexOf("private renderFooter", previewStart);
     const preview = studio.slice(previewStart, previewEnd);
 
     expect(preview).toContain('tree.createSvg("svg", {');
@@ -51,6 +51,18 @@ describe("Theme Studio preview", () => {
 
     expect(studio).toContain('this.modalEl.addClass("arbor-theme-studio-confirm-modal")');
     expect(styles).toContain(".arbor-theme-studio-confirm-modal {");
+    expect(styles).toContain("width: min(360px, calc(100vw - 32px))");
     expect(styles).toContain(".arbor-theme-studio-confirm-modal .modal-content");
+  });
+
+  it("opens custom-theme editing in a separate modal instead of expanding the studio", () => {
+    const studio = readProjectFile("src/themeStudio.ts");
+    const styles = readProjectFile("styles.css");
+
+    expect(studio).toContain("class ThemeEditorModal extends Modal");
+    expect(studio).toContain("this.openThemeEditor(theme)");
+    expect(studio).toContain("this.openThemeEditor(null)");
+    expect(studio).not.toContain("private renderEditor(container: HTMLElement)");
+    expect(styles).toContain(".arbor-theme-studio-editor-modal {");
   });
 });

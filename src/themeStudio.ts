@@ -58,13 +58,153 @@ class ThemeStudioConfirmModal extends Modal {
   }
 }
 
+interface ThemeEditorController {
+  theme: ArborSavedTheme;
+  isNewTheme: boolean;
+  saveTheme: (theme: ArborSavedTheme) => Promise<void>;
+  closed: () => void;
+}
+
+class ThemeEditorModal extends Modal {
+  private readonly original: ArborSavedTheme | null;
+  private readonly draft: ArborSavedTheme;
+  private previewEl: HTMLElement | null = null;
+  private forceClose = false;
+  private confirmationOpen = false;
+
+  constructor(app: App, private readonly controller: ThemeEditorController) {
+    super(app);
+    this.original = controller.isNewTheme ? null : cloneSavedTheme(controller.theme);
+    this.draft = cloneSavedTheme(controller.theme);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("arbor-theme-studio-editor-modal");
+    this.render();
+  }
+
+  dismissImmediately(): void {
+    this.forceClose = true;
+    super.close();
+  }
+
+  override close(): void {
+    if (!this.forceClose && hasUnsavedThemeDraft(this.original, this.draft)) {
+      this.confirmDiscardAndClose();
+      return;
+    }
+    super.close();
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    this.controller.closed();
+  }
+
+  private render(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: this.original ? "Edit custom theme" : "Create custom theme" });
+
+    this.previewEl = contentEl.createDiv({ cls: "arbor-theme-studio-editor-preview" });
+    this.renderPreview();
+
+    new Setting(contentEl)
+      .setName("Theme name")
+      .addText((text) =>
+        text.setValue(this.draft.name).onChange((value) => {
+          this.draft.name = value;
+          this.renderPreview();
+        })
+      );
+    this.addColorSetting(contentEl, "Canvas", "canvas");
+    this.addColorSetting(contentEl, "Card surface", "card");
+    this.addColorSetting(contentEl, "Text", "text");
+    this.addColorSetting(contentEl, "Muted text", "muted");
+    this.addColorSetting(contentEl, "Accent", "accent");
+
+    const actions = contentEl.createDiv({ cls: "arbor-theme-studio-editor-actions" });
+    new ButtonComponent(actions).setButtonText("Cancel").onClick(() => this.close());
+    new ButtonComponent(actions)
+      .setButtonText("Save changes")
+      .setCta()
+      .onClick(() => void this.saveChanges());
+  }
+
+  private renderPreview(): void {
+    const preview = this.previewEl;
+    if (!preview) {
+      return;
+    }
+    preview.empty();
+    applyPaletteVariables(preview, this.draft.palette);
+    const card = preview.createDiv({ cls: "arbor-theme-studio-editor-preview-card" });
+    card.createEl("strong", { text: this.draft.name.trim() || "Untitled theme" });
+    const swatches = preview.createDiv({ cls: "arbor-theme-studio-editor-preview-swatches" });
+    (Object.keys(this.draft.palette) as Array<keyof ArborCustomTheme>).forEach((key) => {
+      const swatch = swatches.createSpan({ attr: { "aria-label": key } });
+      swatch.setCssProps({ "--arbor-theme-editor-swatch": this.draft.palette[key] });
+    });
+  }
+
+  private addColorSetting(container: HTMLElement, name: string, key: keyof ArborCustomTheme): void {
+    new Setting(container)
+      .setName(name)
+      .addColorPicker((picker) =>
+        picker.setValue(this.draft.palette[key]).onChange((value) => {
+          this.draft.palette[key] = value;
+          this.renderPreview();
+        })
+      );
+  }
+
+  private async saveChanges(): Promise<void> {
+    if (!this.draft.name.trim()) {
+      return;
+    }
+    this.draft.name = this.draft.name.trim();
+    await this.controller.saveTheme(cloneSavedTheme(this.draft));
+    this.forceClose = true;
+    super.close();
+  }
+
+  private confirmDiscardAndClose(): void {
+    if (this.confirmationOpen) {
+      return;
+    }
+    this.confirmationOpen = true;
+    new ThemeStudioConfirmModal(
+      this.app,
+      "Theme has unsaved changes",
+      "Leave Theme editor without saving? Your latest edits will be discarded.",
+      "Leave without saving",
+      () => {
+        this.forceClose = true;
+        super.close();
+      },
+      () => {
+        this.confirmationOpen = false;
+      }
+    ).open();
+  }
+}
+
+function cloneSavedTheme(theme: ArborSavedTheme): ArborSavedTheme {
+  return { ...theme, palette: { ...theme.palette } };
+}
+
+function applyPaletteVariables(element: HTMLElement, palette: ArborCustomTheme): void {
+  const variables = resolveArborPaletteVariables(palette);
+  element.setCssProps(Object.fromEntries(
+    ARBOR_THEME_VARIABLES.map((name) => [name, variables[name] ?? ""])
+  ));
+}
+
 export class ThemeStudioModal extends Modal {
   private state: ArborThemeState;
   private previewThemeId: string;
-  private editorOriginal: ArborSavedTheme | null = null;
-  private editorDraft: ArborSavedTheme | null = null;
   private previewEl: HTMLElement | null = null;
-  private forceClose = false;
+  private editorModal: ThemeEditorModal | null = null;
   private confirmationOpen = false;
 
   constructor(app: App, private readonly controller: ThemeStudioController) {
@@ -79,14 +219,7 @@ export class ThemeStudioModal extends Modal {
   }
 
   dismissImmediately(): void {
-    this.closeWithoutGuard();
-  }
-
-  override close(): void {
-    if (!this.forceClose && this.hasUnsavedChanges()) {
-      this.confirmDiscardAndClose();
-      return;
-    }
+    this.editorModal?.dismissImmediately();
     super.close();
   }
 
@@ -107,7 +240,6 @@ export class ThemeStudioModal extends Modal {
     this.renderThemeSection(catalog, "Obsidian", [this.automaticTheme()]);
     this.renderThemeSection(catalog, "Built-in themes", [...BUILT_IN_THEMES]);
     this.renderCustomThemes(catalog);
-    this.renderEditor(contentEl);
     this.renderFooter(contentEl);
   }
 
@@ -127,7 +259,7 @@ export class ThemeStudioModal extends Modal {
     const section = container.createDiv({ cls: "arbor-theme-studio-section" });
     const heading = section.createDiv({ cls: "arbor-theme-studio-section-heading" });
     heading.createEl("h3", { text: "My themes" });
-    new ButtonComponent(heading).setButtonText("New theme").onClick(() => this.createThemeDraft());
+    new ButtonComponent(heading).setButtonText("New theme").onClick(() => this.openThemeEditor(null));
 
     if (this.state.customThemes.length === 0) {
       return;
@@ -142,8 +274,7 @@ export class ThemeStudioModal extends Modal {
       attr: { type: "button", "aria-label": `Preview ${theme.name} theme` }
     });
     card.dataset.themeId = theme.id;
-    card.disabled = this.editorDraft !== null;
-    card.toggleClass("is-selected", theme.id === this.previewThemeId && this.editorDraft === null);
+    card.toggleClass("is-selected", theme.id === this.previewThemeId);
     card.toggleClass("is-active-theme", theme.id === this.state.activeThemeId);
     card.setCssProps({
       "--arbor-theme-swatch-accent": theme.palette.accent,
@@ -164,9 +295,6 @@ export class ThemeStudioModal extends Modal {
   }
 
   private selectPreview(themeId: string): void {
-    if (this.editorDraft) {
-      return;
-    }
     this.previewThemeId = themeId;
     this.contentEl.querySelectorAll<HTMLElement>(".arbor-theme-studio-card").forEach((card) => {
       card.toggleClass("is-selected", card.dataset.themeId === themeId);
@@ -177,9 +305,6 @@ export class ThemeStudioModal extends Modal {
   private openThemeMenu(event: MouseEvent, theme: ArborSavedTheme): void {
     event.preventDefault();
     event.stopPropagation();
-    if (this.editorDraft) {
-      return;
-    }
 
     const menu = new Menu();
     menu.addItem((item) =>
@@ -187,12 +312,15 @@ export class ThemeStudioModal extends Modal {
     );
     if (theme.id.startsWith("custom:")) {
       menu.addItem((item) =>
-        item.setTitle("Edit theme").setIcon("pencil").onClick(() => this.editTheme(theme))
+        item.setTitle("Edit theme").setIcon("pencil").onClick(() => this.openThemeEditor(theme))
       );
     }
     if (theme.id !== AUTOMATIC_THEME_ID) {
       menu.addItem((item) =>
-        item.setTitle("Duplicate theme").setIcon("copy").onClick(() => this.createThemeDraft(theme, `${theme.name} copy`))
+        item
+          .setTitle("Duplicate theme")
+          .setIcon("copy")
+          .onClick(() => this.openThemeEditor(theme, `${theme.name} copy`))
       );
     }
     if (theme.id.startsWith("custom:")) {
@@ -235,8 +363,8 @@ export class ThemeStudioModal extends Modal {
       return;
     }
     preview.empty();
-    const palette = this.editorDraft?.palette ?? this.previewTheme()?.palette ?? this.readObsidianPalette();
-    this.applyPaletteVariables(preview, palette);
+    const palette = this.previewTheme()?.palette ?? this.readObsidianPalette();
+    applyPaletteVariables(preview, palette);
     const tree = preview.createDiv({ cls: "arbor-theme-studio-preview-tree" });
     const root = tree.createDiv({ cls: "arbor-theme-studio-preview-node is-root" });
     root.createEl("strong", { text: "Main idea" });
@@ -262,99 +390,47 @@ export class ThemeStudioModal extends Modal {
     second.createSpan({ text: "Muted context stays visible" });
   }
 
-  private renderEditor(container: HTMLElement): void {
-    const draft = this.editorDraft;
-    if (!draft) {
-      return;
-    }
-    const editor = container.createDiv({ cls: "arbor-theme-studio-editor" });
-    new Setting(editor)
-      .setName(this.editorOriginal ? "Edit custom theme" : "Create custom theme")
-      .setHeading();
-    new Setting(editor)
-      .setName("Theme name")
-      .addText((text) =>
-        text.setValue(draft.name).onChange((value) => {
-          draft.name = value;
-        })
-      );
-    this.addColorSetting(editor, draft, "Canvas", "canvas");
-    this.addColorSetting(editor, draft, "Card surface", "card");
-    this.addColorSetting(editor, draft, "Text", "text");
-    this.addColorSetting(editor, draft, "Muted text", "muted");
-    this.addColorSetting(editor, draft, "Accent", "accent");
-
-    const actions = editor.createDiv({ cls: "arbor-theme-studio-editor-actions" });
-    new ButtonComponent(actions).setButtonText("Cancel editing").onClick(() => this.cancelEditing());
-    new ButtonComponent(actions)
-      .setButtonText("Save changes")
-      .setCta()
-      .onClick(() => void this.saveChanges());
-  }
-
-  private addColorSetting(
-    container: HTMLElement,
-    theme: ArborSavedTheme,
-    name: string,
-    key: keyof ArborCustomTheme
-  ): void {
-    new Setting(container)
-      .setName(name)
-      .addColorPicker((picker) =>
-        picker.setValue(theme.palette[key]).onChange((value) => {
-          theme.palette[key] = value;
-          this.renderPreview();
-        })
-      );
-  }
-
   private renderFooter(container: HTMLElement): void {
     const actions = container.createDiv({ cls: "arbor-theme-studio-footer" });
     new ButtonComponent(actions).setButtonText("Close").onClick(() => this.close());
     new ButtonComponent(actions)
       .setButtonText("Apply selected")
       .setCta()
-      .setDisabled(this.editorDraft !== null)
       .onClick(() => void this.applyTheme(this.previewThemeId));
   }
 
-  private createThemeDraft(source: ArborSavedTheme | null = null, requestedName = "My theme"): void {
-    if (this.editorDraft) {
+  private openThemeEditor(source: ArborSavedTheme | null, requestedName?: string): void {
+    if (this.editorModal) {
       return;
     }
-    this.editorOriginal = null;
-    this.editorDraft = {
-      id: `custom:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      name: this.uniqueName(requestedName),
-      palette: { ...(source?.palette ?? DEFAULT_CUSTOM_THEME) }
-    };
-    this.render();
-  }
-
-  private editTheme(theme: ArborSavedTheme): void {
-    this.editorOriginal = { ...theme, palette: { ...theme.palette } };
-    this.editorDraft = { ...theme, palette: { ...theme.palette } };
-    this.render();
-  }
-
-  private cancelEditing(): void {
-    this.previewThemeId = this.editorOriginal?.id ?? this.state.activeThemeId;
-    this.editorOriginal = null;
-    this.editorDraft = null;
-    this.render();
-  }
-
-  private async saveChanges(): Promise<void> {
-    const draft = this.editorDraft;
-    if (!draft || !draft.name.trim()) {
-      return;
+    const isNewTheme = source === null || requestedName !== undefined;
+    let theme: ArborSavedTheme;
+    if (source && requestedName === undefined) {
+      theme = cloneSavedTheme(source);
+    } else {
+      theme = {
+        id: `custom:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        name: this.uniqueName(requestedName ?? "My theme"),
+        palette: { ...(source?.palette ?? DEFAULT_CUSTOM_THEME) }
+      };
     }
-    draft.name = draft.name.trim();
-    this.state = cloneThemeState(await this.controller.saveTheme(draft));
-    this.previewThemeId = draft.id;
-    this.editorOriginal = null;
-    this.editorDraft = null;
-    this.render();
+    let modal: ThemeEditorModal;
+    modal = new ThemeEditorModal(this.app, {
+      theme,
+      isNewTheme,
+      saveTheme: async (savedTheme) => {
+        this.state = cloneThemeState(await this.controller.saveTheme(savedTheme));
+        this.previewThemeId = savedTheme.id;
+        this.render();
+      },
+      closed: () => {
+        if (this.editorModal === modal) {
+          this.editorModal = null;
+        }
+      }
+    });
+    this.editorModal = modal;
+    modal.open();
   }
 
   private async applyTheme(themeId: string): Promise<void> {
@@ -386,32 +462,6 @@ export class ThemeStudioModal extends Modal {
     ).open();
   }
 
-  private confirmDiscardAndClose(): void {
-    if (this.confirmationOpen) {
-      return;
-    }
-    this.confirmationOpen = true;
-    new ThemeStudioConfirmModal(
-      this.app,
-      "Theme has unsaved changes",
-      "Leave Theme studio without saving this theme? Your latest edits will be discarded.",
-      "Leave without saving",
-      () => this.closeWithoutGuard(),
-      () => {
-        this.confirmationOpen = false;
-      }
-    ).open();
-  }
-
-  private closeWithoutGuard(): void {
-    this.forceClose = true;
-    super.close();
-  }
-
-  private hasUnsavedChanges(): boolean {
-    return hasUnsavedThemeDraft(this.editorOriginal, this.editorDraft);
-  }
-
   private previewTheme(): ArborSavedTheme | null {
     if (this.previewThemeId === AUTOMATIC_THEME_ID) {
       return this.automaticTheme();
@@ -438,13 +488,6 @@ export class ThemeStudioModal extends Modal {
       index += 1;
     }
     return `${base} ${index}`;
-  }
-
-  private applyPaletteVariables(element: HTMLElement, palette: ArborCustomTheme): void {
-    const variables = resolveArborPaletteVariables(palette);
-    element.setCssProps(Object.fromEntries(
-      ARBOR_THEME_VARIABLES.map((name) => [name, variables[name] ?? ""])
-    ));
   }
 
   private readObsidianPalette(): ArborCustomTheme {
