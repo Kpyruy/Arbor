@@ -78,11 +78,11 @@ describe("default presentation mode", () => {
       styles.indexOf(".arbor-breadcrumbs button,")
     );
 
-    expect(breadcrumbs).toContain("margin-right: 168px;");
-    expect(rtlBreadcrumbs).toContain("margin-left: 168px;");
+    expect(breadcrumbs).toContain("margin-right: 208px;");
+    expect(rtlBreadcrumbs).toContain("margin-left: 208px;");
     expect(styles).not.toContain("clip-path:");
     expect(styles).not.toContain(".arbor-breadcrumbs::after");
-    expect(styles).toContain(".arbor-frame::before");
+    expect(styles).toContain(".arbor-frame::before {\n  content: \"\";\n  position: absolute;\n  z-index: 1;\n  top: 2px;\n  right: 208px;");
   });
 
   it("animates only the newly active breadcrumb", () => {

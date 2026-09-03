@@ -56,7 +56,7 @@ describe("Arbor layout direction", () => {
     );
 
     expect(rtlBreadcrumbs).not.toContain("flex-direction: row-reverse;");
-    expect(rtlBreadcrumbs).toContain("margin-left: 168px;");
+    expect(rtlBreadcrumbs).toContain("margin-left: 208px;");
     expect(rtlBreadcrumbs).not.toContain("clip-path:");
   });
 

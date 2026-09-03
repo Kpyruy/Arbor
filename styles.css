@@ -78,7 +78,7 @@
   position: absolute;
   z-index: 1;
   top: 2px;
-  right: 168px;
+  right: 208px;
   width: 1px;
   height: 32px;
   pointer-events: none;
@@ -87,7 +87,7 @@
 
 .arbor-view.is-rtl .arbor-frame::before {
   right: auto;
-  left: 168px;
+  left: 208px;
 }
 
 .workspace-leaf.is-arbor-auto-opening-source {
@@ -104,7 +104,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   min-width: 0;
-  margin-right: 168px;
+  margin-right: 208px;
   padding: 4px 14px 8px;
   mask-image: linear-gradient(to right, transparent 0, black 18px, black calc(100% - 18px), transparent 100%);
   scrollbar-width: none;
@@ -121,7 +121,7 @@
 .arbor-view.is-rtl .arbor-breadcrumbs {
   gap: 3px;
   margin-right: 0;
-  margin-left: 168px;
+  margin-left: 208px;
   padding: 4px 14px 8px;
 }
 
