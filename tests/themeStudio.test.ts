@@ -16,16 +16,18 @@ describe("Theme Studio preview", () => {
     expect(studio).not.toContain("Preview themes here, then apply one or edit your own without changing the workspace in the background.");
   });
 
-  it("draws a branching path from the root preview node to both child cards", () => {
+  it("draws smooth curved paths from the root preview node to both child cards", () => {
     const studio = readProjectFile("src/themeStudio.ts");
     const styles = readProjectFile("styles.css");
     const previewStart = studio.indexOf("private renderPreview()");
     const previewEnd = studio.indexOf("private renderEditor", previewStart);
     const preview = studio.slice(previewStart, previewEnd);
 
-    expect(preview).toContain('tree.createDiv({ cls: "arbor-theme-studio-preview-connector" })');
-    expect(styles).toContain(".arbor-theme-studio-preview-connector::after");
-    expect(styles).toContain(".arbor-theme-studio-preview-branches .arbor-theme-studio-preview-node::before");
+    expect(preview).toContain('tree.createSvg("svg", {');
+    expect(preview).toContain('d: "M 180 78 C 216 78 216 36 252 36"');
+    expect(preview).toContain('d: "M 180 78 C 216 78 216 120 252 120"');
+    expect(styles).toContain(".arbor-theme-studio-preview-links");
+    expect(styles).toContain(".arbor-theme-studio-preview-link");
   });
 
   it("puts Apply and Edit ahead of duplication and marks deletion as dangerous", () => {
@@ -41,5 +43,14 @@ describe("Theme Studio preview", () => {
     expect(menu).toContain("this.styleThemeMenu(menu, theme.palette.accent)");
     expect(styles).toContain(".arbor-theme-studio-menu-apply");
     expect(styles).toContain(".arbor-theme-studio-menu-danger");
+  });
+
+  it("uses a compact dedicated confirmation modal", () => {
+    const studio = readProjectFile("src/themeStudio.ts");
+    const styles = readProjectFile("styles.css");
+
+    expect(studio).toContain('this.modalEl.addClass("arbor-theme-studio-confirm-modal")');
+    expect(styles).toContain(".arbor-theme-studio-confirm-modal {");
+    expect(styles).toContain(".arbor-theme-studio-confirm-modal .modal-content");
   });
 });

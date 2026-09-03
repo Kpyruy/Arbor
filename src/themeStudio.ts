@@ -33,10 +33,12 @@ class ThemeStudioConfirmModal extends Modal {
   }
 
   onOpen(): void {
+    this.modalEl.addClass("arbor-theme-studio-confirm-modal");
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h3", { text: this.titleText });
-    contentEl.createEl("p", { text: this.description });
+    const heading = contentEl.createDiv({ cls: "arbor-theme-studio-confirm-heading" });
+    heading.createEl("h3", { text: this.titleText });
+    contentEl.createEl("p", { cls: "arbor-theme-studio-confirm-description", text: this.description });
     const actions = contentEl.createDiv({ cls: "arbor-confirm-actions" });
     new ButtonComponent(actions).setButtonText("Cancel").onClick(() => this.close());
     new ButtonComponent(actions)
@@ -239,7 +241,18 @@ export class ThemeStudioModal extends Modal {
     const root = tree.createDiv({ cls: "arbor-theme-studio-preview-node is-root" });
     root.createEl("strong", { text: "Main idea" });
     root.createSpan({ text: "A focused starting point" });
-    tree.createDiv({ cls: "arbor-theme-studio-preview-connector" });
+    const links = tree.createSvg("svg", {
+      cls: "arbor-theme-studio-preview-links",
+      attr: { viewBox: "0 0 432 156", "aria-hidden": "true" }
+    });
+    links.createSvg("path", {
+      cls: "arbor-theme-studio-preview-link",
+      attr: { d: "M 180 78 C 216 78 216 36 252 36" }
+    });
+    links.createSvg("path", {
+      cls: "arbor-theme-studio-preview-link",
+      attr: { d: "M 180 78 C 216 78 216 120 252 120" }
+    });
     const branches = tree.createDiv({ cls: "arbor-theme-studio-preview-branches" });
     const first = branches.createDiv({ cls: "arbor-theme-studio-preview-node is-selected" });
     first.createEl("strong", { text: "Selected branch" });
