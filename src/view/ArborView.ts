@@ -1200,9 +1200,6 @@ export class ArborView extends FileView {
     }
 
     this.stopHorizontalScrollMotion();
-    if (origin === "overview") {
-      this.preserveOverviewViewportPosition();
-    }
     this.state.selectedBlockId = nextSelectedBlockId;
     this.pendingFocusBlockId = nextSelectedBlockId;
     this.editingSession = {
@@ -1212,6 +1209,12 @@ export class ArborView extends FileView {
       autofocus: true,
       origin
     };
+    if (origin === "overview" && this.openOverviewEditorInPlace(block)) {
+      return;
+    }
+    if (origin === "overview") {
+      this.preserveOverviewViewportPosition();
+    }
     this.render();
   }
 
@@ -2481,6 +2484,51 @@ export class ArborView extends FileView {
     });
     surface.querySelector(".arbor-overview-links")?.remove();
     this.renderOverviewLinks(surface, layout);
+  }
+
+  private openOverviewEditorInPlace(block: BranchBlock): boolean {
+    const card = this.overviewSurfaceEl?.querySelector<HTMLElement>(`.arbor-overview-card[data-block-id="${block.id}"]`);
+    const session = this.editingSession;
+    if (!card || !session || session.blockId !== block.id || session.origin !== "overview") {
+      return false;
+    }
+
+    card.empty();
+    card.addClass("is-editing");
+    const editor = card.createEl("textarea", { cls: "arbor-editor arbor-overview-editor-input" });
+    this.wireEditorElement(editor, block, "overview");
+    editor.value = session.value;
+    this.resizeEditor(editor);
+    window.requestAnimationFrame(() => {
+      if (this.editingSession !== session) {
+        return;
+      }
+      editor.focus({ preventScroll: true });
+      editor.setSelectionRange(editor.value.length, editor.value.length);
+      this.resizeEditor(editor);
+      session.autofocus = false;
+    });
+    return true;
+  }
+
+  private async restoreOverviewCardContentInPlace(blockId: BranchBlockId): Promise<void> {
+    const card = this.overviewSurfaceEl?.querySelector<HTMLElement>(`.arbor-overview-card[data-block-id="${blockId}"]`);
+    const block = this.state ? getBlock(this.state.metadata, blockId) : null;
+    if (!card || !block) {
+      return;
+    }
+
+    card.empty();
+    card.removeClass("is-editing");
+    const content = card.createDiv({ cls: "arbor-overview-card-content markdown-rendered" });
+    await MarkdownRenderer.render(this.app, block.content, content, this.file?.path ?? "", this);
+    if (content.innerText.trim().length === 0) {
+      content.setText(extractSnippet(block.content, this.plugin.settings.previewSnippetLength));
+    }
+    content.querySelectorAll("img").forEach((image) => {
+      image.addEventListener("load", () => this.render(), { once: true });
+    });
+    card.focus({ preventScroll: true });
   }
 
   private renderOverviewLinks(scene: HTMLElement, layout: ReturnType<typeof buildOverviewLayout>): void {
@@ -4067,11 +4115,13 @@ export class ArborView extends FileView {
 
   private cancelEditingSession(): void {
     this.clearBlurCommitTimer();
-    if (this.editingSession?.origin === "overview") {
-      this.preserveOverviewViewportPosition();
-    }
+    const session = this.editingSession;
     this.pendingFocusBlockId = this.state?.selectedBlockId ?? null;
     this.editingSession = null;
+    if (session?.origin === "overview") {
+      void this.restoreOverviewCardContentInPlace(session.blockId);
+      return;
+    }
     this.render();
   }
 
@@ -4082,16 +4132,20 @@ export class ArborView extends FileView {
 
     this.clearBlurCommitTimer();
 
-    if (session.origin === "overview") {
-      this.preserveOverviewViewportPosition();
-    }
-
     const { blockId, value } = session;
     if (value === session.originalContent) {
       this.pendingFocusBlockId = blockId;
       this.editingSession = null;
+      if (session.origin === "overview") {
+        await this.restoreOverviewCardContentInPlace(session.blockId);
+        return;
+      }
       this.render();
       return;
+    }
+
+    if (session.origin === "overview") {
+      this.preserveOverviewViewportPosition();
     }
 
     this.history.push("Edit block", this.state.metadata, this.state.selectedBlockId);

@@ -101,6 +101,12 @@ describe("overview arrow navigation", () => {
     const editStart = source.indexOf("private beginEditingBlock");
     const editEnd = source.indexOf("selectParentBlock", editStart);
     const beginEditing = source.slice(editStart, editEnd);
+    const commitStart = source.indexOf("private async commitEditingSession");
+    const commitEnd = source.indexOf("private scheduleEditingSessionCommit", commitStart);
+    const commitEditing = source.slice(commitStart, commitEnd);
+    const cancelStart = source.indexOf("private cancelEditingSession");
+    const cancelEnd = source.indexOf("private async commitEditingSession", cancelStart);
+    const cancelEditing = source.slice(cancelStart, cancelEnd);
 
     expect(overview).toContain('this.selectBlock(node.id, { focus: false, reveal: false })');
     expect(overview).toContain('this.beginEditingBlock(node.id, "overview")');
@@ -108,6 +114,9 @@ describe("overview arrow navigation", () => {
     expect(handler).toContain('this.beginEditingBlock(this.state.selectedBlockId, "overview")');
     expect(beginEditing).toContain('origin === "overview"');
     expect(beginEditing).toContain("this.preserveOverviewViewportPosition()");
+    expect(beginEditing).toContain("this.openOverviewEditorInPlace(block)");
+    expect(commitEditing).toContain("this.restoreOverviewCardContentInPlace(session.blockId)");
+    expect(cancelEditing).toContain("this.restoreOverviewCardContentInPlace(session.blockId)");
     expect(source).toContain("private restoreOverviewViewportPosition");
   });
 
