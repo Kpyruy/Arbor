@@ -97,17 +97,13 @@ export class ThemeStudioModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h2", { text: "Theme studio" });
-    contentEl.createEl("p", {
-      cls: "arbor-theme-studio-description",
-      text: "Preview themes here, then apply one or edit your own without changing the workspace in the background."
-    });
 
     this.previewEl = contentEl.createDiv({ cls: "arbor-theme-studio-preview" });
     this.renderPreview();
 
     const catalog = contentEl.createDiv({ cls: "arbor-theme-studio-catalog" });
-    this.renderThemeSection(catalog, "Obsidian", [this.automaticTheme()], "Follows the active Obsidian theme");
-    this.renderThemeSection(catalog, "Built-in themes", [...BUILT_IN_THEMES], "Ready-made Arbor palettes");
+    this.renderThemeSection(catalog, "Obsidian", [this.automaticTheme()]);
+    this.renderThemeSection(catalog, "Built-in themes", [...BUILT_IN_THEMES]);
     this.renderCustomThemes(catalog);
     this.renderEditor(contentEl);
     this.renderFooter(contentEl);
@@ -116,25 +112,19 @@ export class ThemeStudioModal extends Modal {
   private renderThemeSection(
     container: HTMLElement,
     title: string,
-    themes: readonly ArborSavedTheme[],
-    description: string
+    themes: readonly ArborSavedTheme[]
   ): void {
     const section = container.createDiv({ cls: "arbor-theme-studio-section" });
     const heading = section.createDiv({ cls: "arbor-theme-studio-section-heading" });
     heading.createEl("h3", { text: title });
-    heading.createSpan({ text: description });
     const grid = section.createDiv({ cls: "arbor-theme-studio-grid" });
     themes.forEach((theme) => this.renderThemeCard(grid, theme));
   }
 
   private renderCustomThemes(container: HTMLElement): void {
     const section = container.createDiv({ cls: "arbor-theme-studio-section" });
-    const heading = section.createDiv({ cls: "arbor-theme-studio-section-heading arbor-theme-studio-my-themes" });
-    const label = heading.createDiv();
-    label.createEl("h3", { text: "My themes" });
-    label.createSpan({
-      text: this.state.customThemes.length > 0 ? "Your saved palettes" : "No custom themes yet"
-    });
+    const heading = section.createDiv({ cls: "arbor-theme-studio-section-heading" });
+    heading.createEl("h3", { text: "My themes" });
     new ButtonComponent(heading).setButtonText("New theme").onClick(() => this.createThemeDraft());
 
     if (this.state.customThemes.length === 0) {
@@ -224,7 +214,7 @@ export class ThemeStudioModal extends Modal {
     const root = tree.createDiv({ cls: "arbor-theme-studio-preview-node is-root" });
     root.createEl("strong", { text: "Main idea" });
     root.createSpan({ text: "A focused starting point" });
-    tree.createSpan({ cls: "arbor-theme-studio-preview-connector" });
+    tree.createDiv({ cls: "arbor-theme-studio-preview-connector" });
     const branches = tree.createDiv({ cls: "arbor-theme-studio-preview-branches" });
     const first = branches.createDiv({ cls: "arbor-theme-studio-preview-node is-selected" });
     first.createEl("strong", { text: "Selected branch" });

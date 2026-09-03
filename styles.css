@@ -509,11 +509,6 @@
   overflow-y: auto;
 }
 
-.arbor-theme-studio-description {
-  margin: -4px 0 16px;
-  color: var(--text-muted);
-}
-
 .arbor-theme-studio-preview {
   min-height: 190px;
   margin-bottom: 18px;
@@ -527,14 +522,18 @@
 }
 
 .arbor-theme-studio-preview-tree {
-  display: flex;
+  display: grid;
+  grid-template-columns: 180px 72px 180px;
+  grid-template-rows: repeat(2, 72px);
   min-height: 190px;
   align-items: center;
+  align-content: center;
   justify-content: center;
   padding: 24px;
 }
 
 .arbor-theme-studio-preview-node {
+  position: relative;
   display: flex;
   width: 180px;
   min-height: 72px;
@@ -550,6 +549,12 @@
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
 }
 
+.arbor-theme-studio-preview-node.is-root {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: center;
+}
+
 .arbor-theme-studio-preview-node span {
   color: var(--text-muted);
   font-size: 0.78rem;
@@ -561,14 +566,47 @@
 }
 
 .arbor-theme-studio-preview-connector {
-  width: 72px;
-  height: 1px;
-  flex: 0 0 auto;
+  position: relative;
+  grid-column: 2;
+  grid-row: 1 / -1;
+  align-self: stretch;
+}
+
+.arbor-theme-studio-preview-connector::before,
+.arbor-theme-studio-preview-connector::after,
+.arbor-theme-studio-preview-branches .arbor-theme-studio-preview-node::before {
+  position: absolute;
+  display: block;
+  content: "";
   background: color-mix(in srgb, var(--text-muted) 52%, transparent);
+}
+
+.arbor-theme-studio-preview-connector::before {
+  top: 50%;
+  left: 0;
+  width: 50%;
+  height: 1px;
+}
+
+.arbor-theme-studio-preview-connector::after {
+  top: 36px;
+  bottom: 36px;
+  left: 50%;
+  width: 1px;
+}
+
+.arbor-theme-studio-preview-branches .arbor-theme-studio-preview-node::before {
+  top: 50%;
+  left: -36px;
+  width: 36px;
+  height: 1px;
 }
 
 .arbor-theme-studio-preview-branches {
   display: grid;
+  grid-column: 3;
+  grid-row: 1 / -1;
+  grid-template-rows: repeat(2, 72px);
   gap: 12px;
 }
 
@@ -579,7 +617,7 @@
 
 .arbor-theme-studio-section-heading {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
@@ -588,15 +626,6 @@
 .arbor-theme-studio-section-heading h3 {
   margin: 0;
   font-size: 0.9rem;
-}
-
-.arbor-theme-studio-section-heading span {
-  color: var(--text-muted);
-  font-size: 0.76rem;
-}
-
-.arbor-theme-studio-my-themes {
-  align-items: center;
 }
 
 .arbor-theme-studio-grid {
@@ -720,14 +749,18 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+}
+
+@media (max-width: 500px) {
   .arbor-theme-studio-preview-tree {
-    flex-direction: column;
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) 52px minmax(0, 1fr);
+    padding: 16px;
   }
 
-  .arbor-theme-studio-preview-connector {
-    width: 1px;
-    height: 28px;
+  .arbor-theme-studio-preview-node {
+    width: auto;
+    min-width: 0;
+    padding: 10px 12px;
   }
 }
 
