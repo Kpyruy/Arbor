@@ -27,21 +27,17 @@ export function hasVerticalOverflow(scrollHeight: number, clientHeight: number):
   return scrollHeight > clientHeight;
 }
 
-export function isWithinHorizontalBounds(clientX: number, left: number, right: number): boolean {
-  return clientX >= left && clientX <= right;
-}
-
-export function resolveViewportWheelAxis(
+export function resolveColumnWheelNavigation(
   deltaX: number,
   deltaY: number,
   ctrlKey: boolean,
   metaKey: boolean,
   isPointerOverColumn: boolean
-): "vertical" | "horizontal" | null {
-  if (ctrlKey || metaKey || Math.abs(deltaY) <= Math.abs(deltaX)) {
+): "previous" | "next" | null {
+  if (!isPointerOverColumn || ctrlKey || metaKey || Math.abs(deltaY) <= Math.abs(deltaX)) {
     return null;
   }
-  return isPointerOverColumn ? "vertical" : "horizontal";
+  return deltaY < 0 ? "previous" : "next";
 }
 
 export function clampCardCenter(preferredCenter: number, cardHeight: number, viewportTop: number, viewportHeight: number): number {

@@ -85,7 +85,7 @@ describe("default presentation mode", () => {
     expect(breadcrumbs).toContain("margin-right: 208px;");
     expect(breadcrumbs).toContain("overflow-y: hidden;");
     expect(rtlBreadcrumbs).toContain("margin-left: 208px;");
-    expect(columnsViewport).toContain("overflow-y: auto;");
+    expect(columnsViewport).toContain("overflow-y: hidden;");
     expect(styles).not.toContain("clip-path:");
     expect(styles).not.toContain(".arbor-breadcrumbs::after");
     expect(styles).toContain(".arbor-frame::before {\n  content: \"\";\n  position: absolute;\n  z-index: 1;\n  top: 0;\n  right: 196px;");

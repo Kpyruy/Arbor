@@ -6,8 +6,7 @@ import {
   canStartCardDrag,
   clampCardCenter,
   hasVerticalOverflow,
-  isWithinHorizontalBounds,
-  resolveViewportWheelAxis,
+  resolveColumnWheelNavigation,
   reserveSceneWidthForColumns,
   resolveEditorHeight
 } from "../src/cardViewport";
@@ -39,18 +38,12 @@ describe("bounded Arbor card viewport rules", () => {
     expect(hasVerticalOverflow(261, 260)).toBe(true);
   });
 
-  it("detects pointer positions that fall inside a card column", () => {
-    expect(isWithinHorizontalBounds(120, 120, 420)).toBe(true);
-    expect(isWithinHorizontalBounds(420, 120, 420)).toBe(true);
-    expect(isWithinHorizontalBounds(119.9, 120, 420)).toBe(false);
-    expect(isWithinHorizontalBounds(420.1, 120, 420)).toBe(false);
-  });
-
-  it("routes a vertical wheel to the column under the pointer", () => {
-    expect(resolveViewportWheelAxis(0, 120, false, false, true)).toBe("vertical");
-    expect(resolveViewportWheelAxis(0, 120, false, false, false)).toBe("horizontal");
-    expect(resolveViewportWheelAxis(120, 30, false, false, true)).toBeNull();
-    expect(resolveViewportWheelAxis(0, 120, true, false, true)).toBeNull();
+  it("maps wheel motion over a column to existing previous and next block navigation", () => {
+    expect(resolveColumnWheelNavigation(0, -120, false, false, true)).toBe("previous");
+    expect(resolveColumnWheelNavigation(0, 120, false, false, true)).toBe("next");
+    expect(resolveColumnWheelNavigation(0, 120, false, false, false)).toBeNull();
+    expect(resolveColumnWheelNavigation(120, 30, false, false, true)).toBeNull();
+    expect(resolveColumnWheelNavigation(0, 120, true, false, true)).toBeNull();
   });
 
   it("clamps a card center inside canvas safety bounds", () => {
