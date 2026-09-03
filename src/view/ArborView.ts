@@ -2418,12 +2418,6 @@ export class ArborView extends FileView {
       });
       card.addEventListener("mouseenter", () => this.setHoveredBlock(node.id));
       card.addEventListener("mouseleave", () => this.setHoveredBlock(null));
-      card.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          this.beginEditingBlock(node.id, "overview");
-        }
-      });
       cardsById.set(node.id, card);
     }
 

@@ -110,6 +110,7 @@ describe("overview arrow navigation", () => {
 
     expect(overview).toContain('this.selectBlock(node.id, { focus: false, reveal: false })');
     expect(overview).toContain('this.beginEditingBlock(node.id, "overview")');
+    expect(overview).not.toContain('card.addEventListener("keydown"');
     expect(handler).toContain('event.key === "Enter"');
     expect(handler).toContain('this.beginEditingBlock(this.state.selectedBlockId, "overview")');
     expect(beginEditing).toContain('origin === "overview"');
