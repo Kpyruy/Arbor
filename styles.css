@@ -507,6 +507,12 @@
 
 .arbor-theme-studio-modal .modal-content {
   overflow-y: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.arbor-theme-studio-modal .modal-content::-webkit-scrollbar {
+  display: none;
 }
 
 .arbor-theme-studio-preview {

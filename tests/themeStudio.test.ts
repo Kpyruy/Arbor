@@ -65,4 +65,15 @@ describe("Theme Studio preview", () => {
     expect(studio).not.toContain("private renderEditor(container: HTMLElement)");
     expect(styles).toContain(".arbor-theme-studio-editor-modal {");
   });
+
+  it("keeps Theme Studio scrollable without showing a scrollbar over the palette grid", () => {
+    const styles = readProjectFile("styles.css");
+    const modalContent = styles.slice(
+      styles.indexOf(".arbor-theme-studio-modal .modal-content"),
+      styles.indexOf(".arbor-theme-studio-preview {")
+    );
+
+    expect(modalContent).toContain("scrollbar-width: none;");
+    expect(styles).toContain(".arbor-theme-studio-modal .modal-content::-webkit-scrollbar");
+  });
 });
