@@ -10,7 +10,7 @@ export interface ArborReleaseNote {
 
 export const ARBOR_RELEASE_NOTES: readonly ArborReleaseNote[] = [
   {
-    version: "0.3.0",
+    version: "0.2.8",
     title: "Take Arbor with you",
     changes: [
       "Arbor is now officially supported on phones and tablets.",
