@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compactColumns, pinchViewport, shouldSaveOnEnter, useCompactLayout } from "../src/mobile";
+import { compactColumns, pinchViewport, resolvePinchZoom, shouldSaveOnEnter, useCompactLayout } from "../src/mobile";
 import { buildColumnModels } from "../src/model/tree";
 import type { BranchTreeMetadata } from "../src/types";
 
@@ -31,5 +31,11 @@ describe("mobile interaction policy", () => {
     expect(pinchViewport(start, { x: 120, y: 110 }, 150)).toEqual({ zoom: 1.5, left: 180, top: 340 });
     expect(pinchViewport(start, { x: 100, y: 100 }, 400).zoom).toBe(1.6);
     expect(pinchViewport(start, { x: 100, y: 100 }, 10).zoom).toBe(0.5);
+  });
+
+  it("uses the same bounded pinch scale for the branch editor and Tree Overview", () => {
+    expect(resolvePinchZoom(1, 100, 125)).toBe(1.25);
+    expect(resolvePinchZoom(1.4, 80, 160)).toBe(1.6);
+    expect(resolvePinchZoom(0.6, 100, 20)).toBe(0.5);
   });
 });

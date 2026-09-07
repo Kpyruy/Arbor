@@ -91,7 +91,7 @@ import {
   resolveEditorHeight
 } from "../cardViewport";
 import { toBlob } from "html-to-image";
-import { compactColumns, pinchViewport, shouldSaveOnEnter, useCompactLayout, TouchPoint } from "../mobile";
+import { compactColumns, pinchViewport, resolvePinchZoom, shouldSaveOnEnter, useCompactLayout, TouchPoint } from "../mobile";
 
 type EditingOrigin = "card" | "preview" | "overview";
 
@@ -376,6 +376,11 @@ export class ArborView extends FileView {
   private touchStart: { zoom: number; left: number; top: number; midpoint: TouchPoint; distance: number } | null = null;
   private touchMoved = false;
   private suppressTouchClickUntil = 0;
+  private readonly branchTouchPoints = new Map<number, TouchPoint>();
+  private branchTouchStart: { zoom: number; distance: number } | null = null;
+  private branchTouchPinching = false;
+  private touchZoomFrame: number | null = null;
+  private pendingTouchZoom: number | null = null;
   navigation = true;
 
   private readonly history = new BranchHistory();
@@ -568,6 +573,7 @@ export class ArborView extends FileView {
     this.clearZoomPersistTimer();
     this.clearZoomIndicatorTimer();
     this.clearOverviewZoomFrame();
+    this.clearTouchZoomFrame();
     this.clearBreadcrumbScrollFrame();
     if (this.pendingFocusFrame !== null) {
       window.cancelAnimationFrame(this.pendingFocusFrame);
@@ -600,6 +606,7 @@ export class ArborView extends FileView {
     this.clearZoomPersistTimer();
     this.clearZoomIndicatorTimer();
     this.clearOverviewZoomFrame();
+    this.clearTouchZoomFrame();
     this.clearBreadcrumbScrollFrame();
     if (this.pendingFocusFrame !== null) {
       window.cancelAnimationFrame(this.pendingFocusFrame);
@@ -1633,6 +1640,7 @@ export class ArborView extends FileView {
     this.columnsViewportEl.addEventListener("pointerup", (event) => this.handleViewportPointerUp(event, this.columnsViewportEl!));
     this.columnsViewportEl.addEventListener("pointercancel", (event) => this.handleViewportPointerUp(event, this.columnsViewportEl!));
     this.columnsViewportEl.addEventListener("lostpointercapture", (event) => this.handleViewportPointerCaptureLost(event, this.columnsViewportEl!));
+    this.bindBranchTouch(this.columnsViewportEl);
     this.columnsEl = this.columnsViewportEl.createDiv({ cls: "arbor-columns" });
     const viewportFadesEl = this.columnsStageEl.createDiv({ cls: "arbor-viewport-fades" });
     viewportFadesEl.createDiv({ cls: "arbor-edge-fade is-top" });
@@ -1704,6 +1712,9 @@ export class ArborView extends FileView {
     this.touchDockEl = null;
     this.touchPoints.clear();
     this.touchStart = null;
+    this.branchTouchPoints.clear();
+    this.branchTouchStart = null;
+    this.branchTouchPinching = false;
     this.breadcrumbsEl = null;
     this.breadcrumbExitLayerEl = null;
     this.zoomIndicatorEl = null;
@@ -2789,8 +2800,7 @@ export class ArborView extends FileView {
       event.preventDefault();
       if (this.touchPoints.size > 1) {
         const next = pinchViewport(this.touchStart, midpoint, distance);
-        this.updateZoomLevel(next.zoom);
-        this.syncOverviewZoom();
+        this.scheduleTouchZoom(next.zoom);
         viewport.scrollLeft = next.left + (this.overviewSceneEl?.offsetLeft ?? 0);
         viewport.scrollTop = next.top + (this.overviewSceneEl?.offsetTop ?? 0);
       } else {
@@ -2804,6 +2814,68 @@ export class ArborView extends FileView {
       if (this.touchMoved) this.suppressTouchClickUntil = Date.now() + 500;
       if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
       if (!this.touchPoints.size) viewport.removeClass("is-panning");
+      rebase();
+    };
+    viewport.addEventListener("pointerup", end, true);
+    viewport.addEventListener("pointercancel", end, true);
+    viewport.addEventListener("lostpointercapture", end, true);
+    for (const type of ["click", "dblclick", "contextmenu"]) {
+      viewport.addEventListener(type, (event) => {
+        if (Date.now() < this.suppressTouchClickUntil) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      }, true);
+    }
+  }
+
+  private bindBranchTouch(viewport: HTMLElement): void {
+    const distance = () => {
+      const [a, b] = Array.from(this.branchTouchPoints.values());
+      return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+    };
+    const rebase = () => {
+      this.branchTouchStart = this.branchTouchPoints.size > 1
+        ? { zoom: this.plugin.settings.zoomLevel, distance: distance() }
+        : null;
+    };
+    const isInteractiveTarget = (target: EventTarget | null) =>
+      target instanceof Element && Boolean(target.closest("textarea, input, button, a, [contenteditable='true']"));
+
+    viewport.addEventListener("pointerdown", (event) => {
+      if (event.pointerType !== "touch" || !this.usesTouchControls || this.editingSession || isInteractiveTarget(event.target)) {
+        return;
+      }
+      this.branchTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      rebase();
+    }, { capture: true });
+    viewport.addEventListener("pointermove", (event) => {
+      if (!this.branchTouchPoints.has(event.pointerId) || !this.branchTouchStart || this.branchTouchPoints.size < 2) {
+        return;
+      }
+      this.branchTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const nextZoom = resolvePinchZoom(this.branchTouchStart.zoom, this.branchTouchStart.distance, distance());
+      this.suppressTouchClickUntil = Date.now() + 500;
+      this.branchTouchPinching = true;
+      viewport.setPointerCapture(event.pointerId);
+      viewport.addClass("is-touch-pinching");
+      event.preventDefault();
+      this.scheduleTouchZoom(nextZoom);
+    }, { capture: true, passive: false });
+    const end = (event: PointerEvent) => {
+      if (!this.branchTouchPoints.delete(event.pointerId)) {
+        return;
+      }
+      if (viewport.hasPointerCapture(event.pointerId)) {
+        viewport.releasePointerCapture(event.pointerId);
+      }
+      if (this.branchTouchPoints.size < 2) {
+        viewport.removeClass("is-touch-pinching");
+        if (this.branchTouchPinching) {
+          this.branchTouchPinching = false;
+          window.requestAnimationFrame(() => this.revealCompactSelection());
+        }
+      }
       rebase();
     };
     viewport.addEventListener("pointerup", end, true);
@@ -3016,6 +3088,33 @@ export class ArborView extends FileView {
       this.overviewZoomFrame = null;
     }
     this.pendingOverviewZoom = null;
+  }
+
+  private scheduleTouchZoom(nextZoom: number): void {
+    this.pendingTouchZoom = nextZoom;
+    if (this.touchZoomFrame !== null) {
+      return;
+    }
+    this.touchZoomFrame = window.requestAnimationFrame(() => {
+      this.touchZoomFrame = null;
+      const zoom = this.pendingTouchZoom;
+      this.pendingTouchZoom = null;
+      if (zoom === null) {
+        return;
+      }
+      this.updateZoomLevel(zoom);
+      if (this.presentationMode === "overview") {
+        this.syncOverviewZoom();
+      }
+    });
+  }
+
+  private clearTouchZoomFrame(): void {
+    if (this.touchZoomFrame !== null) {
+      window.cancelAnimationFrame(this.touchZoomFrame);
+      this.touchZoomFrame = null;
+    }
+    this.pendingTouchZoom = null;
   }
 
   private cleanupOverviewPan(): void {
@@ -4781,10 +4880,19 @@ export class ArborView extends FileView {
 
     this.plugin.settings.zoomLevel = clamped;
     this.applyCssVars(this.contentEl);
-    this.scheduleColumnAlignment();
     this.scheduleZoomPersist();
     this.flashZoomIndicator();
-    if (this.presentationMode === "overview") return;
+    if (this.presentationMode === "overview") {
+      return;
+    }
+    if (this.compactLayout) {
+      if (!this.branchTouchPinching) {
+        window.requestAnimationFrame(() => this.revealCompactSelection());
+      }
+      return;
+    }
+
+    this.scheduleColumnAlignment();
 
     window.requestAnimationFrame(() => {
       this.alignColumnsToActivePath();

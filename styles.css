@@ -2250,18 +2250,24 @@
 }
 
 .arbor-view.is-compact .arbor-column { width: 100%; min-width: 0; }
-.arbor-view.is-compact .arbor-card-list { transform: none; gap: 12px; transition: none; }
+.arbor-view.is-compact .arbor-card-list { transform: none; gap: clamp(8px, calc(12px * var(--bw-zoom)), 20px); transition: none; }
 .arbor-view.is-compact .arbor-card-list.is-rebinding { opacity: 1; filter: none; }
-.arbor-view.is-compact .arbor-card { width: 100%; padding: 16px; min-height: 100px; opacity: 0.85; }
+.arbor-view.is-compact .arbor-card {
+  width: 100%;
+  padding: clamp(10px, calc(16px * var(--bw-zoom)), 26px);
+  min-height: max(88px, calc(100px * var(--bw-zoom)));
+  opacity: 0.85;
+}
 .arbor-view.is-compact .arbor-card.is-active { opacity: 1; }
 .arbor-view.is-compact.is-context-dim-mode .arbor-card.is-muted { opacity: 0.78; filter: none; }
-.arbor-view.is-compact .arbor-card-content { font-size: 16px; overflow-wrap: anywhere; }
+.arbor-view.is-compact .arbor-card-content { font-size: clamp(13px, calc(16px * var(--bw-content-zoom)), 26px); overflow-wrap: anywhere; }
 .arbor-view.is-compact .arbor-card-content img { max-width: 100%; height: auto; }
 .arbor-view.is-compact .arbor-card-content pre,
 .arbor-view.is-compact .arbor-card-content table { max-width: 100%; overflow-x: auto; }
 .arbor-view.is-compact .arbor-card.is-active .arbor-card-content { max-height: none; overflow: visible; }
 .arbor-view.has-touch-controls .arbor-editor { font-size: 16px; min-height: 80px; touch-action: pan-y; }
 .arbor-view.is-compact .arbor-card.is-editing .arbor-editor { max-height: none; }
+.arbor-view.is-compact .arbor-columns-viewport.is-touch-pinching { overscroll-behavior: contain; }
 .arbor-overview-viewport { touch-action: none; }
 .arbor-view.is-touch-editing .arbor-overview-viewport { touch-action: pan-y; }
 .arbor-view.has-touch-controls .arbor-overview-card.is-editing { max-height: none; }

@@ -14,9 +14,13 @@ export function shouldSaveOnEnter(input: { key: string; shiftKey: boolean; isCom
 
 export interface TouchPoint { x: number; y: number }
 
+export function resolvePinchZoom(startZoom: number, startDistance: number, distance: number): number {
+  return Math.max(0.5, Math.min(1.6, startZoom * distance / Math.max(1, startDistance)));
+}
+
 /** Keeps the world point beneath the pinch midpoint fixed as scale changes. */
 export function pinchViewport(start: { zoom: number; left: number; top: number; midpoint: TouchPoint; distance: number }, midpoint: TouchPoint, distance: number): { zoom: number; left: number; top: number } {
-  const zoom = Math.max(0.5, Math.min(1.6, start.zoom * distance / Math.max(1, start.distance)));
+  const zoom = resolvePinchZoom(start.zoom, start.distance, distance);
   const ratio = zoom / start.zoom;
   return { zoom, left: (start.left + start.midpoint.x) * ratio - midpoint.x, top: (start.top + start.midpoint.y) * ratio - midpoint.y };
 }
