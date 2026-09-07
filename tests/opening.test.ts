@@ -3,6 +3,7 @@ import {
   inspectManagedBranchDocumentText,
   buildMarkdownViewState,
   resolveLoadingViewTarget,
+  resolveArborOpenTarget,
   shouldRouteMarkdownOpenToLoadingView
 } from "../src/opening";
 import { buildBranchDocument } from "../src/storage/document";
@@ -33,6 +34,28 @@ function metadataFixture(): BranchTreeMetadata {
 }
 
 describe("managed note opening", () => {
+  it("uses the current mobile leaf while preserving the desktop split preference", () => {
+    expect(resolveArborOpenTarget(true)).toBe("current");
+    expect(resolveArborOpenTarget(true, true)).toBe("current");
+    expect(resolveArborOpenTarget(false)).toBe("split");
+    expect(resolveArborOpenTarget(false, false)).toBe("current");
+  });
+
+  it("auto-opens managed mobile notes but respects an explicit Markdown open", () => {
+    const input = {
+      requestedViewType: "markdown",
+      filePath: "Demo.md",
+      autoOpenManagedNotes: true,
+      isMobile: true,
+      isSuppressed: false,
+      managedPathHint: true
+    };
+    expect(shouldRouteMarkdownOpenToLoadingView(input)).toBe(true);
+    expect(shouldRouteMarkdownOpenToLoadingView({ ...input, isSuppressed: true })).toBe(false);
+    expect(shouldRouteMarkdownOpenToLoadingView({ ...input, autoOpenManagedNotes: false })).toBe(false);
+    expect(shouldRouteMarkdownOpenToLoadingView({ ...input, managedPathHint: false })).toBe(false);
+  });
+
   it("builds a normal Markdown view state for the current file", () => {
     expect(buildMarkdownViewState("Ideas/Branch.md")).toEqual({
       type: "markdown",

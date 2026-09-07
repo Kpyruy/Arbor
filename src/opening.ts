@@ -38,10 +38,13 @@ export function shouldRouteMarkdownOpenToLoadingView(input: MarkdownOpenIntercep
     input.requestedViewType === "markdown"
     && Boolean(input.filePath)
     && input.autoOpenManagedNotes
-    && !input.isMobile
     && !input.isSuppressed
     && input.managedPathHint
   );
+}
+
+export function resolveArborOpenTarget(isMobile: boolean, splitIfNeeded?: boolean): "current" | "split" {
+  return isMobile || splitIfNeeded === false ? "current" : "split";
 }
 
 export function inspectManagedBranchDocumentText(text: string): ManagedBranchDocumentInspection {

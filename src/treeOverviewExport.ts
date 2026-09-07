@@ -9,8 +9,20 @@ const QUALITY_SCALE: Record<TreeOverviewExportQuality, number> = {
   ultra: 4
 };
 
-const MAX_EXPORT_DIMENSION_PX = 16_384;
-const MAX_EXPORT_PIXELS = 128_000_000;
+export interface TreeOverviewExportLimits {
+  readonly maxDimensionPx: number;
+  readonly maxPixels: number;
+}
+
+const DESKTOP_TREE_OVERVIEW_EXPORT_LIMITS: TreeOverviewExportLimits = {
+  maxDimensionPx: 16_384,
+  maxPixels: 128_000_000
+};
+
+export const MOBILE_TREE_OVERVIEW_EXPORT_LIMITS: TreeOverviewExportLimits = {
+  maxDimensionPx: 4_096,
+  maxPixels: 8_000_000
+};
 
 export interface TreeOverviewExportSize {
   scale: number;
@@ -25,17 +37,20 @@ export function resolveTreeOverviewExportLinkStyle(textMuted: string): { stroke:
 export function resolveTreeOverviewExportSize(
   sourceWidth: number,
   sourceHeight: number,
-  quality: TreeOverviewExportQuality
+  quality: TreeOverviewExportQuality,
+  limits: TreeOverviewExportLimits = DESKTOP_TREE_OVERVIEW_EXPORT_LIMITS
 ): TreeOverviewExportSize | null {
   const scale = QUALITY_SCALE[quality];
   const width = Math.ceil(sourceWidth * scale);
   const height = Math.ceil(sourceHeight * scale);
   if (
+    !Number.isFinite(sourceWidth) ||
+    !Number.isFinite(sourceHeight) ||
     sourceWidth <= 0 ||
     sourceHeight <= 0 ||
-    width > MAX_EXPORT_DIMENSION_PX ||
-    height > MAX_EXPORT_DIMENSION_PX ||
-    width * height > MAX_EXPORT_PIXELS
+    width > limits.maxDimensionPx ||
+    height > limits.maxDimensionPx ||
+    width * height > limits.maxPixels
   ) {
     return null;
   }

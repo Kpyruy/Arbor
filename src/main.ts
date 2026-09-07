@@ -10,7 +10,7 @@ import { resolveInitialLayoutDirection } from "./layoutDirection";
 import { buildAvailableMarkdownPath } from "./markdownPaths";
 import { buildAvailableTreeOverviewExportPath, TreeOverviewExportFormat } from "./treeOverviewExport";
 import { createEmptyTree } from "./model/tree";
-import { inspectManagedBranchDocumentText, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
+import { inspectManagedBranchDocumentText, resolveArborOpenTarget, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
 import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { buildBranchDocument } from "./storage/document";
 import { normalizeMetadata } from "./storage/serializer";
@@ -552,15 +552,10 @@ export default class ArborPlugin extends Plugin {
       selectedBlockId?: string;
     }
   ): Promise<ArborView | null> {
-    if (Platform.isMobileApp) {
-      new Notice("Arbor is desktop-first. Mobile support is intentionally limited.");
-      return null;
-    }
-
     const existingLeaf = this.findManagedLeafForFile(file);
     const leaf = existingLeaf
       ?? options?.preferredLeaf
-      ?? (options?.splitIfNeeded === false
+      ?? (resolveArborOpenTarget(Platform.isMobileApp, options?.splitIfNeeded) === "current"
         ? this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf(false)
         : this.app.workspace.getLeaf("split", this.settings.splitDirection));
     this.expectExplicitArborOpen(file.path);
@@ -714,7 +709,7 @@ export default class ArborPlugin extends Plugin {
   }
 
   private async handleFileOpen(file: TFile | null): Promise<void> {
-    if (!file || file.extension !== "md" || Platform.isMobileApp || !this.settings.autoOpenManagedNotes) {
+    if (!file || file.extension !== "md" || !this.settings.autoOpenManagedNotes) {
       return;
     }
 
@@ -745,7 +740,7 @@ export default class ArborPlugin extends Plugin {
   }
 
   private async handleActiveLeafChange(leaf: WorkspaceLeaf | null): Promise<void> {
-    if (!leaf || Platform.isMobileApp || !this.settings.autoOpenManagedNotes) {
+    if (!leaf || !this.settings.autoOpenManagedNotes) {
       return;
     }
 
@@ -1009,7 +1004,7 @@ export default class ArborPlugin extends Plugin {
     if (
       source === "link-context-menu" ||
       !(file instanceof TFolder) ||
-      !shouldShowNewArborMenuItem("folder", Platform.isMobileApp)
+      !shouldShowNewArborMenuItem("folder")
     ) {
       return;
     }
@@ -1018,7 +1013,7 @@ export default class ArborPlugin extends Plugin {
   }
 
   private handleFilesMenu(menu: Menu, files: TAbstractFile[], source: string): void {
-    if (source === "link-context-menu" || files.length !== 0 || !shouldShowNewArborMenuItem("empty", Platform.isMobileApp)) {
+    if (source === "link-context-menu" || files.length !== 0 || !shouldShowNewArborMenuItem("empty")) {
       return;
     }
 

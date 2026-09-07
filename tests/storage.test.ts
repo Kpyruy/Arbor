@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseBranchDocument, buildBranchDocument } from "../src/storage/document";
 import { buildStructureBlock, linearizeTree } from "../src/storage/serializer";
 import { loadImportedBranchDocument } from "../src/storage/reconcile";
@@ -228,6 +228,33 @@ describe("document and storage", () => {
 
     expect(loaded.origin).toBe("legacy");
     expect(loaded.metadata.blocks.map((block) => block.id)).toEqual(metadata.blocks.map((block) => block.id));
+  });
+
+  it.each(["multiline", "compact-url-safe"])("loads %s legacy trees without Node Buffer and preserves Unicode and hierarchy", (format) => {
+    const metadata: BranchTreeMetadata = {
+      version: 1,
+      prefix: "",
+      blocks: [
+        { id: "корінь-🌳", parentId: null, order: 0, content: "# Дерево 🌳", after: "\n\n" },
+        { id: "гілка-🌿", parentId: "корінь-🌳", order: 0, content: "Дочірній блок: думки й ідеї 🌿", after: "" }
+      ]
+    };
+    const encoded = Buffer.from(JSON.stringify(metadata), "utf8").toString("base64");
+    const footer = format === "multiline"
+      ? `<!-- arbor:metadata:v1\n${encoded.match(/.{1,40}/g)!.join("\n")}\n-->`
+      : `<!-- arbor:metadata:v1:${encoded.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")} -->`;
+    const note = `${legacyLinearize(metadata)}\n${footer}`;
+    let loaded: ReturnType<typeof loadImportedBranchDocument>;
+    vi.stubGlobal("Buffer", undefined);
+    try {
+      loaded = loadImportedBranchDocument(note);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(loaded.origin).toBe("legacy");
+    expect(loaded.metadata.blocks.map(({ id, parentId, content }) => ({ id, parentId, content }))).toEqual(
+      metadata.blocks.map(({ id, parentId, content }) => ({ id, parentId, content }))
+    );
   });
 
   it("marks legacy v1 notes with visible markers for automatic footer migration", () => {

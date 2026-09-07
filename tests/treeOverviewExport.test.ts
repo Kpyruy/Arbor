@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAvailableTreeOverviewExportPath,
   DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY,
+  MOBILE_TREE_OVERVIEW_EXPORT_LIMITS,
   resolveTreeOverviewExportLinkStyle,
   resolveTreeOverviewExportSize
 } from "../src/treeOverviewExport";
@@ -39,6 +40,23 @@ describe("Tree Overview export", () => {
       width: 12_800,
       height: 9_400
     });
+  });
+
+  it("uses a conservative phone budget without changing the requested quality", () => {
+    expect(resolveTreeOverviewExportSize(800, 600, "high", MOBILE_TREE_OVERVIEW_EXPORT_LIMITS)).toEqual({
+      scale: 2,
+      width: 1600,
+      height: 1200
+    });
+    expect(resolveTreeOverviewExportSize(3_000, 2_000, "high", MOBILE_TREE_OVERVIEW_EXPORT_LIMITS)).toBeNull();
+    expect(resolveTreeOverviewExportSize(3_000, 2_000, "standard", MOBILE_TREE_OVERVIEW_EXPORT_LIMITS)).not.toBeNull();
+    expect(resolveTreeOverviewExportSize(4_100, 100, "standard", MOBILE_TREE_OVERVIEW_EXPORT_LIMITS)).toBeNull();
+    expect(resolveTreeOverviewExportSize(3_000, 3_000, "standard", MOBILE_TREE_OVERVIEW_EXPORT_LIMITS)).toBeNull();
+  });
+
+  it("rejects non-finite source dimensions before allocating a canvas", () => {
+    expect(resolveTreeOverviewExportSize(Number.NaN, 100, "standard")).toBeNull();
+    expect(resolveTreeOverviewExportSize(100, Number.POSITIVE_INFINITY, "high")).toBeNull();
   });
 
   it("uses an explicit theme color for export connectors instead of CSS color mixing", () => {

@@ -196,7 +196,9 @@ function parseLegacyMetadataBlock(raw: string): BranchTreeMetadata | null {
   }
 
   try {
-    const json = Buffer.from(encoded.replace(/\s+/g, ""), "base64").toString("utf8");
+    const base64 = encoded.replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+    const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+    const json = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     return normalizeMetadata(JSON.parse(json) as BranchTreeMetadata);
   } catch {
     return null;
