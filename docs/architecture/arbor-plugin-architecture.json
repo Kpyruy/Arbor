@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Архітектура плагіна Arbor",
+    "output": "arbor-plugin-architecture.html",
+    "quality_profile": "showcase",
+    "viewBox": [1180, 620],
+    "views": [
+      {
+        "id": "main-flow",
+        "label": "Основний шлях",
+        "focus": ["obsidian", "plugin", "view", "tree", "storage", "note"],
+        "note": "Від Obsidian до звичайної Markdown-нотатки через інтерфейс, модель дерева та сховище."
+      },
+      {
+        "id": "ui-integration",
+        "label": "Інтерфейс і налаштування",
+        "focus": ["obsidian", "plugin", "view", "settings", "explorer"],
+        "note": "Плагін реєструє View, налаштування та інтеграцію з File Explorer."
+      },
+      {
+        "id": "exports",
+        "label": "Експорт",
+        "focus": ["view", "export", "output"],
+        "note": "Tree Overview експортується як PNG або односторінковий PDF, а нотатки — як чистий Markdown."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "obsidian",
+      "type": "external",
+      "label": "Obsidian",
+      "sublabel": "Vault · workspace · API",
+      "pos": [35, 295],
+      "size": [145, 72]
+    },
+    {
+      "id": "plugin",
+      "type": "backend",
+      "label": "ArborPlugin",
+      "sublabel": "src/main.ts",
+      "tag": "Точка входу",
+      "pos": [230, 295],
+      "size": [150, 72]
+    },
+    {
+      "id": "view",
+      "type": "frontend",
+      "label": "ArborView",
+      "sublabel": "Branch Editor · Tree Overview",
+      "tag": "Інтерактивний UI",
+      "pos": [435, 295],
+      "size": [175, 72]
+    },
+    {
+      "id": "tree",
+      "type": "backend",
+      "label": "Модель дерева",
+      "sublabel": "tree.ts · overviewLayout.ts",
+      "pos": [665, 295],
+      "size": [175, 72]
+    },
+    {
+      "id": "storage",
+      "type": "backend",
+      "label": "Сховище Arbor",
+      "sublabel": "parse · reconcile · serialize",
+      "pos": [895, 295],
+      "size": [175, 72]
+    },
+    {
+      "id": "note",
+      "type": "database",
+      "label": "Markdown-нотатка",
+      "sublabel": "Текст + Arbor markers + structure",
+      "tag": "Джерело правди",
+      "pos": [895, 455],
+      "size": [175, 72]
+    },
+    {
+      "id": "settings",
+      "type": "backend",
+      "label": "Налаштування і теми",
+      "sublabel": "settings.ts · theme.ts · Theme Studio",
+      "pos": [230, 120],
+      "size": [190, 72]
+    },
+    {
+      "id": "explorer",
+      "type": "frontend",
+      "label": "File Explorer",
+      "sublabel": "New Arbor note · ARBOR badge",
+      "pos": [470, 120],
+      "size": [180, 72]
+    },
+    {
+      "id": "export",
+      "type": "backend",
+      "label": "Експорт дерева",
+      "sublabel": "PNG · PDF · чистий Markdown",
+      "pos": [665, 455],
+      "size": [175, 72]
+    },
+    {
+      "id": "output",
+      "type": "external",
+      "label": "Файли експорту",
+      "sublabel": "PNG · PDF · .md копія",
+      "pos": [435, 455],
+      "size": [175, 72]
+    }
+  ],
+  "connections": [
+    {
+      "id": "obsidian-loads-plugin",
+      "from": "obsidian",
+      "to": "plugin",
+      "label": "завантажує",
+      "variant": "emphasis",
+      "labelDy": 60
+    },
+    {
+      "id": "plugin-registers-view",
+      "from": "plugin",
+      "to": "view",
+      "label": "реєструє View",
+      "variant": "emphasis",
+      "labelDy": 60
+    },
+    {
+      "id": "view-updates-tree",
+      "from": "view",
+      "to": "tree",
+      "label": "навігація й розкладка",
+      "variant": "emphasis",
+      "labelDy": 60
+    },
+    {
+      "id": "tree-persisted",
+      "from": "tree",
+      "to": "storage",
+      "label": "структура блоків",
+      "variant": "emphasis",
+      "labelDy": 60
+    },
+    {
+      "id": "storage-reads-writes-note",
+      "from": "storage",
+      "to": "note",
+      "label": "читання й запис",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "settings-configure-plugin",
+      "from": "settings",
+      "to": "plugin",
+      "label": "зберігає вибір",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "explorer-creates-notes",
+      "from": "explorer",
+      "to": "plugin",
+      "label": "створює Arbor-нотатки",
+      "fromSide": "left",
+      "toSide": "top"
+    },
+    {
+      "id": "view-starts-export",
+      "from": "view",
+      "to": "export",
+      "label": "знімок дерева",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "export-writes-output",
+      "from": "export",
+      "to": "output",
+      "label": "створює файл",
+      "variant": "dashed"
+      ,"labelDy": 60
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Основний принцип",
+      "items": [
+        "Нотатка лишається звичайним читабельним Markdown-файлом.",
+        "Arbor зберігає тільки зв’язки блоків і порядок у видимих markers та footer."
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Режими роботи",
+      "items": [
+        "Branch Editor — фокус на вибраній гілці.",
+        "Tree Overview — повна інтерактивна карта дерева."
+      ]
+    }
+  ]
+}
