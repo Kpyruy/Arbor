@@ -10,6 +10,20 @@ export interface ArborReleaseNote {
 
 export const ARBOR_RELEASE_NOTES: readonly ArborReleaseNote[] = [
   {
+    version: "0.3.0",
+    title: "Take Arbor with you",
+    changes: [
+      "Arbor is now officially supported on phones and tablets.",
+      "The compact mobile Branch Editor keeps the selected sibling column in focus with touch-friendly controls.",
+      "Pinch with two fingers to adjust editor density; Tree Overview supports touch pan and pinch zoom.",
+      "Mobile loading, legacy-note recovery and export limits are tuned for smaller devices."
+    ],
+    action: {
+      label: "Open Arbor settings",
+      id: "open-settings"
+    }
+  },
+  {
     version: "0.2.7",
     title: "Make the tree your own",
     changes: [
