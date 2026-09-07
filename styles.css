@@ -534,7 +534,8 @@
   position: relative;
   display: grid;
   grid-template-columns: 180px 72px 180px;
-  grid-template-rows: repeat(2, 72px);
+  grid-template-rows: repeat(2, minmax(72px, max-content));
+  row-gap: 12px;
   min-height: 170px;
   align-items: center;
   align-content: center;
@@ -601,7 +602,7 @@
   display: grid;
   grid-column: 3;
   grid-row: 1 / -1;
-  grid-template-rows: repeat(2, 72px);
+  grid-template-rows: repeat(2, minmax(72px, max-content));
   gap: 12px;
 }
 
@@ -2303,6 +2304,17 @@
   .arbor-theme-studio-editor-actions button,
   .arbor-confirm-actions button,
   .arbor-theme-confirm-actions button { min-height: 44px; flex: 1 1 auto; white-space: normal; }
+  .arbor-theme-studio-footer {
+    bottom: -16px;
+    margin: 16px -16px -16px;
+    padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    box-shadow: none;
+  }
+  .arbor-theme-studio-footer button {
+    box-shadow: none;
+  }
   .arbor-theme-studio-card-label { align-items: flex-start; flex-direction: column; gap: 3px; }
   .arbor-theme-studio-card-label > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .arbor-clean-export-choice { min-height: 44px; }

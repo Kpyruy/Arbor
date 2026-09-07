@@ -77,6 +77,31 @@ describe("Theme Studio preview", () => {
     expect(styles).toContain(".arbor-theme-studio-modal .modal-content::-webkit-scrollbar");
   });
 
+  it("sizes the preview tree rows to their content so mobile text cannot overlap cards", () => {
+    const styles = readProjectFile("styles.css");
+    const previewTree = styles.slice(
+      styles.indexOf(".arbor-theme-studio-preview-tree {"),
+      styles.indexOf(".arbor-theme-studio-catalog {")
+    );
+
+    expect(previewTree).toContain("grid-template-rows: repeat(2, minmax(72px, max-content));");
+    expect(previewTree).toContain("row-gap: 12px;");
+    expect(previewTree).toContain(".arbor-theme-studio-preview-branches {");
+  });
+
+  it("uses an opaque, shadow-free Theme Studio footer on mobile", () => {
+    const styles = readProjectFile("styles.css");
+    const mobileStyles = styles.slice(styles.indexOf("@media (max-width: 600px)"));
+    const footerStyles = mobileStyles.slice(
+      mobileStyles.indexOf(".arbor-theme-studio-footer {"),
+      mobileStyles.indexOf(".arbor-theme-studio-card-label {")
+    );
+
+    expect(footerStyles).toContain("background: var(--background-primary);");
+    expect(footerStyles).toContain("box-shadow: none;");
+    expect(footerStyles).toContain(".arbor-theme-studio-footer button");
+  });
+
   it("offers theme actions from the footer without requiring right-click or nesting buttons", () => {
     const studio = readProjectFile("src/themeStudio.ts");
     const footerStart = studio.indexOf("private renderFooter");
