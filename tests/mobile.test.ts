@@ -1,0 +1,35 @@
+import { describe, expect, it } from "vitest";
+import { compactColumns, pinchViewport, shouldSaveOnEnter, useCompactLayout } from "../src/mobile";
+import { buildColumnModels } from "../src/model/tree";
+import type { BranchTreeMetadata } from "../src/types";
+
+describe("mobile interaction policy", () => {
+  it("uses the actual leaf width, ignoring unmeasured leaves", () => {
+    expect([0, 360, 600, 601, 1024].map(useCompactLayout)).toEqual([false, true, true, false, false]);
+  });
+  it("shows selected siblings and preserves their order and IDs", () => {
+    const metadata: BranchTreeMetadata = { version: 1, prefix: "", blocks: [
+      { id: "root", parentId: null, order: 0, content: "Root", after: "" },
+      { id: "a", parentId: "root", order: 0, content: "A", after: "" },
+      { id: "b", parentId: "root", order: 1, content: "B", after: "" }
+    ] };
+    const columns = compactColumns(buildColumnModels(metadata, "b", 200), "b");
+    expect(columns).toHaveLength(1);
+    expect(columns[0].blocks.map((block) => block.id)).toEqual(["a", "b"]);
+    expect(compactColumns([], null)).toEqual([]);
+  });
+  it("keeps mobile newline and IME input, retaining desktop Enter and explicit save shortcut", () => {
+    const event = { key: "Enter", shiftKey: false, isComposing: false, ctrlKey: false, metaKey: false };
+    expect(shouldSaveOnEnter(event, true)).toBe(false);
+    expect(shouldSaveOnEnter(event, false)).toBe(true);
+    expect(shouldSaveOnEnter({ ...event, ctrlKey: true }, true)).toBe(true);
+    expect(shouldSaveOnEnter({ ...event, metaKey: true, isComposing: true }, true)).toBe(false);
+    expect(shouldSaveOnEnter({ ...event, shiftKey: true }, false)).toBe(false);
+  });
+  it("anchors pinch zoom to the fingers, including movement and scale limits", () => {
+    const start = { zoom: 1, left: 100, top: 200, midpoint: { x: 100, y: 100 }, distance: 100 };
+    expect(pinchViewport(start, { x: 120, y: 110 }, 150)).toEqual({ zoom: 1.5, left: 180, top: 340 });
+    expect(pinchViewport(start, { x: 100, y: 100 }, 400).zoom).toBe(1.6);
+    expect(pinchViewport(start, { x: 100, y: 100 }, 10).zoom).toBe(0.5);
+  });
+});

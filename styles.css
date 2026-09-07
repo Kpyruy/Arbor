@@ -2129,3 +2129,180 @@
     transition-duration: 0ms;
   }
 }
+
+/* Touch controls and a focused column keep phone navigation within reach. */
+.arbor-view.has-touch-controls {
+  padding: 8px;
+}
+
+.arbor-view.has-touch-controls .arbor-frame {
+  height: min(100%, var(--arbor-mobile-height, 100%));
+  gap: 8px;
+  padding-top: 50px;
+}
+
+.arbor-view.has-touch-controls .arbor-frame::before,
+.arbor-view.is-compact .arbor-viewport-fades,
+.arbor-view.is-compact .arbor-preview-pane,
+.arbor-overview-exit.is-inactive-mode {
+  display: none;
+}
+
+.arbor-view.has-touch-controls .arbor-breadcrumbs {
+  flex: 0 0 44px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 4px;
+}
+
+.arbor-view.has-touch-controls .arbor-breadcrumbs button {
+  min-height: 40px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.arbor-view.has-touch-controls .arbor-zoom-indicator,
+.arbor-view.has-touch-controls .arbor-markdown-button,
+.arbor-view.has-touch-controls .arbor-theme-button,
+.arbor-view.has-touch-controls .arbor-view-menu-button,
+.arbor-view.has-touch-controls .arbor-overview-button,
+.arbor-view.has-touch-controls .arbor-overview-exit {
+  top: 0;
+  min-width: 44px;
+  height: 44px;
+  opacity: 1;
+  transform: none;
+  border-radius: 12px;
+}
+
+/* Obsidian's responsive button rule restores horizontal padding on tablets.
+   Explicitly reserve the icon's content box so the SVG cannot shrink to a dot. */
+.arbor-view.has-touch-controls .arbor-markdown-button,
+.arbor-view.has-touch-controls .arbor-theme-button,
+.arbor-view.has-touch-controls .arbor-view-menu-button,
+.arbor-view.has-touch-controls .arbor-overview-button,
+.arbor-view.has-touch-controls .arbor-overview-exit {
+  flex: 0 0 44px;
+  padding: 0;
+}
+
+.arbor-view.has-touch-controls .arbor-view-menu-button { right: 0; }
+.arbor-view.has-touch-controls .arbor-markdown-button { right: 48px; }
+.arbor-view.has-touch-controls .arbor-theme-button { right: 96px; }
+.arbor-view.has-touch-controls .arbor-zoom-indicator { right: 144px; }
+.arbor-view.has-touch-controls .arbor-overview-button,
+.arbor-view.has-touch-controls .arbor-overview-exit { left: 0; right: auto; }
+.arbor-view.has-touch-controls.is-rtl .arbor-view-menu-button { left: 0; right: auto; }
+.arbor-view.has-touch-controls.is-rtl .arbor-markdown-button { left: 48px; right: auto; }
+.arbor-view.has-touch-controls.is-rtl .arbor-theme-button { left: 96px; right: auto; }
+.arbor-view.has-touch-controls.is-rtl .arbor-zoom-indicator { left: 144px; right: auto; }
+.arbor-view.has-touch-controls.is-rtl .arbor-overview-button,
+.arbor-view.has-touch-controls.is-rtl .arbor-overview-exit { right: 0; left: auto; }
+
+.arbor-touch-dock {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px max(6px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  order: 10;
+}
+
+.arbor-touch-dock .arbor-touch-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px;
+  border-radius: 12px;
+  box-shadow: none;
+  touch-action: manipulation;
+}
+
+.arbor-touch-action svg { width: 20px; height: 20px; }
+.arbor-touch-action:disabled { opacity: 0.3; }
+.arbor-touch-dock.is-editing { justify-content: flex-end; gap: 10px; }
+.arbor-touch-dock.is-editing .arbor-touch-action { min-width: 104px; }
+.arbor-view.has-touch-controls .arbor-body { min-height: 0; }
+
+.arbor-view.is-compact .arbor-columns-viewport {
+  overflow-x: hidden;
+  overflow-y: auto;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+}
+
+.arbor-view.is-compact .arbor-columns,
+.arbor-view.is-compact.is-rtl .arbor-columns {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 4px 24px;
+  margin: 0;
+}
+
+.arbor-view.is-compact .arbor-column { width: 100%; min-width: 0; }
+.arbor-view.is-compact .arbor-card-list { transform: none; gap: 12px; transition: none; }
+.arbor-view.is-compact .arbor-card-list.is-rebinding { opacity: 1; filter: none; }
+.arbor-view.is-compact .arbor-card { width: 100%; padding: 16px; min-height: 100px; opacity: 0.85; }
+.arbor-view.is-compact .arbor-card.is-active { opacity: 1; }
+.arbor-view.is-compact.is-context-dim-mode .arbor-card.is-muted { opacity: 0.78; filter: none; }
+.arbor-view.is-compact .arbor-card-content { font-size: 16px; overflow-wrap: anywhere; }
+.arbor-view.is-compact .arbor-card-content img { max-width: 100%; height: auto; }
+.arbor-view.is-compact .arbor-card-content pre,
+.arbor-view.is-compact .arbor-card-content table { max-width: 100%; overflow-x: auto; }
+.arbor-view.is-compact .arbor-card.is-active .arbor-card-content { max-height: none; overflow: visible; }
+.arbor-view.has-touch-controls .arbor-editor { font-size: 16px; min-height: 80px; touch-action: pan-y; }
+.arbor-view.is-compact .arbor-card.is-editing .arbor-editor { max-height: none; }
+.arbor-overview-viewport { touch-action: none; }
+.arbor-view.is-touch-editing .arbor-overview-viewport { touch-action: pan-y; }
+.arbor-view.has-touch-controls .arbor-overview-card.is-editing { max-height: none; }
+.arbor-view.is-compact .arbor-search-dialog { width: 100%; max-width: 100%; padding: 16px; }
+.arbor-view.is-compact .arbor-search-input { width: 100%; min-width: 0; font-size: 16px; }
+.arbor-view.is-compact .arbor-search-footer { flex-wrap: wrap; }
+.arbor-search-footer button { min-height: 36px; }
+
+@media (max-width: 600px) {
+  .modal.arbor-theme-studio-modal,
+  .modal.arbor-theme-studio-editor-modal,
+  .modal.arbor-theme-studio-confirm-modal,
+  .modal.arbor-confirm-modal,
+  .modal.arbor-export-modal {
+    width: calc(100% - 24px);
+    max-width: calc(100% - 24px);
+    max-height: calc(100dvh - 32px);
+    padding: 16px;
+    border-radius: 16px;
+  }
+  .arbor-theme-studio-modal .modal-content,
+  .arbor-theme-studio-editor-modal .modal-content,
+  .arbor-export-modal .modal-content { min-height: 0; overflow-y: auto; }
+  .arbor-theme-studio-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .arbor-theme-studio-footer,
+  .arbor-theme-studio-editor-actions,
+  .arbor-confirm-actions,
+  .arbor-theme-confirm-actions { flex-wrap: wrap; gap: 8px; }
+  .arbor-theme-studio-footer button,
+  .arbor-theme-studio-editor-actions button,
+  .arbor-confirm-actions button,
+  .arbor-theme-confirm-actions button { min-height: 44px; flex: 1 1 auto; white-space: normal; }
+  .arbor-theme-studio-card-label { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .arbor-theme-studio-card-label > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .arbor-clean-export-choice { min-height: 44px; }
+  .arbor-settings input[type="text"],
+  .arbor-theme-studio-editor-modal input[type="text"] { font-size: 16px; max-width: 100%; }
+  .arbor-theme-studio-editor-modal .modal-content,
+  .arbor-theme-studio-confirm-modal .modal-content { padding: 4px; }
+  .arbor-theme-studio-editor-preview { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .arbor-theme-studio-confirm-modal .arbor-confirm-actions button { flex: 1 1 120px; }
+}
+
+.arbor-copy-link { width: 100%; min-height: 100px; resize: vertical; }

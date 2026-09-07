@@ -204,6 +204,7 @@ export class ThemeStudioModal extends Modal {
   private state: ArborThemeState;
   private previewThemeId: string;
   private previewEl: HTMLElement | null = null;
+  private themeActionsButtonEl: HTMLButtonElement | null = null;
   private editorModal: ThemeEditorModal | null = null;
   private confirmationOpen = false;
 
@@ -225,6 +226,7 @@ export class ThemeStudioModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty();
+    this.themeActionsButtonEl = null;
     this.controller.closed();
   }
 
@@ -299,10 +301,11 @@ export class ThemeStudioModal extends Modal {
     this.contentEl.querySelectorAll<HTMLElement>(".arbor-theme-studio-card").forEach((card) => {
       card.toggleClass("is-selected", card.dataset.themeId === themeId);
     });
+    this.syncThemeActionsLabel();
     this.renderPreview();
   }
 
-  private openThemeMenu(event: MouseEvent, theme: ArborSavedTheme): void {
+  private openThemeMenu(event: MouseEvent, theme: ArborSavedTheme, anchor?: HTMLElement): void {
     event.preventDefault();
     event.stopPropagation();
 
@@ -332,7 +335,12 @@ export class ThemeStudioModal extends Modal {
           .onClick(() => this.confirmDelete(theme))
       );
     }
-    menu.showAtMouseEvent(event);
+    if (anchor) {
+      const rect = anchor.getBoundingClientRect();
+      menu.showAtPosition({ x: rect.left, y: rect.bottom + 6 }, anchor.ownerDocument);
+    } else {
+      menu.showAtMouseEvent(event);
+    }
     this.styleThemeMenu(menu, theme.palette.accent);
   }
 
@@ -393,10 +401,31 @@ export class ThemeStudioModal extends Modal {
   private renderFooter(container: HTMLElement): void {
     const actions = container.createDiv({ cls: "arbor-theme-studio-footer" });
     new ButtonComponent(actions).setButtonText("Close").onClick(() => this.close());
+    const themeActions = actions.createEl("button", {
+      cls: "arbor-theme-studio-actions-button",
+      text: "Theme actions",
+      attr: { type: "button", "aria-haspopup": "menu" }
+    });
+    this.themeActionsButtonEl = themeActions;
+    this.syncThemeActionsLabel();
+    themeActions.addEventListener("click", (event) => {
+      const theme = this.previewTheme();
+      if (theme) {
+        this.openThemeMenu(event, theme, themeActions);
+      }
+    });
     new ButtonComponent(actions)
       .setButtonText("Apply selected")
       .setCta()
       .onClick(() => void this.applyTheme(this.previewThemeId));
+  }
+
+  private syncThemeActionsLabel(): void {
+    const theme = this.previewTheme();
+    if (this.themeActionsButtonEl) {
+      this.themeActionsButtonEl.disabled = !theme;
+      this.themeActionsButtonEl.setAttribute("aria-label", theme ? `Actions for ${theme.name} theme` : "Theme actions");
+    }
   }
 
   private openThemeEditor(source: ArborSavedTheme | null, requestedName?: string): void {

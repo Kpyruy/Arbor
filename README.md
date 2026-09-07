@@ -19,7 +19,7 @@ The core idea:
 - reorganize ideas without copy-paste chaos
 - stay inside one note instead of splitting thoughts across many files
 
-Arbor is desktop-only. It currently requires Obsidian `>= 1.7.2` and was tested on Obsidian `1.12.4`.
+Arbor works on desktop, phones, and tablets. It requires Obsidian `>= 1.7.2`.
 
 ## Why Arbor
 
@@ -49,6 +49,8 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Zoom, breadcrumbs, view menu, and context menus
 - Whole-tree Overview map with connected, fully rendered Markdown cards
 - Tree Overview export as a PNG or one-page PDF
+- Touch-first phone editor with a focused sibling column and 44 px action controls
+- One-finger Tree Overview pan and two-finger pinch zoom
 - Automatic and custom palettes through Theme Studio
 - Mouse-wheel navigation through sibling blocks and visible branch columns
 - Auto-open managed Arbor notes in Arbor view
@@ -90,10 +92,16 @@ If you want to install Arbor before it appears in the community catalog:
 1. Open any Markdown note.
 2. Run `Open view for current note`.
 3. Create a root block.
-4. Press `Enter` on a selected card to edit it.
+4. Press `Enter` on a selected card to edit it on desktop, or double-tap it on mobile.
 5. Use `Ctrl/Cmd + Arrow` to grow the structure.
 6. Use the right-click menu to duplicate, move, delete, or continue a branch.
 7. Turn on `Selected block panel` from the Arbor menu if you want a focused preview/editor panel.
+
+## Mobile controls
+
+On a phone, Arbor keeps the selected block's sibling column on screen and puts navigation in a bottom action bar. Tap a card to select it; double-tap a card or use **Edit** to edit it. **Save** and **Cancel** are always visible while editing. Plain `Enter` makes a new line, while `Ctrl/Cmd + Enter` on a hardware keyboard saves.
+
+In Tree Overview, drag with one finger to pan and pinch with two fingers to zoom. A drag never opens a card editor. Use the top-left map button to return to the branch editor.
 
 ## Support
 
@@ -122,8 +130,9 @@ These work inside Arbor itself. They are not command-palette bindings.
 
 | Shortcut | Effect |
 | --- | --- |
-| `Enter` in editor | Save block and leave edit mode |
-| `Shift + Enter` | Insert newline inside the block |
+| `Enter` in editor | Save block and leave edit mode on desktop; insert a newline on mobile |
+| `Shift + Enter` | Insert a newline inside the block on desktop |
+| `Ctrl/Cmd + Enter` | Save the block on mobile with a hardware keyboard |
 | `Escape` | Cancel current edit |
 | `Ctrl/Cmd + Z` in editor | Native text undo inside the current textarea |
 
@@ -218,21 +227,21 @@ Current menu actions:
 | Theme | `Automatic` | Follow Obsidian, choose a built-in palette, or open Theme Studio for custom themes |
 | Layout direction | `Left to right` | Choose which physical side the root starts on; right-to-left also mirrors directional navigation and controls |
 | Default opening mode | `Branch editor` | Choose whether Arbor notes open in the branch editor or Tree Overview |
-| Split direction | `Vertical split` | Where Arbor opens relative to the current note |
+| Split direction | `Vertical split` | Where Arbor opens relative to the current note; desktop only |
 | Card width | `300 px` | Base card width in the branching scene |
 | Card minimum height | `120 px` | Minimum card height before content expands it |
 | Horizontal spacing | `20 px` | Gap between columns |
 | Vertical spacing | `12 px` | Gap between sibling cards |
 | Default zoom | `100%` | Initial scene scale when Arbor opens |
 | Preview snippet length | `220` chars | Maximum preview text for compact card snippets |
-| Drag and drop | `On` | Enable drag reorder and reparent |
+| Drag and drop | `On` | Enable drag reorder and reparent; desktop only |
 | Ctrl/Cmd + wheel zoom | `On` | Allow scene zoom with `Ctrl/Cmd + mouse wheel` |
 | Auto-open managed notes | `On` | Open Arbor-managed notes directly in Arbor view |
 | Show breadcrumb path | `On` | Show the active path strip at the top |
 | Show breadcrumb flow | `On` | Show subtle connectors between breadcrumb items |
 | Preferred breadcrumb line prefix | `#` | Prefer the first non-empty line that starts with `#` when generating breadcrumb labels |
 | Breadcrumb fallback | `First non-empty line` | What Arbor uses when no preferred-prefix line exists |
-| Selected block panel | `Off` | Show the focused preview/editor panel for the selected block |
+| Selected block panel | `Off` | Show the focused preview/editor panel for the selected block; desktop only |
 
 ## How Notes Stay Normal Markdown
 
@@ -296,18 +305,17 @@ The command creates a new Arbor-managed demo note in the current note folder, or
 
 ## Compatibility
 
-- Desktop only
-- Obsidian `>= 1.5.12`
-- Tested on Obsidian `1.12.4`
+- Desktop, Android, and iOS
+- Obsidian `>= 1.7.2`
 - Plugin ID: `arbor`
-- Current version: `0.1.9`
+- Current version: `0.2.7`
 
 ## Known Limitations
 
-- Arbor is intentionally desktop-first.
 - Plain-Markdown rebuild is conservative by design. It protects content first and structure second.
 - Undo and redo are Arbor view history, not native editor history.
 - Very large notes can still benefit from future virtualization work.
+- Mobile Tree Overview exports are capped at 4,096 px on a side and 8 MP before rendering, to avoid unsafe raster allocations.
 
 ## Roadmap
 

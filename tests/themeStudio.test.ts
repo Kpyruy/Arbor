@@ -76,4 +76,18 @@ describe("Theme Studio preview", () => {
     expect(modalContent).toContain("scrollbar-width: none;");
     expect(styles).toContain(".arbor-theme-studio-modal .modal-content::-webkit-scrollbar");
   });
+
+  it("offers theme actions from the footer without requiring right-click or nesting buttons", () => {
+    const studio = readProjectFile("src/themeStudio.ts");
+    const footerStart = studio.indexOf("private renderFooter");
+    const footer = studio.slice(footerStart, studio.indexOf("private openThemeEditor", footerStart));
+    const cardStart = studio.indexOf("private renderThemeCard");
+    const card = studio.slice(cardStart, studio.indexOf("private selectPreview", cardStart));
+
+    expect(footer).toContain('actions.createEl("button"');
+    expect(footer).toContain('"aria-haspopup": "menu"');
+    expect(footer).toContain("const theme = this.previewTheme()");
+    expect(footer).toContain("this.openThemeMenu(event, theme, themeActions)");
+    expect(card).not.toContain('card.createEl("button"');
+  });
 });

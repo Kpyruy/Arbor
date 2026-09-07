@@ -7,6 +7,7 @@ import {
   Menu,
   Modal,
   Notice,
+  Platform,
   setIcon,
   TFile,
   WorkspaceLeaf
@@ -69,6 +70,7 @@ import {
   resolveTreeOverviewExportSize,
   resolveTreeOverviewExportLinkStyle,
   DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY,
+  MOBILE_TREE_OVERVIEW_EXPORT_LIMITS,
   TreeOverviewExportFormat,
   TreeOverviewExportQuality
 } from "../treeOverviewExport";
@@ -89,6 +91,7 @@ import {
   resolveEditorHeight
 } from "../cardViewport";
 import { toBlob } from "html-to-image";
+import { compactColumns, pinchViewport, shouldSaveOnEnter, useCompactLayout, TouchPoint } from "../mobile";
 
 type EditingOrigin = "card" | "preview" | "overview";
 
@@ -223,6 +226,7 @@ class CleanExportModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
+    this.modalEl.addClass("arbor-export-modal");
     contentEl.createEl("h3", { text: "Create clean export copy" });
     contentEl.createEl("p", {
       text: "Choose whether to keep the original YAML frontmatter in the normal Markdown copy."
@@ -281,7 +285,7 @@ class CleanExportModal extends Modal {
 class TreeOverviewExportModal extends Modal {
   private resolved = false;
   private format: TreeOverviewExportFormat = "png";
-  private quality: TreeOverviewExportQuality = DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY;
+  private quality: TreeOverviewExportQuality = Platform.isMobile ? "standard" : DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY;
   private resolver: (value: TreeOverviewExportOptions | null) => void = () => undefined;
 
   waitForChoice(): Promise<TreeOverviewExportOptions | null> {
@@ -295,6 +299,7 @@ class TreeOverviewExportModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h3", { text: "Export tree overview" });
+    this.modalEl.addClass("arbor-export-modal");
     contentEl.createEl("p", {
       text: "Export every branch as one full-page image or PDF. The current zoom and viewport position do not affect the result."
     });
@@ -304,8 +309,8 @@ class TreeOverviewExportModal extends Modal {
     this.addFormatChoice(choicesEl, "png", "PNG image");
     this.addFormatChoice(choicesEl, "pdf", "PDF — one large page");
     choicesEl.createDiv({ cls: "arbor-tree-export-choice-heading", text: "Quality" });
-    this.addQualityChoice(choicesEl, "standard", "Standard — 1×");
-    this.addQualityChoice(choicesEl, "high", "High — 2× (recommended)");
+    this.addQualityChoice(choicesEl, "standard", Platform.isMobile ? "Standard — 1× (recommended)" : "Standard — 1×");
+    this.addQualityChoice(choicesEl, "high", Platform.isMobile ? "High — 2×" : "High — 2× (recommended)");
     this.addQualityChoice(choicesEl, "ultra", "Ultra — 4×");
 
     const actionsEl = contentEl.createDiv({ cls: "arbor-confirm-actions" });
@@ -365,6 +370,12 @@ class TreeOverviewExportModal extends Modal {
 }
 
 export class ArborView extends FileView {
+  private compactLayout = false;
+  private touchDockEl: HTMLElement | null = null;
+  private readonly touchPoints = new Map<number, TouchPoint>();
+  private touchStart: { zoom: number; left: number; top: number; midpoint: TouchPoint; distance: number } | null = null;
+  private touchMoved = false;
+  private suppressTouchClickUntil = 0;
   navigation = true;
 
   private readonly history = new BranchHistory();
@@ -458,6 +469,66 @@ export class ArborView extends FileView {
   constructor(leaf: WorkspaceLeaf, private readonly plugin: ArborPlugin) {
     super(leaf);
     this.allowNoFile = false;
+    const doc = this.contentEl.ownerDocument;
+    this.registerDomEvent(doc, "visibilitychange", () => {
+      if (doc.visibilityState === "hidden" && Platform.isMobile) {
+        void this.commitEditIfNeeded();
+      }
+    });
+    const observer = new ResizeObserver(() => this.handleMobileResize());
+    observer.observe(this.contentEl);
+    this.register(() => observer.disconnect());
+    const visualViewport = doc.defaultView?.visualViewport;
+    if (visualViewport) {
+      const onResize = () => this.handleMobileResize();
+      visualViewport.addEventListener("resize", onResize);
+      this.register(() => visualViewport.removeEventListener("resize", onResize));
+    }
+  }
+
+  private get usesTouchControls(): boolean {
+    return this.compactLayout || Platform.isMobile;
+  }
+
+  private handleMobileResize(): void {
+    const compact = useCompactLayout(this.contentEl.clientWidth);
+    if (compact !== this.compactLayout) {
+      this.compactLayout = compact;
+      this.pendingScrollBlockId = this.state?.selectedBlockId ?? null;
+      this.render();
+    }
+    if (!this.usesTouchControls) return;
+    this.contentEl.querySelectorAll<HTMLTextAreaElement>("textarea.arbor-editor").forEach((editor) => this.resizeEditor(editor));
+    const viewport = this.contentEl.ownerDocument.defaultView?.visualViewport;
+    const rect = this.contentEl.getBoundingClientRect();
+    let bottom = Math.min(rect.bottom - 8, (viewport?.height ?? window.innerHeight) + (viewport?.offsetTop ?? 0));
+    if (Platform.isMobile) {
+      this.contentEl.ownerDocument.querySelectorAll<HTMLElement>(".mobile-navbar, .mobile-toolbar").forEach((bar) => {
+        const bounds = bar.getBoundingClientRect();
+        if (bounds.height > 0 && bounds.width > 0 && bounds.top > rect.top && bounds.top < bottom && bounds.right > rect.left && bounds.left < rect.right && getComputedStyle(bar).visibility !== "hidden") bottom = bounds.top - 8;
+      });
+    }
+    this.contentEl.setCssProps({ "--arbor-mobile-height": `${Math.max(120, bottom - rect.top - 8)}px` });
+    if (this.editingSession) {
+      if (this.presentationMode === "overview") {
+        const card = this.overviewSurfaceEl?.querySelector<HTMLElement>(".arbor-overview-card.is-active");
+        if (card) this.revealOverviewSelectedCard(card);
+      }
+      else this.revealCompactSelection();
+    }
+  }
+
+  private revealCompactSelection(): void {
+    if (!this.compactLayout) return;
+    const viewport = this.columnsViewportEl;
+    const card = this.columnsEl?.querySelector<HTMLElement>(".arbor-card.is-active");
+    if (!viewport || !card) return;
+    const bounds = viewport.getBoundingClientRect();
+    const target = card.getBoundingClientRect();
+    const offset = target.top < bounds.top + 12 || target.height > bounds.height - 24
+      ? target.top - bounds.top - 12
+      : Math.max(0, target.bottom - bounds.bottom + 12);
+    if (Math.abs(offset) > 1) viewport.scrollTop += offset;
   }
 
   getViewType(): string {
@@ -774,7 +845,7 @@ export class ArborView extends FileView {
 
       const snapshot = await this.createTreeOverviewExportSnapshot();
       exportFrame = snapshot.frame;
-      const size = resolveTreeOverviewExportSize(snapshot.width, snapshot.height, choice.quality);
+      const size = resolveTreeOverviewExportSize(snapshot.width, snapshot.height, choice.quality, Platform.isMobile ? MOBILE_TREE_OVERVIEW_EXPORT_LIMITS : undefined);
       if (!size) {
         new Notice("This tree overview is too large for the selected quality. Choose a lower quality and try again.");
         return;
@@ -972,6 +1043,7 @@ export class ArborView extends FileView {
 
     const selectionChanged = this.state.selectedBlockId !== nextSelectedBlockId;
     this.state.selectedBlockId = nextSelectedBlockId;
+    this.syncTouchDock();
 
     if (options?.focus) {
       this.pendingFocusBlockId = this.state.selectedBlockId;
@@ -1180,7 +1252,7 @@ export class ArborView extends FileView {
       const pendingSession = this.editingSession;
       void this.commitEditingSession(pendingSession).then(() => {
         if (this.state && nextSelectedBlockId) {
-          this.beginEditingBlock(nextSelectedBlockId);
+          this.beginEditingBlock(nextSelectedBlockId, origin);
         }
       });
       return;
@@ -1205,6 +1277,7 @@ export class ArborView extends FileView {
       autofocus: true,
       origin
     };
+    this.syncTouchDock();
     if (origin === "overview" && this.openOverviewEditorInPlace(block)) {
       return;
     }
@@ -1443,6 +1516,7 @@ export class ArborView extends FileView {
     }
 
     this.ensureShell();
+    this.syncTouchDock();
     this.syncViewportEdgeFades();
     this.syncBreadcrumbs();
     this.viewContext = this.buildViewContext();
@@ -1461,7 +1535,8 @@ export class ArborView extends FileView {
     this.overviewStageEl?.setCssStyles({ display: "none" });
     this.columnsStageEl?.setCssStyles({ display: "" });
     this.previewPaneEl?.setCssStyles({ display: "" });
-    const columns = buildColumnModels(this.state.metadata, this.state.selectedBlockId, this.plugin.settings.previewSnippetLength);
+    const allColumns = buildColumnModels(this.state.metadata, this.state.selectedBlockId, this.plugin.settings.previewSnippetLength);
+    const columns = this.compactLayout ? compactColumns(allColumns, this.state.selectedBlockId) : allColumns;
     const preservedSceneWidth = this.armSceneWidthForPendingScroll(columns.length);
     this.currentColumnMap.clear();
     columns.forEach((column) => this.currentColumnMap.set(column.key, column));
@@ -1567,12 +1642,68 @@ export class ArborView extends FileView {
     this.syncZoomIndicator();
   }
 
+  private syncTouchDock(): void {
+    if (!this.frameEl || !this.state) return;
+    this.contentEl.toggleClass("is-compact", this.compactLayout);
+    this.contentEl.toggleClass("has-touch-controls", this.usesTouchControls);
+    const overviewExit = this.frameEl.querySelector<HTMLElement>(".arbor-overview-exit");
+    if (this.overviewButtonEl) (this.usesTouchControls ? this.frameEl : this.bodyEl)?.appendChild(this.overviewButtonEl);
+    if (overviewExit) {
+      (this.usesTouchControls ? this.frameEl : this.overviewStageEl)?.appendChild(overviewExit);
+      overviewExit.toggleClass("is-inactive-mode", this.presentationMode !== "overview");
+    }
+    if (!this.usesTouchControls) {
+      this.touchDockEl?.remove();
+      this.touchDockEl = null;
+      return;
+    }
+    const dock = this.touchDockEl ?? this.frameEl.createDiv({ cls: "arbor-touch-dock", attr: { role: "toolbar", "aria-label": "Block actions" } });
+    this.touchDockEl = dock;
+    this.contentEl.toggleClass("is-touch-editing", Boolean(this.editingSession));
+    window.requestAnimationFrame(() => this.handleMobileResize());
+    dock.empty();
+    const button = (label: string, icon: string, action: () => void, disabled = false, text = false) => {
+      const el = dock.createEl("button", { cls: "arbor-touch-action", attr: { type: "button", "aria-label": label } });
+      setIcon(el, icon);
+      if (text) el.createSpan({ text: label });
+      el.disabled = disabled;
+      el.addEventListener("pointerdown", (event) => { event.preventDefault(); this.clearBlurCommitTimer(); });
+      el.addEventListener("click", action);
+      return el;
+    };
+    if (this.editingSession) {
+      dock.addClass("is-editing");
+      button("Cancel", "x", () => this.cancelEditingSession(), false, true);
+      button("Save", "check", () => void this.commitEditingSession(), false, true).addClass("mod-cta");
+      return;
+    }
+    dock.removeClass("is-editing");
+    const id = this.state.selectedBlockId;
+    const tree = this.state.metadata;
+    button("Parent block", getParentArrowIcon(this.plugin.settings.layoutDirection), () => this.selectParentBlock(), !getParentBlock(tree, id));
+    button("Previous block", "chevron-up", () => this.selectPreviousSiblingBlock(), !getPreviousSibling(tree, id));
+    button("Next block", "chevron-down", () => this.selectNextSiblingBlock(), !getNextSibling(tree, id));
+    button("Child block", getChildArrowIcon(this.plugin.settings.layoutDirection), () => this.selectPreferredChildBlock(), !getPreferredChildBlock(tree, id));
+    button("Edit block", "pencil", () => { if (id) this.beginEditingBlock(id, this.presentationMode === "overview" ? "overview" : "card"); }, !id);
+    const add = button("Add block", "plus", () => {
+      const menu = new Menu();
+      menu.addItem((item) => item.setTitle(id ? "Create child" : "Create root block").setIcon("git-branch").onClick(() => void (id ? this.createChild() : this.createRootBlock())));
+      if (id) menu.addItem((item) => item.setTitle("Create sibling below").setIcon("plus").onClick(() => void this.createSiblingBelow()));
+      const rect = add.getBoundingClientRect();
+      menu.showAtPosition({ x: rect.left, y: rect.top }, add.ownerDocument);
+    });
+    button("Block menu", "ellipsis", () => this.openActiveBlockMenu(), !id);
+  }
+
   private teardownShell(): void {
     this.cleanupDragPreview();
     this.cleanupViewportPan();
     this.cleanupOverviewPan();
     this.contentEl.empty();
     this.frameEl = null;
+    this.touchDockEl = null;
+    this.touchPoints.clear();
+    this.touchStart = null;
     this.breadcrumbsEl = null;
     this.breadcrumbExitLayerEl = null;
     this.zoomIndicatorEl = null;
@@ -1910,6 +2041,16 @@ export class ArborView extends FileView {
         this.render();
         this.searchInputEl?.focus();
       });
+      const go = footerEl.createEl("button", { text: "Go to match", attr: { type: "button" } });
+      go.addEventListener("click", () => {
+        const match = this.viewContext?.overviewNodes.find((node) => node.isSearchMatch);
+        if (match) {
+          this.selectBlock(match.id, { focus: true });
+          this.closeSearchOverlay();
+        }
+      });
+      const close = footerEl.createEl("button", { text: "Close", attr: { type: "button", "aria-label": "Close search" } });
+      close.addEventListener("click", () => this.closeSearchOverlay());
     }
 
     if (this.searchInputEl && this.searchInputEl.value !== this.previewSearchQuery) {
@@ -2144,7 +2285,7 @@ export class ArborView extends FileView {
     card.dataset.blockIndex = String(index);
     card.dataset.parentId = block.parentId ?? "";
     const isEditingCard = this.editingSession?.blockId === block.id && this.editingSession.origin === "card";
-    card.draggable = canDragCard(this.plugin.settings.dragAndDrop, isEditingCard);
+    card.draggable = canDragCard(this.plugin.settings.dragAndDrop && !this.usesTouchControls, isEditingCard);
     card.removeClass(
       "is-active",
       "is-on-path",
@@ -2219,7 +2360,7 @@ export class ArborView extends FileView {
       if (event.key === "Escape") {
         event.preventDefault();
         this.cancelEditingSession();
-      } else if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      } else if (shouldSaveOnEnter(event, this.usesTouchControls)) {
         event.preventDefault();
         void this.commitEditingSession();
       }
@@ -2244,6 +2385,7 @@ export class ArborView extends FileView {
     });
     editor.addEventListener("blur", (event) => {
       event.stopPropagation();
+      if (this.usesTouchControls) return;
       const session = this.editingSession;
       if (!session || session.blockId !== block.id || session.origin !== editor.dataset.editorOrigin) {
         return;
@@ -2270,7 +2412,7 @@ export class ArborView extends FileView {
     if (this.editingSession?.autofocus && this.editingSession.origin === "card") {
       const editorEl = editor;
       window.requestAnimationFrame(() => {
-        editorEl.focus();
+        editorEl.focus({ preventScroll: true });
         editorEl.setSelectionRange(editorEl.value.length, editorEl.value.length);
         this.resizeEditor(editorEl);
         if (this.editingSession) {
@@ -2321,6 +2463,7 @@ export class ArborView extends FileView {
       });
       setIcon(exitButton, "git-fork");
       exitButton.addEventListener("click", () => this.closeTreeOverview());
+      if (this.usesTouchControls) this.frameEl?.appendChild(exitButton);
 
       this.overviewViewportEl = this.overviewStageEl.createDiv({ cls: "arbor-overview-viewport" });
       this.overviewViewportEl.tabIndex = 0;
@@ -2333,11 +2476,16 @@ export class ArborView extends FileView {
       this.overviewViewportEl.addEventListener("lostpointercapture", () => this.cleanupOverviewPan());
       this.overviewViewportEl.addEventListener("wheel", (event) => this.handleOverviewWheel(event), { passive: false });
       this.overviewViewportEl.addEventListener("keydown", (event) => this.handleOverviewKeyDown(event));
+      this.bindOverviewTouch(this.overviewViewportEl);
     }
 
     const stage = this.overviewStageEl;
     const viewport = this.overviewViewportEl;
     const scene = this.overviewSceneEl;
+    // Markdown rendering yields before layout measurement. If a newer render starts
+    // while that work is pending, discard its hidden staging surface immediately so
+    // repeated settings changes cannot leave duplicate card trees in the scene.
+    scene.querySelectorAll<HTMLElement>(".arbor-overview-surface.is-staging").forEach((staleSurface) => staleSurface.remove());
     const previousSurface = this.overviewSurfaceEl;
     const surface = scene.createDiv({ cls: "arbor-overview-surface is-staging" });
     const overviewRenderVersion = this.overviewRenderVersion;
@@ -2444,6 +2592,7 @@ export class ArborView extends FileView {
       window.requestAnimationFrame(() => this.centerOverviewOnSelectedBlock());
     }
     this.restoreOverviewKeyboardFocusAfterMutation();
+    this.syncTouchDock();
   }
 
   private applyOverviewLayout(
@@ -2547,6 +2696,7 @@ export class ArborView extends FileView {
   }
 
   private handleOverviewPointerDown(event: PointerEvent): void {
+    if (event.pointerType === "touch") return;
     const viewport = this.overviewViewportEl;
     if (!viewport || event.button !== 0 || event.target instanceof HTMLButtonElement) {
       return;
@@ -2563,6 +2713,7 @@ export class ArborView extends FileView {
   }
 
   private handleOverviewPointerMove(event: PointerEvent): void {
+    if (event.pointerType === "touch") return;
     const viewport = this.overviewViewportEl;
     const panState = this.overviewPanState;
     if (!viewport || !panState || panState.pointerId !== event.pointerId) {
@@ -2573,6 +2724,7 @@ export class ArborView extends FileView {
   }
 
   private handleOverviewPointerUp(event: PointerEvent): void {
+    if (event.pointerType === "touch") return;
     if (this.overviewPanState?.pointerId === event.pointerId) {
       this.cleanupOverviewPan();
     }
@@ -2598,6 +2750,73 @@ export class ArborView extends FileView {
       this.updateZoomLevel(nextZoom);
       this.syncOverviewZoom();
     });
+  }
+
+  private bindOverviewTouch(viewport: HTMLElement): void {
+    const geometry = () => {
+      const points = Array.from(this.touchPoints.values());
+      const a = points[0];
+      const b = points[1] ?? a;
+      const rect = viewport.getBoundingClientRect();
+      return { midpoint: { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top }, distance: Math.hypot(a.x - b.x, a.y - b.y) };
+    };
+    const rebase = () => {
+      this.touchStart = this.touchPoints.size ? {
+        zoom: this.plugin.settings.zoomLevel,
+        left: viewport.scrollLeft - (this.overviewSceneEl?.offsetLeft ?? 0),
+        top: viewport.scrollTop - (this.overviewSceneEl?.offsetTop ?? 0),
+        ...geometry()
+      } : null;
+    };
+    viewport.addEventListener("pointerdown", (event) => {
+      if (event.pointerType !== "touch" || this.editingSession || (event.target as HTMLElement)?.closest("textarea, input, button, a, [contenteditable='true']")) return;
+      if (!this.touchPoints.size) this.touchMoved = false;
+      this.touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      rebase();
+      if (this.touchPoints.size > 1) this.touchMoved = true;
+    }, { capture: true });
+    viewport.addEventListener("pointermove", (event) => {
+      if (!this.touchPoints.has(event.pointerId) || !this.touchStart) return;
+      this.touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const { midpoint, distance } = geometry();
+      const dx = midpoint.x - this.touchStart.midpoint.x;
+      const dy = midpoint.y - this.touchStart.midpoint.y;
+      if (!this.touchMoved && Math.hypot(dx, dy) < 8) return;
+      this.touchMoved = true;
+      this.suppressTouchClickUntil = Date.now() + 500;
+      viewport.setPointerCapture(event.pointerId);
+      viewport.addClass("is-panning");
+      event.preventDefault();
+      if (this.touchPoints.size > 1) {
+        const next = pinchViewport(this.touchStart, midpoint, distance);
+        this.updateZoomLevel(next.zoom);
+        this.syncOverviewZoom();
+        viewport.scrollLeft = next.left + (this.overviewSceneEl?.offsetLeft ?? 0);
+        viewport.scrollTop = next.top + (this.overviewSceneEl?.offsetTop ?? 0);
+      } else {
+        viewport.scrollLeft = this.touchStart.left + (this.overviewSceneEl?.offsetLeft ?? 0) - dx;
+        viewport.scrollTop = this.touchStart.top + (this.overviewSceneEl?.offsetTop ?? 0) - dy;
+      }
+    }, { capture: true, passive: false });
+    const end = (event: PointerEvent) => {
+      if (event.type === "lostpointercapture" && event.target !== viewport) return;
+      if (!this.touchPoints.delete(event.pointerId)) return;
+      if (this.touchMoved) this.suppressTouchClickUntil = Date.now() + 500;
+      if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+      if (!this.touchPoints.size) viewport.removeClass("is-panning");
+      rebase();
+    };
+    viewport.addEventListener("pointerup", end, true);
+    viewport.addEventListener("pointercancel", end, true);
+    viewport.addEventListener("lostpointercapture", end, true);
+    for (const type of ["click", "dblclick", "contextmenu"]) {
+      viewport.addEventListener(type, (event) => {
+        if (Date.now() < this.suppressTouchClickUntil) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      }, true);
+    }
   }
 
   private handleOverviewKeyDown(event: KeyboardEvent): void {
@@ -3167,6 +3386,13 @@ export class ArborView extends FileView {
     event?.stopPropagation();
 
     const menu = new Menu();
+    menu.addItem((item) => item.setTitle("Search blocks").setIcon("search").onClick(() => this.openSearchOverlay()));
+    for (const [label, icon, factor] of [["Zoom in", "zoom-in", 1.15], ["Zoom out", "zoom-out", 1 / 1.15]] as const) {
+      menu.addItem((item) => item.setTitle(label).setIcon(icon).onClick(() => {
+        this.updateZoomLevel(this.plugin.settings.zoomLevel * factor);
+        this.syncOverviewZoom();
+      }));
+    }
     menu.addItem((item) =>
       item.setTitle("Open in Markdown").setIcon("file-text").onClick(() => void this.openCurrentFileInMarkdown())
     );
@@ -4081,7 +4307,7 @@ export class ArborView extends FileView {
           originalContent: block.content,
           value: block.content,
           autofocus: true,
-          origin: "card"
+          origin: this.presentationMode === "overview" ? "overview" : "card"
         };
       }
     }
@@ -4109,6 +4335,7 @@ export class ArborView extends FileView {
     const session = this.editingSession;
     this.pendingFocusBlockId = this.state?.selectedBlockId ?? null;
     this.editingSession = null;
+    this.syncTouchDock();
     if (session?.origin === "overview") {
       void this.restoreOverviewCardContentInPlace(session.blockId);
       return;
@@ -4127,6 +4354,7 @@ export class ArborView extends FileView {
     if (value === session.originalContent) {
       this.pendingFocusBlockId = blockId;
       this.editingSession = null;
+      this.syncTouchDock();
       if (session.origin === "overview") {
         await this.restoreOverviewCardContentInPlace(session.blockId);
         return;
@@ -4277,6 +4505,9 @@ export class ArborView extends FileView {
   }
 
   private applyViewClasses(root: HTMLElement): void {
+    this.compactLayout = useCompactLayout(root.clientWidth);
+    root.toggleClass("is-compact", this.compactLayout);
+    root.toggleClass("has-touch-controls", this.usesTouchControls);
     root.classList.add("is-context-dim-mode");
     root.classList.toggle("is-rtl", this.plugin.settings.layoutDirection === "rtl");
     this.applyThemeVariables(root);
@@ -4296,6 +4527,7 @@ export class ArborView extends FileView {
 
   private buildBlockMenu(blockId: BranchBlockId): Menu {
     const menu = new Menu();
+    menu.addItem((item) => item.setTitle("Edit block").setIcon("pencil").onClick(() => this.beginEditingBlock(blockId, this.presentationMode === "overview" ? "overview" : "card")));
     const canCreateLeft = this.state ? Boolean(getParentBlock(this.state.metadata, blockId)) : false;
     const childCount = this.state ? getChildren(this.state.metadata, blockId).length : 0;
     const block = this.state ? getBlock(this.state.metadata, blockId) : null;
@@ -4391,13 +4623,21 @@ export class ArborView extends FileView {
     if (!this.file || !block) {
       return;
     }
+    const link = buildArborBlockLink(this.file.path, blockId, extractPathLabel(block.content));
     try {
-      await navigator.clipboard.writeText(
-        buildArborBlockLink(this.file.path, blockId, extractPathLabel(block.content))
-      );
+      await navigator.clipboard.writeText(link);
     } catch (error) {
       console.error("[Arbor] Failed to copy block link", error);
-      new Notice("Arbor could not copy the block link.");
+      const modal = new Modal(this.app);
+      modal.modalEl.addClass("arbor-export-modal");
+      modal.contentEl.createEl("h3", { text: "Copy block link" });
+      modal.contentEl.createEl("p", { text: "Select and copy this link." });
+      const input = modal.contentEl.createEl("textarea", { cls: "arbor-copy-link", attr: { readonly: "", "aria-label": "Block link" } });
+      input.value = link;
+      new ButtonComponent(modal.contentEl).setButtonText("Close").onClick(() => modal.close());
+      modal.open();
+      input.focus();
+      input.select();
     }
   }
 
@@ -4452,14 +4692,15 @@ export class ArborView extends FileView {
   private resizeEditor(textarea: HTMLTextAreaElement): void {
     textarea.setCssProps({ "--arbor-editor-height": "0px" });
     const card = textarea.closest<HTMLElement>(".arbor-card");
-    const viewportHeight = this.columnsViewportEl?.clientHeight ?? window.innerHeight;
+    const viewportHeight = (this.presentationMode === "overview" ? this.overviewViewportEl : this.columnsViewportEl)?.clientHeight ?? window.innerHeight;
     const cardChromeHeight = card ? Math.max(0, card.offsetHeight - textarea.offsetHeight) : 0;
     textarea.setCssProps({
-      "--arbor-editor-height": `${resolveEditorHeight(textarea.scrollHeight, viewportHeight, cardChromeHeight)}px`
+      "--arbor-editor-height": `${this.usesTouchControls ? Math.max(80, Math.min(textarea.scrollHeight, viewportHeight - cardChromeHeight - 32)) : resolveEditorHeight(textarea.scrollHeight, viewportHeight, cardChromeHeight)}px`
     });
   }
 
   private handleViewportWheel(event: WheelEvent, viewport: HTMLElement): void {
+    if (this.compactLayout) return;
     if ((event.ctrlKey || event.metaKey) && this.plugin.settings.enableCtrlWheelZoom) {
       event.preventDefault();
       const factor = event.deltaY < 0 ? 1.06 : 1 / 1.06;
@@ -4543,6 +4784,7 @@ export class ArborView extends FileView {
     this.scheduleColumnAlignment();
     this.scheduleZoomPersist();
     this.flashZoomIndicator();
+    if (this.presentationMode === "overview") return;
 
     window.requestAnimationFrame(() => {
       this.alignColumnsToActivePath();
@@ -4604,6 +4846,7 @@ export class ArborView extends FileView {
   }
 
   private handleViewportPointerDown(event: PointerEvent, viewport: HTMLElement): void {
+    if (event.pointerType === "touch" || this.compactLayout) return;
     if (event.button !== 0 || viewport.scrollWidth <= viewport.clientWidth) {
       return;
     }
@@ -4717,6 +4960,7 @@ export class ArborView extends FileView {
   }
 
   private armSceneWidthForPendingScroll(nextColumnCount: number): number {
+    if (this.compactLayout) return 0;
     if (!this.pendingScrollBlockId || !this.columnsEl || !this.columnsViewportEl) {
       return 0;
     }
@@ -4815,6 +5059,10 @@ export class ArborView extends FileView {
   }
 
   private scrollCardIntoHorizontalView(card: HTMLElement, viewport: HTMLElement, preservedSceneWidth = 0, snap = false): void {
+    if (this.compactLayout) {
+      this.revealCompactSelection();
+      return;
+    }
     const viewportRect = viewport.getBoundingClientRect();
     const cardRect = card.getBoundingClientRect();
     const safePadding = Math.min(96, viewport.clientWidth * 0.18);
@@ -4861,6 +5109,13 @@ export class ArborView extends FileView {
   }
 
   private alignColumnsToActivePath(): void {
+    if (this.compactLayout) {
+      this.columnsEl?.querySelectorAll<HTMLElement>(".arbor-card-list").forEach((list) => {
+        list.setCssProps({ "--arbor-card-list-offset-y": "0px" });
+        list.removeClass("is-rebinding");
+      });
+      return;
+    }
     if (!this.state) {
       return;
     }

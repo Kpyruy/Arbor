@@ -555,7 +555,7 @@ export default class ArborPlugin extends Plugin {
     const existingLeaf = this.findManagedLeafForFile(file);
     const leaf = existingLeaf
       ?? options?.preferredLeaf
-      ?? (resolveArborOpenTarget(Platform.isMobileApp, options?.splitIfNeeded) === "current"
+      ?? (resolveArborOpenTarget(Platform.isMobile, options?.splitIfNeeded) === "current"
         ? this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf(false)
         : this.app.workspace.getLeaf("split", this.settings.splitDirection));
     this.expectExplicitArborOpen(file.path);

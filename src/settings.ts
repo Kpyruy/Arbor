@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, Platform, PluginSettingTab, Setting } from "obsidian";
 import type ArborPlugin from "./main";
 import { ArborSettings } from "./types";
 import {
@@ -47,7 +47,7 @@ export class ArborSettingTab extends PluginSettingTab {
   }
 
   getSettingDefinitions(): ArborSettingDefinition[] {
-    return [
+    const definitions: ArborSettingDefinition[] = [
       {
         name: "Theme",
         desc: "Follow the active Obsidian theme or select a built-in or custom Arbor preset.",
@@ -121,6 +121,9 @@ export class ArborSettingTab extends PluginSettingTab {
       },
       this.toggleDefinition("Selected block panel", "Show the focused selected-block panel alongside the branching editor.", "liveLinearPreview")
     ];
+    return definitions.filter((definition) =>
+      !Platform.isMobile || !["splitDirection", "dragAndDrop", "liveLinearPreview"].includes(definition.control.key)
+    );
   }
 
   getControlValue(key: string): unknown {
@@ -153,6 +156,7 @@ export class ArborSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    containerEl.addClass("arbor-settings");
 
     this.renderThemeSettings(containerEl);
 
@@ -185,19 +189,21 @@ export class ArborSettingTab extends PluginSettingTab {
           })
       );
 
-    new Setting(containerEl)
-      .setName("Split direction")
-      .setDesc("Choose where the branch view opens relative to the current note.")
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOption("vertical", "Vertical split")
-          .addOption("horizontal", "Horizontal split")
-          .setValue(this.plugin.settings.splitDirection)
-          .onChange(async (value) => {
-            this.plugin.settings.splitDirection = value as ArborSettings["splitDirection"];
-            await this.plugin.saveSettings();
-          })
-      );
+    if (!Platform.isMobile) {
+      new Setting(containerEl)
+        .setName("Split direction")
+        .setDesc("Choose where the branch view opens relative to the current note.")
+        .addDropdown((dropdown) =>
+          dropdown
+            .addOption("vertical", "Vertical split")
+            .addOption("horizontal", "Horizontal split")
+            .setValue(this.plugin.settings.splitDirection)
+            .onChange(async (value) => {
+              this.plugin.settings.splitDirection = value as ArborSettings["splitDirection"];
+              await this.plugin.saveSettings();
+            })
+        );
+    }
 
     this.addNumericSetting(containerEl, "Card width", "Card width in pixels.", "cardWidth", 220, 520, 10);
     this.addNumericSetting(containerEl, "Card minimum height", "Minimum card height in pixels.", "cardMinHeight", 80, 300, 10);
@@ -206,16 +212,18 @@ export class ArborSettingTab extends PluginSettingTab {
     this.addNumericSetting(containerEl, "Default zoom", "Default scene zoom level.", "zoomLevel", 50, 160, 5, "%");
     this.addNumericSetting(containerEl, "Preview snippet length", "Maximum characters to show in card preview.", "previewSnippetLength", 80, 600, 10);
 
-    new Setting(containerEl)
-      .setName("Drag and drop")
-      .setDesc("Enable drag-and-drop reordering across columns.")
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.dragAndDrop).onChange(async (value) => {
-          this.plugin.settings.dragAndDrop = value;
-          await this.plugin.saveSettings();
-          this.plugin.refreshAllBranchViews();
-        })
-      );
+    if (!Platform.isMobile) {
+      new Setting(containerEl)
+        .setName("Drag and drop")
+        .setDesc("Enable drag-and-drop reordering across columns.")
+        .addToggle((toggle) =>
+          toggle.setValue(this.plugin.settings.dragAndDrop).onChange(async (value) => {
+            this.plugin.settings.dragAndDrop = value;
+            await this.plugin.saveSettings();
+            this.plugin.refreshAllBranchViews();
+          })
+        );
+    }
 
     new Setting(containerEl)
       .setName("Ctrl/Cmd + wheel zoom")
@@ -289,16 +297,18 @@ export class ArborSettingTab extends PluginSettingTab {
           })
       );
 
-    new Setting(containerEl)
-      .setName("Selected block panel")
-      .setDesc("Show the focused selected-block panel alongside the branching editor.")
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.liveLinearPreview).onChange(async (value) => {
-          this.plugin.settings.liveLinearPreview = value;
-          await this.plugin.saveSettings();
-          this.plugin.refreshAllBranchViews();
-        })
-      );
+    if (!Platform.isMobile) {
+      new Setting(containerEl)
+        .setName("Selected block panel")
+        .setDesc("Show the focused selected-block panel alongside the branching editor.")
+        .addToggle((toggle) =>
+          toggle.setValue(this.plugin.settings.liveLinearPreview).onChange(async (value) => {
+            this.plugin.settings.liveLinearPreview = value;
+            await this.plugin.saveSettings();
+            this.plugin.refreshAllBranchViews();
+          })
+        );
+    }
 
   }
 

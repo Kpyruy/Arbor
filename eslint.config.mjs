@@ -13,6 +13,7 @@ export default defineConfig([
     ignores: [
       "node_modules/**",
       "main.js",
+      "docs/superpowers/**",
       "assets/**"
     ]
   },
@@ -30,5 +31,9 @@ export default defineConfig([
         ...globals.node
       }
     }
+  },
+  {
+    files: ["tests/**/*.ts"],
+    rules: { "import/no-nodejs-modules": "off" }
   }
 ]);
