@@ -64,6 +64,7 @@ import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
+import { getEnteringBreadcrumbIds } from "../breadcrumbAnimation";
 import { resolveBranchCardInteraction } from "../cardInteraction";
 import { resolveNumericChildTarget } from "../numericNavigation";
 import {
@@ -1757,6 +1758,10 @@ export class ArborView extends FileView {
     }
 
     const path = getActivePath(this.state.metadata, this.state.selectedBlockId);
+    const previousPathIds = Array.from(
+      this.breadcrumbsEl.querySelectorAll<HTMLElement>("[data-block-id]")
+    ).map((element) => element.dataset.blockId ?? "");
+    const enteringBlockIds = getEnteringBreadcrumbIds(previousPathIds, path.map((block) => block.id));
     this.animateRemovedBreadcrumbs(path);
     this.breadcrumbsEl.empty();
     if (path.length === 0) {
@@ -1764,7 +1769,7 @@ export class ArborView extends FileView {
       return;
     }
 
-    this.renderBreadcrumbItems(this.breadcrumbsEl, path);
+    this.renderBreadcrumbItems(this.breadcrumbsEl, path, enteringBlockIds);
     this.syncBreadcrumbScroll();
   }
 
@@ -1777,7 +1782,11 @@ export class ArborView extends FileView {
     });
   }
 
-  private renderBreadcrumbItems(container: HTMLElement, path: BranchBlock[]): void {
+  private renderBreadcrumbItems(
+    container: HTMLElement,
+    path: BranchBlock[],
+    enteringBlockIds: ReadonlySet<BranchBlockId> = new Set<BranchBlockId>()
+  ): void {
     const visualPath = getVisualBreadcrumbOrder(path, this.plugin.settings.layoutDirection);
     visualPath.forEach((block, index) => {
       const button = container.createEl("button", {
@@ -1785,6 +1794,7 @@ export class ArborView extends FileView {
         text: this.getBreadcrumbLabel(block.content),
         attr: { "data-block-id": block.id }
       });
+      button.toggleClass("is-entering", enteringBlockIds.has(block.id));
       button.setCssProps({ "--bw-crumb-index": String(index) });
       button.addEventListener("click", () => this.selectBlock(block.id, { focus: true }));
 
