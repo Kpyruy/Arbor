@@ -38,11 +38,15 @@ describe("mobile settings availability", () => {
   });
 
   it("omits split, drag and side-panel controls on mobile while retaining usable settings", () => {
-    const keys = createTab(true).tab.getSettingDefinitions().map((definition) => definition.control.key);
+    const definitions = createTab(true).tab.getSettingDefinitions();
+    const keys = definitions.map((definition) => definition.control.key);
     expect(keys).not.toContain("splitDirection");
     expect(keys).not.toContain("dragAndDrop");
     expect(keys).not.toContain("liveLinearPreview");
     expect(keys).toEqual(expect.arrayContaining(["activeThemeId", "layoutDirection", "defaultPresentationMode", "cardWidth", "zoomLevel"]));
+    const zoom = definitions.find((definition) => definition.control.key === "zoomLevel");
+    expect(zoom?.control.type).toBe("slider");
+    expect(zoom?.control.type === "slider" && zoom.control.min).toBe(25);
   });
 
   it("does not overwrite preferences when the same configuration is used on a phone", () => {

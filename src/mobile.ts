@@ -1,5 +1,8 @@
 import type { BranchColumnModel, BranchBlockId } from "./types";
 
+export const MIN_ZOOM_LEVEL = 0.25;
+export const MAX_ZOOM_LEVEL = 1.6;
+
 export function useCompactLayout(width: number): boolean {
   return width > 0 && width <= 600;
 }
@@ -14,8 +17,12 @@ export function shouldSaveOnEnter(input: { key: string; shiftKey: boolean; isCom
 
 export interface TouchPoint { x: number; y: number }
 
+export function clampZoomLevel(zoom: number): number {
+  return Math.max(MIN_ZOOM_LEVEL, Math.min(MAX_ZOOM_LEVEL, zoom));
+}
+
 export function resolvePinchZoom(startZoom: number, startDistance: number, distance: number): number {
-  return Math.max(0.5, Math.min(1.6, startZoom * distance / Math.max(1, startDistance)));
+  return clampZoomLevel(startZoom * distance / Math.max(1, startDistance));
 }
 
 /** Keeps the world point beneath the pinch midpoint fixed as scale changes. */

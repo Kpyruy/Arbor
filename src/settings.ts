@@ -5,6 +5,7 @@ import {
   AUTOMATIC_THEME_ID,
   BUILT_IN_THEMES
 } from "./theme";
+import { MIN_ZOOM_LEVEL } from "./mobile";
 
 type ArborSettingControl =
   | { type: "dropdown"; key: keyof ArborSettings; options: Record<string, string>; defaultValue?: string }
@@ -92,7 +93,7 @@ export class ArborSettingTab extends PluginSettingTab {
       this.sliderDefinition("Card minimum height", "Minimum card height in pixels.", "cardMinHeight", 80, 300, 10),
       this.sliderDefinition("Horizontal spacing", "Space between columns in pixels.", "horizontalSpacing", 8, 48, 2),
       this.sliderDefinition("Vertical spacing", "Space between cards in pixels.", "verticalSpacing", 4, 32, 2),
-      this.sliderDefinition("Default zoom", "Default scene zoom level.", "zoomLevel", 50, 160, 5, "%"),
+      this.sliderDefinition("Default zoom", "Default scene zoom level.", "zoomLevel", MIN_ZOOM_LEVEL * 100, 160, 5, "%"),
       this.sliderDefinition("Preview snippet length", "Maximum characters to show in card preview.", "previewSnippetLength", 80, 600, 10),
       this.toggleDefinition("Drag and drop", "Enable drag-and-drop reordering across columns.", "dragAndDrop"),
       this.toggleDefinition("Ctrl/Cmd + wheel zoom", "Zoom the branching scene with Ctrl/Cmd + mouse wheel.", "enableCtrlWheelZoom"),
@@ -209,7 +210,7 @@ export class ArborSettingTab extends PluginSettingTab {
     this.addNumericSetting(containerEl, "Card minimum height", "Minimum card height in pixels.", "cardMinHeight", 80, 300, 10);
     this.addNumericSetting(containerEl, "Horizontal spacing", "Space between columns in pixels.", "horizontalSpacing", 8, 48, 2);
     this.addNumericSetting(containerEl, "Vertical spacing", "Space between cards in pixels.", "verticalSpacing", 4, 32, 2);
-    this.addNumericSetting(containerEl, "Default zoom", "Default scene zoom level.", "zoomLevel", 50, 160, 5, "%");
+    this.addNumericSetting(containerEl, "Default zoom", "Default scene zoom level.", "zoomLevel", MIN_ZOOM_LEVEL * 100, 160, 5, "%");
     this.addNumericSetting(containerEl, "Preview snippet length", "Maximum characters to show in card preview.", "previewSnippetLength", 80, 600, 10);
 
     if (!Platform.isMobile) {

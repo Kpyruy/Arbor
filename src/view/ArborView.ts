@@ -92,7 +92,7 @@ import {
   resolveEditorHeight
 } from "../cardViewport";
 import { toBlob } from "html-to-image";
-import { compactColumns, pinchViewport, resolvePinchZoom, shouldSaveOnEnter, useCompactLayout, TouchPoint } from "../mobile";
+import { clampZoomLevel, compactColumns, pinchViewport, resolvePinchZoom, shouldSaveOnEnter, useCompactLayout, TouchPoint } from "../mobile";
 
 type EditingOrigin = "card" | "preview" | "overview";
 
@@ -4883,7 +4883,7 @@ export class ArborView extends FileView {
   }
 
   private updateZoomLevel(nextZoomLevel: number): void {
-    const clamped = Math.max(0.5, Math.min(1.6, Number(nextZoomLevel.toFixed(3))));
+    const clamped = clampZoomLevel(Number(nextZoomLevel.toFixed(3)));
     if (Math.abs(clamped - this.plugin.settings.zoomLevel) < 0.001) {
       return;
     }
@@ -4896,6 +4896,7 @@ export class ArborView extends FileView {
       return;
     }
     if (this.compactLayout) {
+      this.syncViewportEdgeFades();
       if (!this.branchTouchPinching) {
         window.requestAnimationFrame(() => this.revealCompactSelection());
       }
