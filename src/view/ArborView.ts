@@ -497,7 +497,7 @@ export class ArborView extends FileView {
   }
 
   private handleMobileResize(): void {
-    const compact = useCompactLayout(this.contentEl.clientWidth, Platform.isMobile);
+    const compact = useCompactLayout(this.contentEl.clientWidth);
     if (compact !== this.compactLayout) {
       this.compactLayout = compact;
       this.pendingScrollBlockId = this.state?.selectedBlockId ?? null;
@@ -4614,7 +4614,7 @@ export class ArborView extends FileView {
   }
 
   private applyViewClasses(root: HTMLElement): void {
-    this.compactLayout = useCompactLayout(root.clientWidth, Platform.isMobile);
+    this.compactLayout = useCompactLayout(root.clientWidth);
     root.toggleClass("is-compact", this.compactLayout);
     root.toggleClass("has-touch-controls", this.usesTouchControls);
     root.classList.add("is-context-dim-mode");

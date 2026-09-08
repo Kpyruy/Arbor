@@ -6,11 +6,8 @@ import { buildColumnModels } from "../src/model/tree";
 import type { BranchTreeMetadata } from "../src/types";
 
 describe("mobile interaction policy", () => {
-  it("uses compact layout only for the actual mobile runtime", () => {
-    expect(useCompactLayout(480, false)).toBe(false);
-    expect(useCompactLayout(1280, false)).toBe(false);
-    expect(useCompactLayout(0, true)).toBe(true);
-    expect(useCompactLayout(1280, true)).toBe(true);
+  it("uses the actual leaf width, ignoring unmeasured leaves", () => {
+    expect([0, 360, 600, 601, 1024].map(useCompactLayout)).toEqual([false, true, true, false, false]);
   });
   it("shows selected siblings and preserves their order and IDs", () => {
     const metadata: BranchTreeMetadata = { version: 1, prefix: "", blocks: [
