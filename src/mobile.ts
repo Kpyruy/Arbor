@@ -3,8 +3,8 @@ import type { BranchColumnModel, BranchBlockId } from "./types";
 export const MIN_ZOOM_LEVEL = 0.25;
 export const MAX_ZOOM_LEVEL = 1.6;
 
-export function useCompactLayout(width: number): boolean {
-  return width > 0 && width <= 600;
+export function useCompactLayout(_width: number, isMobile: boolean): boolean {
+  return isMobile;
 }
 
 export function compactColumns(columns: BranchColumnModel[], selectedId: BranchBlockId | null): BranchColumnModel[] {
