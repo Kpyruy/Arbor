@@ -1,10 +1,24 @@
 import { diffChars } from "diff";
 import { DEFAULT_BLOCK_SEPARATOR } from "../constants";
 import { buildLinearOrder, createEmptyTree, getRootBlocks } from "../model/tree";
+import { normalizeOutputState } from "../outputProfiles";
 import { ImportedBranchDocument, BranchBlock, BranchTreeMetadata } from "../types";
 import { normalizeNewlines, nowIso } from "../utils";
 import { parseBranchDocument } from "./document";
 import { computeBodyHash, linearizeTree, linearizeTreeLegacy, normalizeMetadata, parseVisibleBlockMetadata } from "./serializer";
+
+function withOutputState(
+  imported: Omit<ImportedBranchDocument, "outputState" | "outputRaw" | "outputError">,
+  parsed: ReturnType<typeof parseBranchDocument>
+): ImportedBranchDocument {
+  const validBlockIds = new Set(imported.metadata.blocks.map((block) => block.id));
+  return {
+    ...imported,
+    outputState: normalizeOutputState(parsed.outputState, imported.metadata, validBlockIds),
+    outputRaw: parsed.outputRaw,
+    outputError: parsed.outputError
+  };
+}
 
 function buildImportedBlock(content: string, order: number): BranchBlock {
   const timestamp = nowIso();
@@ -193,66 +207,66 @@ export function loadImportedBranchDocument(text: string): ImportedBranchDocument
 
   if (hasStoredMetadataBlock && visibleMarkerMetadata) {
     if (parsed.storageFormat === "structure-v2") {
-      return {
+      return withOutputState({
         metadata: normalizeMetadata(visibleMarkerMetadata),
         origin: "metadata",
         staleMetadata: null,
         needsVisibleMarkerMigration: false
-      };
+      }, parsed);
     }
 
     const markerMetadata = normalizeMetadata(mergeMarkerMetadataWithStoredExtras(visibleMarkerMetadata, parsed.metadata));
     if (parsed.metadata) {
       const linearized = linearizeTree(parsed.metadata);
       if (computeBodyHash(parsed.body) === computeBodyHash(linearized.body)) {
-        return {
+        return withOutputState({
           metadata: normalizeMetadata(parsed.metadata),
           origin: "metadata",
           staleMetadata: null,
           needsVisibleMarkerMigration: true
-        };
+        }, parsed);
       }
     }
 
-    return {
+    return withOutputState({
       metadata: markerMetadata,
       origin: "markers",
       staleMetadata: parsed.metadata,
       needsVisibleMarkerMigration: true
-    };
+    }, parsed);
   }
 
   if (visibleMarkerMetadata) {
     if (visibleMarkerMetadata.prefix.trim().length > 0) {
       const importedMetadata = importBodyToMetadata(parsed.body);
-      return {
+      return withOutputState({
         metadata: importedMetadata,
         origin: getRootBlocks(importedMetadata).length > 0 ? "imported" : "metadata",
         staleMetadata: null
-      };
+      }, parsed);
     }
 
-    return {
+    return withOutputState({
       metadata: normalizeMetadata(visibleMarkerMetadata),
       origin: "markers",
       staleMetadata: null,
       needsVisibleMarkerMigration: false
-    };
+    }, parsed);
   }
 
   if (parsed.metadata && parsed.storageFormat === "legacy-v1") {
-    return {
+    return withOutputState({
       metadata: translateLegacyBodyToMetadata(parsed.body, parsed.metadata),
       origin: "legacy",
       staleMetadata: null,
       needsVisibleMarkerMigration: true
-    };
+    }, parsed);
   }
 
-  return {
+  return withOutputState({
     metadata: importBodyToMetadata(parsed.body),
     origin: getRootBlocks(importBodyToMetadata(parsed.body)).length > 0 ? "imported" : "metadata",
     staleMetadata: null,
     needsVisibleMarkerMigration: false
-  };
+  }, parsed);
 }

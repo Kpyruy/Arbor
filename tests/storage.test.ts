@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseBranchDocument, buildBranchDocument } from "../src/storage/document";
+import { createDefaultOutputState } from "../src/outputProfiles";
+import { buildOutputBlock } from "../src/storage/outputProfiles";
 import { buildStructureBlock, linearizeTree } from "../src/storage/serializer";
 import { loadImportedBranchDocument } from "../src/storage/reconcile";
-import { BranchBlock, BranchTreeMetadata } from "../src/types";
+import { ArborOutputState, BranchBlock, BranchTreeMetadata } from "../src/types";
 
 const complexBlock = [
   "# Heading",
@@ -112,6 +114,87 @@ describe("document and storage", () => {
     expect(parsed.frontmatter.startsWith("---")).toBe(true);
     expect(parsed.body).toBe(linearized.body);
     expect(parsed.metadata?.blocks.map((block) => block.id)).toEqual(metadata.blocks.map((block) => block.id));
+  });
+
+  it("round-trips output metadata before the terminal structure footer", () => {
+    const metadata = metadataFixture();
+    const outputState: ArborOutputState = {
+      version: 1,
+      activeProfileId: "draft",
+      profiles: [{
+        id: "draft",
+        name: "Draft",
+        rules: [{ blockId: "child-1", state: "exclude" }]
+      }]
+    };
+    const note = buildBranchDocument("", linearizeTree(metadata).body, metadata, outputState);
+
+    expect(note.indexOf("%% arbor:output")).toBeLessThan(note.indexOf("%% arbor:structure"));
+    const parsed = parseBranchDocument(note);
+    expect(parsed.outputState).toEqual(outputState);
+    expect(parsed.outputRaw).toBe(buildOutputBlock(outputState));
+    expect(parsed.outputError).toBeNull();
+    expect(parsed.body).not.toContain("arbor:output");
+  });
+
+  it("loads the clean default output state when output metadata is absent", () => {
+    const metadata = metadataFixture();
+    const note = buildBranchDocument("", linearizeTree(metadata).body, metadata);
+
+    expect(parseBranchDocument(note).outputState).toEqual(createDefaultOutputState());
+    expect(loadImportedBranchDocument(note).outputState).toEqual(createDefaultOutputState());
+    expect(note).not.toContain("arbor:output");
+  });
+
+  it("preserves malformed output metadata byte-for-byte during a tree-only save", () => {
+    const metadata = metadataFixture();
+    const malformedOutput = [
+      "%% arbor:output",
+      "```json",
+      "{\"arbor-plugin\":\"output\",\"version\":1,\"active\":\"missing\",\"profiles\":[]}",
+      "```",
+      "%%"
+    ].join("\n");
+    const note = [linearizeTree(metadata).body, malformedOutput, buildStructureBlock(metadata)].join("\n\n");
+    const parsed = parseBranchDocument(note);
+    const loaded = loadImportedBranchDocument(note);
+
+    expect(parsed.outputRaw).toBe(malformedOutput);
+    expect(parsed.outputError).toBeTruthy();
+    expect(loaded.metadata.blocks.map((block) => block.id)).toEqual(metadata.blocks.map((block) => block.id));
+    expect(loaded.outputRaw).toBe(malformedOutput);
+    expect(loaded.outputError).toBe(parsed.outputError);
+
+    const saved = buildBranchDocument(
+      parsed.frontmatter,
+      linearizeTree(loaded.metadata).body,
+      loaded.metadata,
+      loaded.outputState,
+      loaded.outputRaw
+    );
+    expect(saved).toContain(`\n${malformedOutput}\n\n%% arbor:structure`);
+    expect(saved.split(malformedOutput)).toHaveLength(2);
+  });
+
+  it("drops output rules whose block IDs do not survive tree recovery", () => {
+    const metadata = metadataFixture();
+    const outputState: ArborOutputState = {
+      version: 1,
+      activeProfileId: "draft",
+      profiles: [{
+        id: "draft",
+        name: "Draft",
+        rules: [
+          { blockId: "missing", state: "include" },
+          { blockId: "root-1", state: "exclude" }
+        ]
+      }]
+    };
+    const note = buildBranchDocument("", linearizeTree(metadata).body, metadata, outputState);
+
+    expect(loadImportedBranchDocument(note).outputState.profiles[0].rules).toEqual([
+      { blockId: "root-1", state: "exclude" }
+    ]);
   });
 
   it("keeps the note readable even if the plugin is disabled", () => {

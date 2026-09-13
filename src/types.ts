@@ -50,12 +50,18 @@ export interface ParsedBranchDocument {
   metadata: BranchTreeMetadata | null;
   metadataRaw: string;
   storageFormat: ArborStorageFormat;
+  outputState: ArborOutputState;
+  outputRaw: string;
+  outputError: string | null;
 }
 
 export interface ImportedBranchDocument {
   metadata: BranchTreeMetadata;
   origin: "metadata" | "markers" | "legacy" | "imported" | "reconciled";
   staleMetadata: BranchTreeMetadata | null;
+  outputState: ArborOutputState;
+  outputRaw: string;
+  outputError: string | null;
   needsVisibleMarkerMigration?: boolean;
 }
 
