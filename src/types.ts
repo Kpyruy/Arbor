@@ -1,5 +1,30 @@
 export type BranchBlockId = string;
 
+export type ArborOutputRuleState = "include" | "exclude";
+
+export interface ArborOutputRule {
+  blockId: BranchBlockId;
+  state: ArborOutputRuleState;
+}
+
+export interface ArborOutputProfile {
+  id: string;
+  name: string;
+  rules: ArborOutputRule[];
+}
+
+export interface ArborOutputState {
+  version: 1;
+  activeProfileId: string;
+  profiles: ArborOutputProfile[];
+}
+
+export interface ArborOutputResolution {
+  included: boolean;
+  source: "default" | "direct" | "inherited";
+  ruleBlockId: BranchBlockId | null;
+}
+
 export interface BranchBlock {
   id: BranchBlockId;
   parentId: BranchBlockId | null;
