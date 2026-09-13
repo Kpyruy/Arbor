@@ -11,6 +11,10 @@ import {
 
 export const FULL_OUTPUT_PROFILE_ID = "full";
 
+function normalizeProfileId(profileId: string): string {
+  return profileId.trim();
+}
+
 function fullOutputProfile(): ArborOutputProfile {
   return { id: FULL_OUTPUT_PROFILE_ID, name: "Full tree", rules: [] };
 }
@@ -104,10 +108,13 @@ export function normalizeOutputState(
   const seenNames = new Set<string>();
 
   for (const profile of state.profiles) {
-    if (!profile || typeof profile.id !== "string" || profile.id === FULL_OUTPUT_PROFILE_ID) {
+    if (!profile || typeof profile.id !== "string") {
       continue;
     }
-    const id = profile.id.trim();
+    const id = normalizeProfileId(profile.id);
+    if (id === FULL_OUTPUT_PROFILE_ID) {
+      continue;
+    }
     const name = typeof profile.name === "string" ? profile.name.trim() : "";
     const nameKey = profileNameKey(name);
     if (!id || !name || seenIds.has(id) || seenNames.has(nameKey)) {
@@ -123,19 +130,23 @@ export function normalizeOutputState(
     });
   }
 
-  const activeProfileId = state.activeProfileId === FULL_OUTPUT_PROFILE_ID || seenIds.has(state.activeProfileId)
-    ? state.activeProfileId
+  const normalizedActiveProfileId = typeof state.activeProfileId === "string"
+    ? normalizeProfileId(state.activeProfileId)
+    : "";
+  const activeProfileId = normalizedActiveProfileId === FULL_OUTPUT_PROFILE_ID || seenIds.has(normalizedActiveProfileId)
+    ? normalizedActiveProfileId
     : FULL_OUTPUT_PROFILE_ID;
 
   return { version: 1, activeProfileId, profiles };
 }
 
 export function getActiveOutputProfile(state: ArborOutputState): ArborOutputProfile {
-  if (state.activeProfileId === FULL_OUTPUT_PROFILE_ID) {
+  const activeProfileId = normalizeProfileId(state.activeProfileId);
+  if (activeProfileId === FULL_OUTPUT_PROFILE_ID) {
     return fullOutputProfile();
   }
 
-  const profile = state.profiles.find((candidate) => candidate.id === state.activeProfileId);
+  const profile = state.profiles.find((candidate) => candidate.id === activeProfileId);
   return profile ? cloneProfile(profile) : fullOutputProfile();
 }
 
@@ -179,7 +190,7 @@ export function createProfile(
   validBlockIds?: ReadonlySet<BranchBlockId>
 ): ArborOutputState {
   const normalized = normalizeOutputState(state, metadata, validBlockIds);
-  const normalizedId = profileId.trim();
+  const normalizedId = normalizeProfileId(profileId);
   const normalizedName = name.trim();
   if (
     !normalizedId ||
@@ -206,18 +217,19 @@ export function renameProfile(
   validBlockIds?: ReadonlySet<BranchBlockId>
 ): ArborOutputState {
   const normalized = normalizeOutputState(state, metadata, validBlockIds);
+  const normalizedProfileId = normalizeProfileId(profileId);
   const normalizedName = name.trim();
   if (
-    profileId === FULL_OUTPUT_PROFILE_ID ||
+    normalizedProfileId === FULL_OUTPUT_PROFILE_ID ||
     !normalizedName ||
-    normalized.profiles.some((profile) => profile.id !== profileId && profileNameKey(profile.name) === profileNameKey(normalizedName))
+    normalized.profiles.some((profile) => profile.id !== normalizedProfileId && profileNameKey(profile.name) === profileNameKey(normalizedName))
   ) {
     return normalized;
   }
 
   return normalizeOutputState({
     ...normalized,
-    profiles: normalized.profiles.map((profile) => profile.id === profileId ? { ...profile, name: normalizedName } : profile)
+    profiles: normalized.profiles.map((profile) => profile.id === normalizedProfileId ? { ...profile, name: normalizedName } : profile)
   }, metadata, validBlockIds);
 }
 
@@ -228,14 +240,15 @@ export function deleteProfile(
   validBlockIds?: ReadonlySet<BranchBlockId>
 ): ArborOutputState {
   const normalized = normalizeOutputState(state, metadata, validBlockIds);
-  if (profileId === FULL_OUTPUT_PROFILE_ID) {
+  const normalizedProfileId = normalizeProfileId(profileId);
+  if (normalizedProfileId === FULL_OUTPUT_PROFILE_ID) {
     return normalized;
   }
 
   return normalizeOutputState({
     ...normalized,
-    activeProfileId: normalized.activeProfileId === profileId ? FULL_OUTPUT_PROFILE_ID : normalized.activeProfileId,
-    profiles: normalized.profiles.filter((profile) => profile.id !== profileId)
+    activeProfileId: normalized.activeProfileId === normalizedProfileId ? FULL_OUTPUT_PROFILE_ID : normalized.activeProfileId,
+    profiles: normalized.profiles.filter((profile) => profile.id !== normalizedProfileId)
   }, metadata, validBlockIds);
 }
 
@@ -254,7 +267,7 @@ export function setSubtreeState(
   blockId: BranchBlockId,
   state: ArborOutputRuleState
 ): ArborOutputProfile {
-  if (profile.id === FULL_OUTPUT_PROFILE_ID) {
+  if (normalizeProfileId(profile.id) === FULL_OUTPUT_PROFILE_ID) {
     return fullOutputProfile();
   }
   if (!metadata.blocks.some((block) => block.id === blockId)) {
@@ -275,7 +288,7 @@ export function setBlockOnlyState(
   blockId: BranchBlockId,
   state: ArborOutputRuleState
 ): ArborOutputProfile {
-  if (profile.id === FULL_OUTPUT_PROFILE_ID) {
+  if (normalizeProfileId(profile.id) === FULL_OUTPUT_PROFILE_ID) {
     return fullOutputProfile();
   }
   if (!metadata.blocks.some((block) => block.id === blockId)) {

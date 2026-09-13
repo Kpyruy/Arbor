@@ -171,4 +171,26 @@ describe("output profile state", () => {
     expect(setSubtreeState(sampleTree(), forgedFull, "root", "exclude")).toEqual(full);
     expect(setBlockOnlyState(sampleTree(), forgedFull, "root", "exclude")).toEqual(full);
   });
+
+  it("treats whitespace-padded full IDs as the immutable built-in", () => {
+    const paddedState: ArborOutputState = {
+      version: 1,
+      activeProfileId: " full ",
+      profiles: [{ id: " full ", name: "Spoof", rules: [{ blockId: "root", state: "exclude" }] }]
+    };
+    const paddedProfile: ArborOutputProfile = {
+      id: " full ",
+      name: "Spoof",
+      rules: [{ blockId: "root", state: "exclude" }]
+    };
+
+    expect(normalizeOutputState(paddedState, sampleTree())).toEqual(createDefaultOutputState());
+    expect(getActiveOutputProfile(paddedState)).toEqual({ id: "full", name: "Full tree", rules: [] });
+    expect(createProfile(createDefaultOutputState(), " full ", "Draft", sampleTree())).toEqual(createDefaultOutputState());
+    expect(renameProfile(paddedState, " full ", "Renamed", sampleTree())).toEqual(createDefaultOutputState());
+    expect(deleteProfile(paddedState, " full ", sampleTree())).toEqual(createDefaultOutputState());
+    expect(setActiveOutputProfile(createDefaultOutputState(), " full ", sampleTree())).toEqual(createDefaultOutputState());
+    expect(setSubtreeState(sampleTree(), paddedProfile, "root", "include")).toEqual({ id: "full", name: "Full tree", rules: [] });
+    expect(setBlockOnlyState(sampleTree(), paddedProfile, "root", "include")).toEqual({ id: "full", name: "Full tree", rules: [] });
+  });
 });
