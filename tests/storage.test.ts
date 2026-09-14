@@ -94,6 +94,26 @@ describe("document and storage", () => {
     expect(linearized.body.indexOf("Second root section")).toBeGreaterThan(linearized.body.indexOf("Child paragraph"));
   });
 
+  it("keeps a child marker on its own line when a former leaf has no separator", () => {
+    const metadata: BranchTreeMetadata = {
+      version: 1,
+      prefix: "",
+      blocks: [
+        { id: "parent", parentId: null, order: 0, content: "Parent", after: "" },
+        { id: "child", parentId: "parent", order: 0, content: "Child", after: "" }
+      ]
+    };
+
+    const body = linearizeTree(metadata).body;
+    const loaded = loadImportedBranchDocument(body);
+
+    expect(body).toContain('Parent\n\n<!-- arbor:block:v1 id="child"');
+    expect(loaded.metadata.blocks.map((block) => [block.id, block.content])).toEqual([
+      ["parent", "Parent"],
+      ["child", "Child"]
+    ]);
+  });
+
   it("strips legacy native Arbor anchors from block content", () => {
     const metadata = metadataFixture();
     const legacyBody = linearizeTree(metadata).body.replace(
@@ -129,6 +149,7 @@ describe("document and storage", () => {
     };
     const note = buildBranchDocument("", linearizeTree(metadata).body, metadata, outputState);
 
+    expect(note).toMatch(/^.+\n%% arbor:output\n```json/m);
     expect(note.indexOf("%% arbor:output")).toBeLessThan(note.indexOf("%% arbor:structure"));
     const parsed = parseBranchDocument(note);
     expect(parsed.outputState).toEqual(outputState);
@@ -242,6 +263,18 @@ describe("document and storage", () => {
     expect(note).not.toContain("arbor:metadata:v1");
     expect(note).not.toContain("lastLinearHash");
     expect(note).not.toContain('"content"');
+
+    const structureJson = note.match(/%% arbor:structure\n```json\n([\s\S]*?)\n```\n%%\n?$/)?.[1];
+    if (!structureJson) {
+      throw new Error("Expected the terminal structure footer JSON.");
+    }
+    const structure = JSON.parse(structureJson) as { blocks: Array<Record<string, unknown>> };
+    expect(structure.blocks).toHaveLength(metadata.blocks.length);
+    expect(structure.blocks).toEqual(metadata.blocks.map((block) => ({
+      id: block.id,
+      parent: block.parentId,
+      order: block.order
+    })));
   });
 
   it("rebuilds safely from plain markdown changes instead of losing content", () => {

@@ -51,6 +51,19 @@ describe("tree operations", () => {
     expect(moved.blocks.find((block) => block.id === "a11")?.parentId).toBe("a1");
   });
 
+  it("reparents under a former leaf without mutating source content", () => {
+    const source = sampleTree();
+    source.blocks.find((block) => block.id === "b")!.after = "";
+    const moved = moveBlockToParentAtIndex(source, "a1", "b", 0);
+
+    expect(moved.blocks.find((block) => block.id === "a1")).toMatchObject({
+      parentId: "b",
+      content: "A.1"
+    });
+    expect(moved.blocks.find((block) => block.id === "a11")?.parentId).toBe("a1");
+    expect(source.blocks.find((block) => block.id === "a1")?.parentId).toBe("a");
+  });
+
   it("moves right under the previous sibling", () => {
     const moved = moveBlockRight(sampleTree(), "b");
     expect(moved.blocks.find((block) => block.id === "b")?.parentId).toBe("a");

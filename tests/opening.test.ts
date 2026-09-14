@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   inspectManagedBranchDocumentText,
@@ -9,6 +11,19 @@ import {
 import { buildBranchDocument } from "../src/storage/document";
 import { linearizeTree } from "../src/storage/serializer";
 import { BranchTreeMetadata } from "../src/types";
+
+function readProjectFile(relativePath: string): string {
+  return readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), "utf8");
+}
+
+function sourceMethod(source: string, start: string, end: string): string {
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end, startIndex);
+  if (startIndex === -1 || endIndex === -1) {
+    throw new Error(`Could not locate source contract: ${start}`);
+  }
+  return source.slice(startIndex, endIndex);
+}
 
 function metadataFixture(): BranchTreeMetadata {
   return {
@@ -34,6 +49,35 @@ function metadataFixture(): BranchTreeMetadata {
 }
 
 describe("managed note opening", () => {
+  it("opens the current Arbor file in Markdown and keeps Output Preview in the existing leaf", () => {
+    const source = readProjectFile("src/view/ArborView.ts");
+    const openCurrentFile = sourceMethod(
+      source,
+      "  private async openCurrentFileInMarkdown(): Promise<void>",
+      "  async exportCleanCopy(): Promise<void>"
+    );
+    const outputPreview = sourceMethod(
+      source,
+      "  openOutputPreview(): void",
+      "  selectBlock(blockId:"
+    );
+    const outputRender = sourceMethod(
+      source,
+      "  private async syncOutputPreview(): Promise<void>",
+      "  private async syncPreview("
+    );
+
+    expect(openCurrentFile).toContain("await this.openFileInMarkdownView(this.file);");
+    expect(outputPreview).toContain('this.presentationMode = "output";');
+    expect(outputPreview).toContain("this.render();");
+    expect(outputPreview).not.toContain("vault.create");
+    expect(outputPreview).not.toContain("openFileInMarkdownView");
+    expect(outputPreview).not.toContain("createCleanExportCopy");
+    expect(outputRender).not.toContain("vault.create");
+    expect(outputRender).not.toContain("openFileInMarkdownView");
+    expect(outputRender).not.toContain("createCleanExportCopy");
+  });
+
   it("uses the current mobile leaf while preserving the desktop split preference", () => {
     expect(resolveArborOpenTarget(true)).toBe("current");
     expect(resolveArborOpenTarget(true, true)).toBe("current");

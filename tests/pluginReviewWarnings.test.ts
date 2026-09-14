@@ -8,7 +8,11 @@ function readProjectFile(relativePath: string): string {
 
 describe("Obsidian plugin review compatibility", () => {
   it("uses Obsidian element helpers instead of direct createElement calls", () => {
-    for (const path of ["src/fileExplorerBadge.ts", "src/view/ArborView.ts"]) {
+    for (const path of [
+      "src/fileExplorerBadge.ts",
+      "src/view/ArborView.ts",
+      "src/view/OutputProfilesModal.ts"
+    ]) {
       expect(readProjectFile(path)).not.toMatch(/(?:document|ownerDocument)\.createElement(?:NS)?\(/);
     }
   });

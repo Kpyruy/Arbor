@@ -161,12 +161,20 @@ export function linearizeTree(metadata: BranchTreeMetadata): LinearizedBranchDoc
   const locations = new Map<BranchBlockId, BlockLocation>();
   let cursor = normalized.prefix.length;
   let line = countLines(normalized.prefix);
+  let endsWithNewline = normalized.prefix.length === 0 || normalized.prefix.endsWith("\n");
 
   for (const block of ordered) {
+    if (cursor > 0 && !endsWithNewline) {
+      parts.push(DEFAULT_BLOCK_SEPARATOR);
+      cursor += DEFAULT_BLOCK_SEPARATOR.length;
+      line += countLines(DEFAULT_BLOCK_SEPARATOR);
+    }
+
     const marker = buildVisibleBlockMarker(block);
     parts.push(marker);
     cursor += marker.length;
     line += countLines(marker);
+    endsWithNewline = true;
 
     parts.push(block.content);
     const start = cursor;
@@ -174,10 +182,16 @@ export function linearizeTree(metadata: BranchTreeMetadata): LinearizedBranchDoc
     locations.set(block.id, { start, end, line });
     cursor = end;
     line += countLines(block.content);
+    if (block.content.length > 0) {
+      endsWithNewline = block.content.endsWith("\n");
+    }
 
     parts.push(block.after);
     cursor += block.after.length;
     line += countLines(block.after);
+    if (block.after.length > 0) {
+      endsWithNewline = block.after.endsWith("\n");
+    }
   }
 
   return {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildCleanExportDocument, CleanExportOptions } from "../src/storage/cleanExport";
-import { setBlockOnlyState } from "../src/outputProfiles";
+import { createDefaultOutputState, setBlockOnlyState } from "../src/outputProfiles";
 import { ArborOutputProfile, ArborOutputState, BranchTreeMetadata } from "../src/types";
 
 function metadataFixture(): BranchTreeMetadata {
@@ -24,6 +24,18 @@ function outputState(rules: ArborOutputProfile["rules"]): ArborOutputState {
 }
 
 describe("clean Arbor exports", () => {
+  it("keeps the legacy full-tree Markdown result for old notes", () => {
+    const output = buildCleanExportDocument(
+      "---\nalias: Draft\n---\n",
+      metadataFixture(),
+      createDefaultOutputState(),
+      { frontmatter: "keep", excluded: "omit" }
+    );
+
+    expect(output).toBe(
+      "---\nalias: Draft\n---\n> [!note] Introduction\n> Keep this prefix.\n\n# Root\n\nChild\n\n# Next"
+    );
+  });
   it.each([
     { frontmatter: "keep", excluded: "omit" },
     { frontmatter: "omit", excluded: "omit" },
