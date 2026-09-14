@@ -11,25 +11,33 @@ const STRUCTURE_MARKER_PATTERN = STRUCTURE_MARKER.replace(/[.*+?^${}()|[\]\\]/g,
 const OUTPUT_MARKER_PATTERN = OUTPUT_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const COMPACT_PATTERN = new RegExp(`\\n?<!--\\s*${METADATA_MARKER_PATTERN}:[A-Za-z0-9+/=\\r\\n_-]+\\s*-->\\s*$`);
 const MULTILINE_PATTERN = new RegExp(`\\n?<!--\\s*${METADATA_MARKER_PATTERN}\\s*\\n[\\s\\S]*?\\n-->\\s*$`);
-const OUTPUT_BLOCK_PATTERN = new RegExp(`\\n?(%%\\s*${OUTPUT_MARKER_PATTERN}\\s*\\n\`\`\`json\\n[\\s\\S]*?\\n\`\`\`\\n%%)\\s*$`);
+const OUTPUT_BLOCK_PATTERN = new RegExp(`\\r?\\n?(%%\\s*${OUTPUT_MARKER_PATTERN}\\s*\\r?\\n\`\`\`json\\r?\\n[\\s\\S]*?\\r?\\n\`\`\`\\r?\\n%%)\\s*$`);
+const STRUCTURE_BLOCK_PATTERN = new RegExp(`\\r?\\n?%%\\s*${STRUCTURE_MARKER_PATTERN}\\s*\\r?\\n\`\`\`json\\r?\\n[\\s\\S]*?\\r?\\n\`\`\`\\r?\\n%%\\s*$`);
 
 export function parseBranchDocument(text: string): ParsedBranchDocument {
+  const rawStructureMatch = text.match(STRUCTURE_BLOCK_PATTERN);
+  const rawWithoutStructure = rawStructureMatch?.index !== undefined
+    ? text.slice(0, rawStructureMatch.index)
+    : text;
+  const rawOutputMatch = rawWithoutStructure.match(OUTPUT_BLOCK_PATTERN);
+  const preservedOutputRaw = rawOutputMatch?.[1] ?? "";
+
   const normalized = normalizeNewlines(text);
   const frontmatterMatch = normalized.match(FRONTMATTER_PATTERN);
   const frontmatter = frontmatterMatch?.[0] ?? "";
   let remaining = normalized.slice(frontmatter.length);
 
   let metadataRaw = "";
-  const structureMatch = remaining.match(new RegExp("\\n?%%\\s*" + STRUCTURE_MARKER_PATTERN + "\\s*\\n```json\\n[\\s\\S]*?\\n```\\n%%\\s*$"));
+  const structureMatch = remaining.match(STRUCTURE_BLOCK_PATTERN);
   if (structureMatch?.index !== undefined) {
     metadataRaw = structureMatch[0].trimStart();
     remaining = remaining.slice(0, structureMatch.index);
   }
 
-  let outputRaw = "";
+  let outputRaw = preservedOutputRaw;
   const outputMatch = remaining.match(OUTPUT_BLOCK_PATTERN);
   if (outputMatch?.index !== undefined) {
-    outputRaw = outputMatch[1];
+    outputRaw ||= outputMatch[1];
     remaining = remaining.slice(0, outputMatch.index);
   }
 

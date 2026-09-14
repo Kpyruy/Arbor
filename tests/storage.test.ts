@@ -176,6 +176,30 @@ describe("document and storage", () => {
     expect(saved.split(malformedOutput)).toHaveLength(2);
   });
 
+  it("preserves malformed CRLF output metadata byte-for-byte during a tree-only save", () => {
+    const metadata = metadataFixture();
+    const malformedOutput = [
+      "%% arbor:output",
+      "```json",
+      "{\"arbor-plugin\":\"output\",\"version\":1,\"active\":\"missing\",\"profiles\":[]}",
+      "```",
+      "%%"
+    ].join("\r\n");
+    const note = [linearizeTree(metadata).body, malformedOutput, buildStructureBlock(metadata)].join("\r\n\r\n");
+    const loaded = loadImportedBranchDocument(note);
+
+    expect(loaded.outputRaw).toBe(malformedOutput);
+
+    const saved = buildBranchDocument(
+      "",
+      linearizeTree(loaded.metadata).body,
+      loaded.metadata,
+      loaded.outputState,
+      loaded.outputRaw
+    );
+    expect(saved).toContain(`\n${malformedOutput}\n\n%% arbor:structure`);
+  });
+
   it("drops output rules whose block IDs do not survive tree recovery", () => {
     const metadata = metadataFixture();
     const outputState: ArborOutputState = {
