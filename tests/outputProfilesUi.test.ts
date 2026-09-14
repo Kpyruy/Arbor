@@ -53,6 +53,14 @@ function outputState(activeProfileId = "full"): ArborOutputState {
   };
 }
 
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
 describe("Output Profiles manager UI", () => {
   it("offers creation and the complete custom-profile action set", () => {
     const model = ui.buildOutputProfileManagerModel(outputState(), tree());
@@ -141,8 +149,84 @@ describe("Output Profiles manager UI", () => {
   it("requires an explicit reset before malformed output can be replaced", () => {
     const model = ui.buildOutputProfileManagerModel(outputState(), tree(), "Invalid output metadata");
 
-    expect(model.resetAction).toEqual({ id: "reset", label: "Reset output profiles" });
+    expect(model.resetAction).toEqual({
+      id: "reset",
+      label: "Reset output profiles",
+      disabled: false
+    });
     expect(model.createAction.disabled).toBe(true);
     expect(model.profiles.every((profile) => profile.actions.every((action) => action.disabled))).toBe(true);
   });
+
+  it("disables every manager mutation while an operation is busy", () => {
+    const model = ui.buildOutputProfileManagerModel(outputState(), tree(), null, true);
+    const invalidModel = ui.buildOutputProfileManagerModel(
+      outputState(),
+      tree(),
+      "Invalid output metadata",
+      true
+    );
+
+    expect(model.createAction.disabled).toBe(true);
+    expect(model.profiles.every((profile) => profile.actions.every((action) => action.disabled))).toBe(true);
+    expect(invalidModel.resetAction?.disabled).toBe(true);
+  });
+
+  it("serializes rapid mutations against the latest persisted profile state", async () => {
+    const coordinator = new ui.AsyncOperationCoordinator();
+    const firstSave = deferred();
+    let state: ArborOutputState = {
+      ...outputState(),
+      profiles: [
+        ...outputState().profiles,
+        { id: "publish", name: "Publish", rules: [] }
+      ]
+    };
+
+    const duplicateDraft = coordinator.enqueue("manager", async () => {
+      const next = ui.duplicateOutputProfileState(state, "draft", tree());
+      await firstSave.promise;
+      state = next;
+    });
+    const duplicatePublish = coordinator.enqueue("manager", async () => {
+      state = ui.duplicateOutputProfileState(state, "publish", tree());
+    });
+
+    expect(coordinator.isBusy("manager")).toBe(true);
+    await Promise.resolve();
+    firstSave.resolve();
+    await Promise.all([duplicateDraft, duplicatePublish]);
+
+    expect(coordinator.isBusy("manager")).toBe(false);
+    expect(state.profiles.map((profile) => profile.name)).toEqual([
+      "Draft",
+      "Publish",
+      "Draft copy",
+      "Publish copy"
+    ]);
+  });
+
+  it.each(["name-save", "confirmation"])(
+    "guards repeated %s submissions synchronously",
+    async (channel) => {
+      const coordinator = new ui.AsyncOperationCoordinator();
+      const pending = deferred();
+      let controllerCalls = 0;
+      const submit = () => coordinator.runOnce(channel, async () => {
+        controllerCalls += 1;
+        await pending.promise;
+      });
+
+      const first = submit();
+      const repeated = submit();
+      expect(coordinator.isBusy(channel)).toBe(true);
+      await Promise.resolve();
+
+      expect(controllerCalls).toBe(1);
+      await expect(repeated).resolves.toBeUndefined();
+      pending.resolve();
+      await first;
+      expect(coordinator.isBusy(channel)).toBe(false);
+    }
+  );
 });

@@ -29,7 +29,7 @@ export interface OutputProfileRowModel {
 
 export interface OutputProfileManagerModel {
   createAction: { id: "create"; label: "Create profile"; disabled: boolean };
-  resetAction: { id: "reset"; label: "Reset output profiles" } | null;
+  resetAction: { id: "reset"; label: "Reset output profiles"; disabled: boolean } | null;
   profiles: OutputProfileRowModel[];
 }
 
@@ -51,6 +51,40 @@ interface OutputProfileNameController {
   profileId?: string;
   save: (name: string) => Promise<void>;
   closed: () => void;
+}
+
+export class AsyncOperationCoordinator {
+  private readonly queues = new Map<string, { tail: Promise<void>; token: symbol }>();
+  private readonly activeSubmissions = new Set<string>();
+
+  enqueue<T>(channel: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.queues.get(channel)?.tail ?? Promise.resolve();
+    const token = Symbol(channel);
+    const operationResult = previous.then(operation, operation);
+    const tail = operationResult.then(() => undefined, () => undefined);
+    this.queues.set(channel, { tail, token });
+
+    return operationResult.finally(() => {
+      if (this.queues.get(channel)?.token === token) {
+        this.queues.delete(channel);
+      }
+    });
+  }
+
+  runOnce<T>(channel: string, operation: () => Promise<T>): Promise<T | undefined> {
+    if (this.activeSubmissions.has(channel)) {
+      return Promise.resolve(undefined);
+    }
+
+    this.activeSubmissions.add(channel);
+    return Promise.resolve()
+      .then(operation)
+      .finally(() => this.activeSubmissions.delete(channel));
+  }
+
+  isBusy(channel: string): boolean {
+    return this.queues.has(channel) || this.activeSubmissions.has(channel);
+  }
 }
 
 function fullTreeProfile(): ArborOutputProfile {
@@ -161,9 +195,10 @@ export function createOutputProfileButton(
 export function buildOutputProfileManagerModel(
   state: ArborOutputState,
   metadata: BranchTreeMetadata,
-  outputError: string | null = null
+  outputError: string | null = null,
+  busy = false
 ): OutputProfileManagerModel {
-  const mutationDisabled = outputError !== null;
+  const mutationDisabled = outputError !== null || busy;
   const profiles = [fullTreeProfile(), ...state.profiles].map((profile): OutputProfileRowModel => {
     const resolutions = resolveOutputStates(metadata, profile);
     const includedCount = [...resolutions.values()].filter((resolution) => resolution.included).length;
@@ -188,7 +223,7 @@ export function buildOutputProfileManagerModel(
 
   return {
     createAction: { id: "create", label: "Create profile", disabled: mutationDisabled },
-    resetAction: outputError ? { id: "reset", label: "Reset output profiles" } : null,
+    resetAction: outputError ? { id: "reset", label: "Reset output profiles", disabled: busy } : null,
     profiles
   };
 }
@@ -212,6 +247,9 @@ export function duplicateOutputProfileState(
 
 class OutputProfilesConfirmModal extends Modal {
   private resolved = false;
+  private readonly submissions = new AsyncOperationCoordinator();
+  private cancelButton: ButtonComponent | null = null;
+  private confirmButton: ButtonComponent | null = null;
 
   constructor(
     app: App,
@@ -231,11 +269,17 @@ class OutputProfilesConfirmModal extends Modal {
     contentEl.createEl("h3", { text: this.titleText });
     contentEl.createEl("p", { text: this.description });
     const actions = contentEl.createDiv({ cls: "arbor-output-profiles-confirm-actions" });
-    new ButtonComponent(actions).setButtonText("Cancel").onClick(() => this.close());
-    new ButtonComponent(actions)
+    this.cancelButton = new ButtonComponent(actions).setButtonText("Cancel").onClick(() => this.close());
+    this.confirmButton = new ButtonComponent(actions)
       .setButtonText(this.confirmText)
       .setWarning()
       .onClick(() => void this.confirm());
+  }
+
+  override close(): void {
+    if (!this.submissions.isBusy("confirm")) {
+      super.close();
+    }
   }
 
   onClose(): void {
@@ -250,9 +294,25 @@ class OutputProfilesConfirmModal extends Modal {
     if (this.resolved) {
       return;
     }
-    await this.onConfirm();
-    this.resolved = true;
-    super.close();
+
+    const submission = this.submissions.runOnce("confirm", async () => {
+      await this.onConfirm();
+      this.resolved = true;
+      super.close();
+    });
+    this.syncBusyPresentation();
+    try {
+      await submission;
+    } finally {
+      this.syncBusyPresentation();
+    }
+  }
+
+  private syncBusyPresentation(): void {
+    const busy = this.submissions.isBusy("confirm");
+    this.contentEl.setAttr("aria-busy", busy ? "true" : "false");
+    this.cancelButton?.setDisabled(busy);
+    this.confirmButton?.setDisabled(busy);
   }
 }
 
@@ -261,6 +321,10 @@ class OutputProfileNameModal extends Modal {
   private forceClose = false;
   private confirmationOpen = false;
   private errorEl: HTMLElement | null = null;
+  private inputEl: HTMLInputElement | null = null;
+  private cancelButton: ButtonComponent | null = null;
+  private saveButton: ButtonComponent | null = null;
+  private readonly submissions = new AsyncOperationCoordinator();
 
   constructor(app: App, private readonly controller: OutputProfileNameController) {
     super(app);
@@ -273,6 +337,9 @@ class OutputProfileNameModal extends Modal {
   }
 
   override close(): void {
+    if (this.submissions.isBusy("save")) {
+      return;
+    }
     if (
       !this.forceClose &&
       hasUnsavedOutputProfileDraft(this.controller.originalName, this.draftName)
@@ -298,6 +365,7 @@ class OutputProfileNameModal extends Modal {
       attr: { type: "text", autocomplete: "off" },
       value: this.draftName
     });
+    this.inputEl = input;
     input.addEventListener("input", () => {
       this.draftName = input.value;
       this.showError(null);
@@ -310,30 +378,48 @@ class OutputProfileNameModal extends Modal {
     });
     this.errorEl = contentEl.createDiv({ cls: "arbor-output-profile-name-error" });
     const actions = contentEl.createDiv({ cls: "arbor-output-profile-name-actions" });
-    new ButtonComponent(actions).setButtonText("Cancel").onClick(() => this.close());
-    new ButtonComponent(actions).setButtonText("Save").setCta().onClick(() => void this.save());
+    this.cancelButton = new ButtonComponent(actions).setButtonText("Cancel").onClick(() => this.close());
+    this.saveButton = new ButtonComponent(actions).setButtonText("Save").setCta().onClick(() => void this.save());
     window.requestAnimationFrame(() => input.focus());
   }
 
   private async save(): Promise<void> {
-    const error = validateOutputProfileName(
-      this.controller.currentState(),
-      this.draftName,
-      this.controller.profileId
-    );
-    if (error) {
-      this.showError(error);
-      return;
-    }
+    const submission = this.submissions.runOnce("save", async () => {
+      const error = validateOutputProfileName(
+        this.controller.currentState(),
+        this.draftName,
+        this.controller.profileId
+      );
+      if (error) {
+        this.showError(error);
+        return;
+      }
 
-    await this.controller.save(this.draftName.trim());
-    this.forceClose = true;
-    super.close();
+      await this.controller.save(this.draftName.trim());
+      this.forceClose = true;
+      super.close();
+    });
+    this.syncBusyPresentation();
+    try {
+      await submission;
+    } finally {
+      this.syncBusyPresentation();
+    }
   }
 
   private showError(error: string | null): void {
     this.errorEl?.setText(error ?? "");
     this.errorEl?.toggleClass("is-visible", error !== null);
+  }
+
+  private syncBusyPresentation(): void {
+    const busy = this.submissions.isBusy("save");
+    this.contentEl.setAttr("aria-busy", busy ? "true" : "false");
+    if (this.inputEl) {
+      this.inputEl.disabled = busy;
+    }
+    this.cancelButton?.setDisabled(busy);
+    this.saveButton?.setDisabled(busy);
   }
 
   private confirmDiscard(): void {
@@ -361,6 +447,7 @@ export class OutputProfilesModal extends Modal {
   private state: ArborOutputState;
   private nameModal: OutputProfileNameModal | null = null;
   private confirmationOpen = false;
+  private readonly operations = new AsyncOperationCoordinator();
 
   constructor(app: App, private readonly controller: OutputProfilesController) {
     super(app);
@@ -381,10 +468,13 @@ export class OutputProfilesModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h2", { text: "Output profiles" });
+    const busy = this.operations.isBusy("manager");
+    contentEl.setAttr("aria-busy", busy ? "true" : "false");
     const model = buildOutputProfileManagerModel(
       this.state,
       this.controller.metadata,
-      this.controller.outputError
+      this.controller.outputError,
+      busy
     );
 
     if (this.controller.outputError && model.resetAction) {
@@ -396,6 +486,7 @@ export class OutputProfilesModal extends Modal {
       });
       new ButtonComponent(warning)
         .setButtonText(model.resetAction.label)
+        .setDisabled(model.resetAction.disabled)
         .setWarning()
         .onClick(() => this.confirmReset());
     }
@@ -465,7 +556,7 @@ export class OutputProfilesModal extends Modal {
   }
 
   private openCreate(): void {
-    if (this.controller.outputError) {
+    if (this.controller.outputError || this.operations.isBusy("manager")) {
       return;
     }
     this.openNameModal({
@@ -473,21 +564,27 @@ export class OutputProfilesModal extends Modal {
       initialName: "",
       originalName: null,
       save: async (name) => {
-        const next = createProfile(
-          this.state,
-          uniqueProfileId(this.state, name),
-          name,
-          this.controller.metadata
-        );
-        this.state = await this.controller.mutate("Create output profile", next);
-        this.render();
+        await this.runManagerOperation(async () => {
+          const next = createProfile(
+            this.state,
+            uniqueProfileId(this.state, name),
+            name,
+            this.controller.metadata
+          );
+          this.state = await this.controller.mutate("Create output profile", next);
+        });
       }
     });
   }
 
   private openRename(profileId: string): void {
     const profile = findProfile(this.state, profileId);
-    if (!profile || profile.id === FULL_OUTPUT_PROFILE_ID || this.controller.outputError) {
+    if (
+      !profile ||
+      profile.id === FULL_OUTPUT_PROFILE_ID ||
+      this.controller.outputError ||
+      this.operations.isBusy("manager")
+    ) {
       return;
     }
     this.openNameModal({
@@ -496,9 +593,10 @@ export class OutputProfilesModal extends Modal {
       originalName: profile.name,
       profileId,
       save: async (name) => {
-        const next = renameProfile(this.state, profileId, name, this.controller.metadata);
-        this.state = await this.controller.mutate("Rename output profile", next);
-        this.render();
+        await this.runManagerOperation(async () => {
+          const next = renameProfile(this.state, profileId, name, this.controller.metadata);
+          this.state = await this.controller.mutate("Rename output profile", next);
+        });
       }
     });
   }
@@ -518,18 +616,20 @@ export class OutputProfilesModal extends Modal {
     if (this.controller.outputError) {
       return;
     }
-    const next = setActiveOutputProfile(this.state, profileId, this.controller.metadata);
-    this.state = await this.controller.activate(next);
-    this.render();
+    await this.runManagerOperation(async () => {
+      const next = setActiveOutputProfile(this.state, profileId, this.controller.metadata);
+      this.state = await this.controller.activate(next);
+    });
   }
 
   private async duplicate(profileId: string): Promise<void> {
     if (this.controller.outputError) {
       return;
     }
-    const next = duplicateOutputProfileState(this.state, profileId, this.controller.metadata);
-    this.state = await this.controller.mutate("Duplicate output profile", next);
-    this.render();
+    await this.runManagerOperation(async () => {
+      const next = duplicateOutputProfileState(this.state, profileId, this.controller.metadata);
+      this.state = await this.controller.mutate("Duplicate output profile", next);
+    });
   }
 
   private confirmDelete(profileId: string): void {
@@ -545,9 +645,10 @@ export class OutputProfilesModal extends Modal {
       "Delete",
       async () => {
         try {
-          const next = deleteProfile(this.state, profile.id, this.controller.metadata);
-          this.state = await this.controller.mutate("Delete output profile", next);
-          this.render();
+          await this.runManagerOperation(async () => {
+            const next = deleteProfile(this.state, profile.id, this.controller.metadata);
+            this.state = await this.controller.mutate("Delete output profile", next);
+          });
         } finally {
           this.confirmationOpen = false;
         }
@@ -570,7 +671,9 @@ export class OutputProfilesModal extends Modal {
       "Reset output profiles",
       async () => {
         try {
-          this.state = await this.controller.reset();
+          await this.runManagerOperation(async () => {
+            this.state = await this.controller.reset();
+          });
           this.close();
         } finally {
           this.confirmationOpen = false;
@@ -580,5 +683,15 @@ export class OutputProfilesModal extends Modal {
         this.confirmationOpen = false;
       }
     ).open();
+  }
+
+  private async runManagerOperation(operation: () => Promise<void>): Promise<void> {
+    const pending = this.operations.enqueue("manager", operation);
+    this.render();
+    try {
+      await pending;
+    } finally {
+      this.render();
+    }
   }
 }
