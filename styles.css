@@ -111,6 +111,13 @@
   -ms-overflow-style: none;
 }
 
+.arbor-breadcrumbs.is-reserved-hidden {
+  min-height: 40px;
+  box-sizing: border-box;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .arbor-breadcrumb-exit-layer {
   position: absolute;
   z-index: 1;
@@ -479,7 +486,7 @@
 .arbor-overview-exit,
 .arbor-overview-button {
   position: absolute;
-  z-index: 3;
+  z-index: 4;
   top: 12px;
   right: 12px;
   display: grid;
@@ -487,11 +494,12 @@
   height: 32px;
   padding: 0;
   place-items: center;
+  pointer-events: auto;
 }
 
 .arbor-output-profile-button {
   position: absolute;
-  z-index: 3;
+  z-index: 4;
   top: 12px;
   right: 56px;
   min-width: 44px;
@@ -505,6 +513,7 @@
   color: var(--text-muted);
   cursor: pointer;
   font-size: 0.77rem;
+  pointer-events: auto;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1716,6 +1725,11 @@
   border-color: color-mix(in srgb, var(--text-faint) 40%, var(--background-modifier-border));
 }
 
+.arbor-card.is-output-excluded-inherited > .arbor-output-state-badge,
+.arbor-overview-card.is-output-excluded-inherited > .arbor-output-state-badge {
+  opacity: 0.68;
+}
+
 .arbor-card.is-output-excluded-direct.is-editing > .arbor-editor,
 .arbor-card.is-output-excluded-inherited.is-editing > .arbor-editor,
 .arbor-overview-card.is-output-excluded-direct.is-editing > .arbor-editor,
@@ -1746,7 +1760,13 @@
 }
 
 .arbor-card.is-output-excluded-direct > .arbor-card-content,
-.arbor-overview-card.is-output-excluded-direct > .arbor-overview-card-content {
+.arbor-card.is-output-excluded-inherited > .arbor-card-content,
+.arbor-overview-card.is-output-excluded-direct > .arbor-overview-card-content,
+.arbor-overview-card.is-output-excluded-inherited > .arbor-overview-card-content,
+.arbor-card.is-output-excluded-direct > .arbor-editor,
+.arbor-card.is-output-excluded-inherited > .arbor-editor,
+.arbor-overview-card.is-output-excluded-direct > .arbor-editor,
+.arbor-overview-card.is-output-excluded-inherited > .arbor-editor {
   padding-inline-end: 24px;
   box-sizing: border-box;
 }

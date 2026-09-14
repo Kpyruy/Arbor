@@ -41,6 +41,69 @@ describe("default presentation mode", () => {
     expect(outputRender).not.toContain("persistState");
   });
 
+  it("keeps the header row reserved while Output Preview hides breadcrumbs", () => {
+    const source = readProjectFile("src/view/ArborView.ts");
+    const styles = readProjectFile("styles.css");
+    const renderNow = source.slice(
+      source.indexOf("  private async renderNow(): Promise<void>"),
+      source.indexOf("  private ensureShell(): void")
+    );
+    const breadcrumbs = source.slice(
+      source.indexOf("  private syncBreadcrumbs(): void"),
+      source.indexOf("  private getBreadcrumbLabel(")
+    );
+    const reservedBreadcrumbStart = styles.indexOf(".arbor-breadcrumbs.is-reserved-hidden");
+    const reservedBreadcrumbStyles = styles.slice(
+      reservedBreadcrumbStart,
+      styles.indexOf("}", reservedBreadcrumbStart) + 1
+    );
+
+    expect(renderNow).not.toContain('this.breadcrumbsEl?.setCssStyles({ display: "none" });');
+    expect(breadcrumbs).toContain('this.breadcrumbsEl.toggleClass("is-reserved-hidden", hideBreadcrumbContent);');
+    expect(breadcrumbs).toContain('this.breadcrumbsEl.setAttr("aria-hidden", hideBreadcrumbContent ? "true" : "false");');
+    expect(reservedBreadcrumbStart).toBeGreaterThanOrEqual(0);
+    expect(reservedBreadcrumbStyles).toContain("min-height: 40px;");
+    expect(reservedBreadcrumbStyles).toContain("visibility: hidden;");
+    expect(reservedBreadcrumbStyles).toContain("pointer-events: none;");
+  });
+
+  it("keeps profile and mode controls above the overview interaction surface", () => {
+    const styles = readProjectFile("styles.css");
+    const modeControls = styles.slice(
+      styles.indexOf(".arbor-overview-exit,"),
+      styles.indexOf(".arbor-output-profiles-modal")
+    );
+
+    expect(modeControls).toContain("z-index: 4;");
+    expect(modeControls).toContain("pointer-events: auto;");
+  });
+
+  it("places Output preview immediately above clean export in the view menu", () => {
+    const source = readProjectFile("src/view/ArborView.ts");
+    const menu = source.slice(
+      source.indexOf("  private openViewMenu("),
+      source.indexOf("  private syncOutputProfileButton(")
+    );
+    const outputPreviewIndex = menu.indexOf('setTitle("Output preview")');
+    const cleanExportIndex = menu.indexOf('setTitle("Export clean copy…")');
+
+    expect(outputPreviewIndex).toBeGreaterThanOrEqual(0);
+    expect(cleanExportIndex).toBeGreaterThan(outputPreviewIndex);
+  });
+
+  it("groups Tree Overview export format and quality into stable columns", () => {
+    const source = readProjectFile("src/view/ArborView.ts");
+    const modal = source.slice(
+      source.indexOf("class TreeOverviewExportModal extends Modal"),
+      source.indexOf("export class ArborView")
+    );
+
+    expect(modal).toContain('const formatGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });');
+    expect(modal).toContain('const qualityGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });');
+    expect(modal).toContain('this.addFormatChoice(formatGroup, "png", "PNG image")');
+    expect(modal).toContain('this.addQualityChoice(qualityGroup, "ultra", "Ultra — 4×")');
+  });
+
   it("refreshes the same Output Preview when the active profile changes", () => {
     const source = readProjectFile("src/view/ArborView.ts");
     const switchProfile = source.slice(

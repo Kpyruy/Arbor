@@ -1,5 +1,7 @@
 import { build } from "esbuild";
 import { beforeAll, describe, expect, it } from "vitest";
+import { addChild } from "../src/model/tree";
+import { reconcileProfilesAfterTreeChange } from "../src/outputProfiles";
 import { ArborOutputState, BranchTreeMetadata } from "../src/types";
 
 type OutputProfilesUiModule = typeof import("../src/view/OutputProfilesModal");
@@ -346,13 +348,32 @@ describe("Output Profiles manager UI", () => {
     expect(direct.ariaLabel).toContain("Excluded directly from output profile Draft");
     expect(inherited).toMatchObject({
       className: "is-output-excluded-inherited",
-      badgeIcon: null
+      badgeIcon: "eye-off"
     });
     expect(inherited.ariaLabel).toContain('Inherited exclusion from ancestor "Root"');
     expect(arborViewUi.getOutputCardPresentation(tree(), includedState, "root")).toMatchObject({
       className: null,
       badgeIcon: null,
       ariaLabel: "Root. Included in output profile Draft."
+    });
+  });
+
+  it("marks a new child inherited from an excluded parent as excluded", () => {
+    const before = tree();
+    const created = addChild(before, "root");
+    const state = reconcileProfilesAfterTreeChange(
+      before,
+      created.metadata,
+      outputState("draft")
+    );
+
+    expect(arborViewUi.getOutputCardPresentation(
+      created.metadata,
+      state,
+      created.selectedBlockId
+    )).toMatchObject({
+      className: "is-output-excluded-inherited",
+      badgeIcon: "eye-off"
     });
   });
 });

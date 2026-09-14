@@ -207,7 +207,7 @@ export function getOutputCardPresentation(
   const reason = `Inherited exclusion from ancestor "${ancestorLabel}" in output profile ${profile.name}.`;
   return {
     className: "is-output-excluded-inherited",
-    badgeIcon: null,
+    badgeIcon: "eye-off",
     ariaLabel: `${blockLabel}. ${reason}`,
     tooltip: reason
   };
@@ -429,13 +429,15 @@ class TreeOverviewExportModal extends Modal {
     });
 
     const choicesEl = contentEl.createDiv({ cls: "arbor-clean-export-choices" });
-    choicesEl.createDiv({ cls: "arbor-tree-export-choice-heading", text: "Format" });
-    this.addFormatChoice(choicesEl, "png", "PNG image");
-    this.addFormatChoice(choicesEl, "pdf", "PDF — one large page");
-    choicesEl.createDiv({ cls: "arbor-tree-export-choice-heading", text: "Quality" });
-    this.addQualityChoice(choicesEl, "standard", Platform.isMobile ? "Standard — 1× (recommended)" : "Standard — 1×");
-    this.addQualityChoice(choicesEl, "high", Platform.isMobile ? "High — 2×" : "High — 2× (recommended)");
-    this.addQualityChoice(choicesEl, "ultra", "Ultra — 4×");
+    const formatGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });
+    formatGroup.createDiv({ cls: "arbor-tree-export-choice-heading", text: "Format" });
+    this.addFormatChoice(formatGroup, "png", "PNG image");
+    this.addFormatChoice(formatGroup, "pdf", "PDF — one large page");
+    const qualityGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });
+    qualityGroup.createDiv({ cls: "arbor-tree-export-choice-heading", text: "Quality" });
+    this.addQualityChoice(qualityGroup, "standard", Platform.isMobile ? "Standard — 1× (recommended)" : "Standard — 1×");
+    this.addQualityChoice(qualityGroup, "high", Platform.isMobile ? "High — 2×" : "High — 2× (recommended)");
+    this.addQualityChoice(qualityGroup, "ultra", "Ultra — 4×");
 
     const actionsEl = contentEl.createDiv({ cls: "arbor-confirm-actions" });
     new ButtonComponent(actionsEl)
@@ -1687,7 +1689,6 @@ export class ArborView extends FileView {
     this.syncBanner();
     this.syncLoadingOverlay();
     if (this.presentationMode === "output") {
-      this.breadcrumbsEl?.setCssStyles({ display: "none" });
       this.overviewButtonEl?.setCssStyles({ display: "" });
       this.overviewStageEl?.setCssStyles({ display: "none" });
       this.columnsStageEl?.setCssStyles({ display: "none" });
@@ -1940,8 +1941,11 @@ export class ArborView extends FileView {
       return;
     }
 
-    this.breadcrumbsEl.setCssStyles({ display: this.plugin.settings.showBreadcrumb ? "" : "none" });
-    if (!this.plugin.settings.showBreadcrumb) {
+    const hideBreadcrumbContent =
+      !this.plugin.settings.showBreadcrumb || this.presentationMode === "output";
+    this.breadcrumbsEl.toggleClass("is-reserved-hidden", hideBreadcrumbContent);
+    this.breadcrumbsEl.setAttr("aria-hidden", hideBreadcrumbContent ? "true" : "false");
+    if (hideBreadcrumbContent) {
       return;
     }
 
@@ -3775,15 +3779,15 @@ export class ArborView extends FileView {
       item.setTitle("Open in Markdown").setIcon("file-text").onClick(() => void this.openCurrentFileInMarkdown())
     );
     menu.addItem((item) =>
+      this.presentationMode === "output"
+        ? item.setTitle("Return to branch editor").setIcon("git-fork").onClick(() => this.closeOutputPreview())
+        : item.setTitle("Output preview").setIcon("file-check-2").onClick(() => this.openOutputPreview())
+    );
+    menu.addItem((item) =>
       item.setTitle("Export clean copy…").setIcon("file-output").onClick(() => void this.exportCleanCopy())
     );
     menu.addItem((item) =>
       item.setTitle("Export tree overview…").setIcon("image-down").onClick(() => void this.exportTreeOverview())
-    );
-    menu.addItem((item) =>
-      this.presentationMode === "output"
-        ? item.setTitle("Return to branch editor").setIcon("git-fork").onClick(() => this.closeOutputPreview())
-        : item.setTitle("Output preview").setIcon("file-check-2").onClick(() => this.openOutputPreview())
     );
     menu.addItem((item) =>
       this.presentationMode === "overview"
