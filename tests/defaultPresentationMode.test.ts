@@ -12,6 +12,47 @@ describe("default presentation mode", () => {
     expect(readProjectFile("src/view/ArborView.ts")).toContain("this.presentationMode = this.plugin.settings.defaultPresentationMode;");
   });
 
+  it("keeps Output Preview inside the Arbor leaf and never writes while opening, refreshing or closing", () => {
+    const source = readProjectFile("src/view/ArborView.ts");
+    const types = readProjectFile("src/types.ts");
+    const openAndClose = source.slice(
+      source.indexOf("  openOutputPreview(): void"),
+      source.indexOf("  selectBlock(blockId:")
+    );
+    const refresh = source.slice(
+      source.indexOf("  async refreshView(): Promise<void>"),
+      source.indexOf("  async refreshLayoutDirection(): Promise<void>")
+    );
+    const outputRender = source.slice(
+      source.indexOf("  private async syncOutputPreview(): Promise<void>"),
+      source.indexOf("  private async syncPreview(")
+    );
+
+    expect(types).toContain('export type ArborPresentationMode = "editor" | "overview" | "output";');
+    expect(openAndClose).toContain('this.presentationMode = "output";');
+    expect(openAndClose).not.toContain("commitEditIfNeeded");
+    expect(openAndClose).not.toContain("persistState");
+    expect(refresh).not.toContain("persistState");
+    expect(outputRender).toContain("projectOutput(metadata, this.state.outputState)");
+    expect(outputRender).toContain("renderVersion !== this.outputRenderVersion");
+    expect(outputRender).toContain("MarkdownRenderer.render");
+    expect(outputRender).not.toContain("vault.create");
+    expect(outputRender).not.toContain("vault.modify");
+    expect(outputRender).not.toContain("persistState");
+  });
+
+  it("refreshes the same Output Preview when the active profile changes", () => {
+    const source = readProjectFile("src/view/ArborView.ts");
+    const switchProfile = source.slice(
+      source.indexOf("  private async applyActiveOutputProfile("),
+      source.indexOf("  private async applyOutputProfileMutation(")
+    );
+
+    expect(switchProfile).toContain('await this.persistState("Switch output profile")');
+    expect(switchProfile).toContain("this.render();");
+    expect(switchProfile).not.toContain("this.presentationMode =");
+  });
+
   it("places the overview switch in the canvas and relies on one accessible tooltip", () => {
     const source = readProjectFile("src/view/ArborView.ts");
 

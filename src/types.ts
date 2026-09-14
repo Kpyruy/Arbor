@@ -25,6 +25,20 @@ export interface ArborOutputResolution {
   ruleBlockId: BranchBlockId | null;
 }
 
+export interface ArborOutputProjectionEntry {
+  readonly block: Readonly<BranchBlock>;
+  readonly resolution: Readonly<ArborOutputResolution>;
+  readonly depth: number;
+}
+
+export interface ArborOutputProjection {
+  readonly prefix: string;
+  readonly profile: Readonly<Pick<ArborOutputProfile, "id" | "name">>;
+  readonly included: readonly ArborOutputProjectionEntry[];
+  readonly excluded: readonly ArborOutputProjectionEntry[];
+  readonly excludedCount: number;
+}
+
 export interface BranchBlock {
   id: BranchBlockId;
   parentId: BranchBlockId | null;
@@ -99,7 +113,7 @@ export interface BranchHistoryEntry {
   selectedBlockId: BranchBlockId | null;
 }
 
-export type ArborPresentationMode = "editor" | "overview";
+export type ArborPresentationMode = "editor" | "overview" | "output";
 export type ArborLayoutDirection = "ltr" | "rtl";
 export interface ArborCustomTheme {
   canvas: string;

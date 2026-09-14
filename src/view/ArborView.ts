@@ -79,6 +79,7 @@ import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { deepClone, extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
+import { projectOutput } from "../outputProjection";
 import { getEnteringBreadcrumbIds } from "../breadcrumbAnimation";
 import { resolveBranchCardInteraction } from "../cardInteraction";
 import { resolveNumericChildTarget } from "../numericNavigation";
@@ -525,6 +526,8 @@ export class ArborView extends FileView {
   private overviewViewportEl: HTMLElement | null = null;
   private overviewSceneEl: HTMLElement | null = null;
   private overviewSurfaceEl: HTMLElement | null = null;
+  private outputStageEl: HTMLElement | null = null;
+  private outputSurfaceEl: HTMLElement | null = null;
   private rootEmptyEl: HTMLElement | null = null;
   private renderedPreviewSignature = "";
   private previewSearchQuery = "";
@@ -541,6 +544,7 @@ export class ArborView extends FileView {
   private shouldRestoreOverviewKeyboardFocusAfterMutation = false;
   private pendingOverviewViewportPosition: { left: number; top: number } | null = null;
   private overviewRenderVersion = 0;
+  private outputRenderVersion = 0;
   private isExportingTreeOverview = false;
   private overviewPanState: {
     pointerId: number;
@@ -1138,6 +1142,16 @@ export class ArborView extends FileView {
     });
   }
 
+  openOutputPreview(): void {
+    this.presentationMode = "output";
+    this.render();
+  }
+
+  closeOutputPreview(): void {
+    this.presentationMode = "editor";
+    this.render();
+  }
+
   selectBlock(blockId: BranchBlockId | null, options?: { focus?: boolean; reveal?: boolean }): void {
     if (!this.state) {
       return;
@@ -1618,6 +1632,7 @@ export class ArborView extends FileView {
 
   render(): void {
     this.overviewRenderVersion += 1;
+    this.outputRenderVersion += 1;
     if (this.renderFrame !== null) {
       window.cancelAnimationFrame(this.renderFrame);
     }
@@ -1650,6 +1665,18 @@ export class ArborView extends FileView {
     this.syncSearchOverlay(this.viewContext);
     this.syncBanner();
     this.syncLoadingOverlay();
+    if (this.presentationMode === "output") {
+      this.breadcrumbsEl?.setCssStyles({ display: "none" });
+      this.overviewButtonEl?.setCssStyles({ display: "" });
+      this.overviewStageEl?.setCssStyles({ display: "none" });
+      this.columnsStageEl?.setCssStyles({ display: "none" });
+      this.previewPaneEl?.setCssStyles({ display: "none" });
+      this.outputStageEl?.setCssStyles({ display: "" });
+      await this.syncOutputPreview();
+      return;
+    }
+
+    this.outputStageEl?.setCssStyles({ display: "none" });
     if (this.presentationMode === "overview") {
       this.overviewButtonEl?.setCssStyles({ display: "none" });
       this.columnsStageEl?.setCssStyles({ display: "none" });
@@ -1685,7 +1712,8 @@ export class ArborView extends FileView {
       this.breadcrumbExitLayerEl &&
       this.outputProfileButtonEl &&
       this.bannerEl &&
-      this.loadingOverlayEl
+      this.loadingOverlayEl &&
+      this.outputStageEl
     ) {
       return;
     }
@@ -1776,6 +1804,8 @@ export class ArborView extends FileView {
     viewportFadesEl.createDiv({ cls: "arbor-edge-fade is-right" });
     viewportFadesEl.createDiv({ cls: "arbor-edge-fade is-bottom" });
     viewportFadesEl.createDiv({ cls: "arbor-edge-fade is-left" });
+    this.outputStageEl = this.bodyEl.createDiv({ cls: "arbor-output-preview-stage" });
+    this.outputStageEl.setCssStyles({ display: "none" });
     this.syncZoomIndicator();
   }
 
@@ -1789,6 +1819,11 @@ export class ArborView extends FileView {
     if (overviewExit) {
       (this.usesTouchControls ? this.frameEl : this.overviewStageEl)?.appendChild(overviewExit);
       overviewExit.toggleClass("is-inactive-mode", this.presentationMode !== "overview");
+    }
+    if (this.presentationMode === "output") {
+      this.touchDockEl?.remove();
+      this.touchDockEl = null;
+      return;
     }
     if (!this.usesTouchControls) {
       this.touchDockEl?.remove();
@@ -1871,6 +1906,8 @@ export class ArborView extends FileView {
     this.overviewViewportEl = null;
     this.overviewSceneEl = null;
     this.overviewSurfaceEl = null;
+    this.outputStageEl = null;
+    this.outputSurfaceEl = null;
     this.rootEmptyEl = null;
     this.renderedPreviewSignature = "";
     this.columnElementMap.clear();
@@ -3276,6 +3313,78 @@ export class ArborView extends FileView {
     this.overviewPanState = null;
   }
 
+  private async syncOutputPreview(): Promise<void> {
+    const stage = this.outputStageEl;
+    if (!stage || !this.state) {
+      return;
+    }
+
+    stage.querySelectorAll<HTMLElement>(".arbor-output-preview-surface.is-staging")
+      .forEach((surface) => surface.remove());
+    const renderVersion = this.outputRenderVersion;
+    let metadata = cloneMetadata(this.state.metadata);
+    if (this.editingSession) {
+      metadata = updateBlockContent(metadata, this.editingSession.blockId, this.editingSession.value);
+    }
+    const projection = projectOutput(metadata, this.state.outputState);
+    const surface = stage.createDiv({ cls: "arbor-output-preview-surface is-staging" });
+    const header = surface.createDiv({ cls: "arbor-output-preview-header" });
+    const heading = header.createDiv({ cls: "arbor-output-preview-heading" });
+    heading.createEl("h2", { text: projection.profile.name });
+    heading.createEl("p", {
+      text: `${projection.excludedCount} hidden block${projection.excludedCount === 1 ? "" : "s"}`
+    });
+    const actions = header.createDiv({ cls: "arbor-output-preview-actions" });
+    const returnButton = actions.createEl("button", {
+      attr: { type: "button" }
+    });
+    setIcon(returnButton, "git-fork");
+    returnButton.createSpan({ text: "Return to editor" });
+    returnButton.addEventListener("click", () => this.closeOutputPreview());
+    const exportButton = actions.createEl("button", {
+      cls: "mod-cta",
+      attr: { type: "button" }
+    });
+    setIcon(exportButton, "file-output");
+    exportButton.createSpan({ text: "Export clean copy" });
+    exportButton.addEventListener("click", () => void this.exportCleanCopy());
+
+    const content = surface.createDiv({
+      cls: "arbor-output-preview-content",
+      attr: { "aria-label": `Output preview: ${projection.profile.name}` }
+    });
+    if (projection.prefix.trim().length > 0) {
+      const prefix = content.createDiv({ cls: "arbor-output-preview-prefix markdown-rendered" });
+      await MarkdownRenderer.render(this.app, projection.prefix, prefix, this.file?.path ?? "", this);
+    }
+
+    for (const entry of projection.included) {
+      if (renderVersion !== this.outputRenderVersion) {
+        surface.remove();
+        return;
+      }
+      const block = content.createDiv({ cls: "arbor-output-preview-block markdown-rendered" });
+      block.dataset.blockId = entry.block.id;
+      block.dataset.depth = String(entry.depth);
+      await MarkdownRenderer.render(this.app, entry.block.content, block, this.file?.path ?? "", this);
+    }
+
+    if (projection.included.length === 0 && projection.prefix.trim().length === 0) {
+      content.createDiv({
+        cls: "arbor-output-preview-empty",
+        text: "No blocks are included in this output profile."
+      });
+    }
+
+    if (renderVersion !== this.outputRenderVersion) {
+      surface.remove();
+      return;
+    }
+    this.outputSurfaceEl?.remove();
+    surface.removeClass("is-staging");
+    this.outputSurfaceEl = surface;
+  }
+
   private async syncPreview(context: BranchViewContext): Promise<void> {
     if (!this.bodyEl || !this.file || !this.state) {
       return;
@@ -3649,6 +3758,11 @@ export class ArborView extends FileView {
     );
     menu.addItem((item) =>
       item.setTitle("Export tree overview…").setIcon("image-down").onClick(() => void this.exportTreeOverview())
+    );
+    menu.addItem((item) =>
+      this.presentationMode === "output"
+        ? item.setTitle("Return to branch editor").setIcon("git-fork").onClick(() => this.closeOutputPreview())
+        : item.setTitle("Output preview").setIcon("file-check-2").onClick(() => this.openOutputPreview())
     );
     menu.addItem((item) =>
       this.presentationMode === "overview"
