@@ -37,6 +37,13 @@ describe("output projection", () => {
 
     expect(projection.prefix).toBe("# Document title\n\n");
     expect(projection.profile).toEqual({ id: "draft", name: "Draft" });
+    expect(projection.entries.map((entry) => entry.block.id)).toEqual([
+      "root",
+      "chosen",
+      "nested",
+      "hidden",
+      "other"
+    ]);
     expect(projection.included.map((entry) => entry.block.id)).toEqual(["root", "chosen", "nested"]);
     expect(projection.excluded.map((entry) => entry.block.id)).toEqual(["hidden", "other"]);
     expect(projection.excludedCount).toBe(2);

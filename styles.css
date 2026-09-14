@@ -2312,8 +2312,22 @@
 
 .arbor-clean-export-choices {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
   margin-top: 14px;
+}
+
+.arbor-clean-export-group {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.arbor-clean-export-group > strong {
+  margin: 0 2px 2px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
 }
 
 .arbor-tree-export-choice-heading {
@@ -2699,6 +2713,7 @@
   .arbor-theme-studio-card-label { align-items: flex-start; flex-direction: column; gap: 3px; }
   .arbor-theme-studio-card-label > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .arbor-clean-export-choice { min-height: 44px; }
+  .arbor-clean-export-choices { grid-template-columns: minmax(0, 1fr); }
   .arbor-settings input[type="text"],
   .arbor-theme-studio-editor-modal input[type="text"] { font-size: 16px; max-width: 100%; }
   .arbor-output-profile-name-modal input[type="text"] { font-size: 16px; max-width: 100%; }

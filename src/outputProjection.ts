@@ -26,6 +26,7 @@ export function projectOutput(
 ): ArborOutputProjection {
   const activeProfile = getActiveOutputProfile(state);
   const resolutions = resolveOutputStates(metadata, activeProfile);
+  const entries: ArborOutputProjectionEntry[] = [];
   const included: ArborOutputProjectionEntry[] = [];
   const excluded: ArborOutputProjectionEntry[] = [];
 
@@ -41,17 +42,20 @@ export function projectOutput(
         resolution: cloneFrozenResolution(resolution),
         depth
       });
+      entries.push(entry);
       (resolution.included ? included : excluded).push(entry);
       visit(block.id, depth + 1);
     }
   };
 
   visit(null, 0);
+  const frozenEntries = Object.freeze(entries);
   const frozenIncluded = Object.freeze(included);
   const frozenExcluded = Object.freeze(excluded);
   return Object.freeze({
     prefix: metadata.prefix,
     profile: Object.freeze({ id: activeProfile.id, name: activeProfile.name }),
+    entries: frozenEntries,
     included: frozenIncluded,
     excluded: frozenExcluded,
     excludedCount: frozenExcluded.length

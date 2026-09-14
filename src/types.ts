@@ -34,6 +34,7 @@ export interface ArborOutputProjectionEntry {
 export interface ArborOutputProjection {
   readonly prefix: string;
   readonly profile: Readonly<Pick<ArborOutputProfile, "id" | "name">>;
+  readonly entries: readonly ArborOutputProjectionEntry[];
   readonly included: readonly ArborOutputProjectionEntry[];
   readonly excluded: readonly ArborOutputProjectionEntry[];
   readonly excludedCount: number;

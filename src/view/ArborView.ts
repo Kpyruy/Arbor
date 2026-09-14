@@ -73,7 +73,7 @@ import {
   setActiveOutputProfile
 } from "../outputProfiles";
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
-import { buildCleanExportDocument, CleanExportMode } from "../storage/cleanExport";
+import { buildCleanExportDocument, CleanExportOptions } from "../storage/cleanExport";
 import { loadImportedBranchDocument } from "../storage/reconcile";
 import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
@@ -316,10 +316,10 @@ class ArborConfirmModal extends Modal {
 
 class CleanExportModal extends Modal {
   private resolved = false;
-  private mode: CleanExportMode = "keep-yaml";
-  private resolver: (value: CleanExportMode | null) => void = () => undefined;
+  private options: CleanExportOptions = { frontmatter: "keep", excluded: "omit" };
+  private resolver: (value: CleanExportOptions | null) => void = () => undefined;
 
-  waitForChoice(): Promise<CleanExportMode | null> {
+  waitForChoice(): Promise<CleanExportOptions | null> {
     return new Promise((resolve) => {
       this.resolver = resolve;
       this.open();
@@ -332,12 +332,22 @@ class CleanExportModal extends Modal {
     this.modalEl.addClass("arbor-export-modal");
     contentEl.createEl("h3", { text: "Create clean export copy" });
     contentEl.createEl("p", {
-      text: "Choose whether to keep the original YAML frontmatter in the normal Markdown copy."
+      text: "Choose what the Markdown copy should keep. The source note stays unchanged."
     });
 
     const choicesEl = contentEl.createDiv({ cls: "arbor-clean-export-choices" });
-    this.addChoice(choicesEl, "keep-yaml", "Keep YAML frontmatter");
-    this.addChoice(choicesEl, "text-only", "Text only");
+    const frontmatterGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });
+    frontmatterGroup.createEl("strong", { text: "YAML frontmatter" });
+    this.addChoice(frontmatterGroup, { group: "frontmatter", value: "keep" }, "Keep YAML");
+    this.addChoice(frontmatterGroup, { group: "frontmatter", value: "omit" }, "Export body only");
+    const excludedGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });
+    excludedGroup.createEl("strong", { text: "Excluded blocks" });
+    this.addChoice(excludedGroup, { group: "excluded", value: "omit" }, "Omit excluded blocks");
+    this.addChoice(
+      excludedGroup,
+      { group: "excluded", value: "comment" },
+      "Keep excluded blocks as comments"
+    );
 
     const actionsEl = contentEl.createDiv({ cls: "arbor-confirm-actions" });
     new ButtonComponent(actionsEl)
@@ -346,7 +356,7 @@ class CleanExportModal extends Modal {
     new ButtonComponent(actionsEl)
       .setButtonText("Create export")
       .setCta()
-      .onClick(() => this.finish(this.mode));
+      .onClick(() => this.finish({ ...this.options }));
   }
 
   onClose(): void {
@@ -357,25 +367,36 @@ class CleanExportModal extends Modal {
     }
   }
 
-  private addChoice(container: HTMLElement, value: CleanExportMode, label: string): void {
+  private addChoice(
+    container: HTMLElement,
+    choice:
+      | { group: "frontmatter"; value: CleanExportOptions["frontmatter"] }
+      | { group: "excluded"; value: CleanExportOptions["excluded"] },
+    label: string
+  ): void {
     const choiceEl = container.createEl("label", { cls: "arbor-clean-export-choice" });
     const input = choiceEl.createEl("input", {
       attr: {
         type: "radio",
-        name: "arbor-clean-export-mode",
-        value
+        name: `arbor-clean-export-${choice.group}`,
+        value: choice.value
       }
     });
-    input.checked = this.mode === value;
+    input.checked = this.options[choice.group] === choice.value;
     input.addEventListener("change", () => {
-      if (input.checked) {
-        this.mode = value;
+      if (!input.checked) {
+        return;
+      }
+      if (choice.group === "frontmatter") {
+        this.options = { ...this.options, frontmatter: choice.value };
+      } else {
+        this.options = { ...this.options, excluded: choice.value };
       }
     });
     choiceEl.createSpan({ text: label });
   }
 
-  private finish(value: CleanExportMode | null): void {
+  private finish(value: CleanExportOptions | null): void {
     if (this.resolved) {
       return;
     }
@@ -916,14 +937,14 @@ export class ArborView extends FileView {
     }
 
     const file = this.file;
-    const { frontmatter, metadata } = this.state;
+    const { frontmatter, metadata, outputState } = this.state;
     const pendingEdit = this.editingSession
       ? { blockId: this.editingSession.blockId, content: this.editingSession.value }
       : undefined;
     this.clearBlurCommitTimer();
 
-    const mode = await new CleanExportModal(this.app).waitForChoice();
-    if (!mode) {
+    const options = await new CleanExportModal(this.app).waitForChoice();
+    if (!options) {
       return;
     }
     if (this.file !== file || !this.state) {
@@ -931,7 +952,7 @@ export class ArborView extends FileView {
     }
 
     try {
-      const contents = buildCleanExportDocument(frontmatter, metadata, mode, pendingEdit);
+      const contents = buildCleanExportDocument(frontmatter, metadata, outputState, options, pendingEdit);
       const exported = await this.plugin.createCleanExportCopy(file, contents);
       await this.plugin.openFileInMarkdownView(this.app.workspace.getLeaf("tab"), exported);
     } catch (error) {
