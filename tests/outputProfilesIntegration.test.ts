@@ -102,6 +102,15 @@ function effectiveStates(metadata: BranchTreeMetadata, state: ArborOutputState):
   );
 }
 
+function blockTopology(metadata: BranchTreeMetadata): Array<{
+  id: string;
+  parentId: string | null;
+  order: number;
+  content: string;
+}> {
+  return metadata.blocks.map(({ id, parentId, order, content }) => ({ id, parentId, order, content }));
+}
+
 describe("Output Profiles integrated lifecycle", () => {
   it("preserves content, topology and effective output through mutations, history and storage", () => {
     const frontmatter = "---\ntags: [Arbor]\n---\n";
@@ -120,18 +129,32 @@ describe("Output Profiles integrated lifecycle", () => {
 
     expect(history.canUndo()).toBe(false);
     expect(outputState.activeProfileId).toBe("draft");
+    expect(effectiveStates(metadata, outputState)).toEqual({
+      "корінь": true,
+      "обране": true,
+      "альтернатива": true,
+      "глибоко": true,
+      "другий-root": true
+    });
 
     history.push("Exclude root only", metadata, outputState, selectedBlockId);
     outputState = replaceActiveProfile(
       outputState,
       setBlockOnlyState(metadata, getActiveOutputProfile(outputState), "корінь", "exclude")
     );
+    expect(effectiveStates(metadata, outputState)).toEqual({
+      "корінь": false,
+      "обране": true,
+      "альтернатива": true,
+      "глибоко": true,
+      "другий-root": true
+    });
     history.push("Exclude alternative subtree", metadata, outputState, selectedBlockId);
     outputState = replaceActiveProfile(
       outputState,
       setSubtreeState(metadata, getActiveOutputProfile(outputState), "альтернатива", "exclude")
     );
-    expect(effectiveStates(metadata, outputState)).toMatchObject({
+    expect(effectiveStates(metadata, outputState)).toEqual({
       "корінь": false,
       "обране": true,
       "альтернатива": false,
@@ -150,6 +173,9 @@ describe("Output Profiles integrated lifecycle", () => {
       duplicated.duplicateMap
     );
     selectedBlockId = duplicated.selectedBlockId;
+    if (!selectedBlockId) {
+      throw new Error("Expected duplicateSubtree to select the duplicated block.");
+    }
     const duplicateBlockId = selectedBlockId;
     expect(selectedBlockId).not.toBe("обране");
     expect(getBlock(metadata, selectedBlockId)).toMatchObject({
@@ -157,18 +183,32 @@ describe("Output Profiles integrated lifecycle", () => {
       order: 1,
       content: "Chosen branch"
     });
-    expect(resolveOutputStates(metadata, getActiveOutputProfile(outputState)).get(selectedBlockId!)?.included).toBe(true);
+    expect(effectiveStates(metadata, outputState)).toEqual({
+      "корінь": false,
+      "обране": true,
+      "альтернатива": false,
+      "глибоко": false,
+      "другий-root": true,
+      [duplicateBlockId]: true
+    });
 
     history.push("Move duplicate", metadata, outputState, selectedBlockId);
     const beforeMove = metadata;
-    metadata = moveBlockToParentAtIndex(metadata, selectedBlockId!, "другий-root", 0);
+    metadata = moveBlockToParentAtIndex(metadata, selectedBlockId, "другий-root", 0);
     outputState = reconcileProfilesAfterTreeChange(beforeMove, metadata, outputState);
     expect(getBlock(metadata, selectedBlockId)).toMatchObject({
       parentId: "другий-root",
       order: 0,
       content: "Chosen branch"
     });
-    expect(resolveOutputStates(metadata, getActiveOutputProfile(outputState)).get(selectedBlockId!)?.included).toBe(true);
+    expect(effectiveStates(metadata, outputState)).toEqual({
+      "корінь": false,
+      "обране": true,
+      "альтернатива": false,
+      "глибоко": false,
+      "другий-root": true,
+      [duplicateBlockId]: true
+    });
 
     history.push("Delete root and lift children", metadata, outputState, selectedBlockId);
     const beforeDelete = metadata;
@@ -181,18 +221,43 @@ describe("Output Profiles integrated lifecycle", () => {
     expect(getBlock(metadata, "обране")?.parentId).toBeNull();
     expect(getBlock(metadata, "альтернатива")?.parentId).toBeNull();
     expect(getBlock(metadata, "глибоко")?.content).toBe("Nested alternative");
-    expect(metadata.blocks.map(({ id, parentId, order }) => ({ id, parentId, order }))).toEqual([
-      { id: "обране", parentId: null, order: 0 },
-      { id: "альтернатива", parentId: null, order: 1 },
-      { id: "глибоко", parentId: "альтернатива", order: 0 },
-      { id: "другий-root", parentId: null, order: 2 },
-      { id: duplicateBlockId, parentId: "другий-root", order: 0 }
+    expect(blockTopology(metadata)).toEqual([
+      { id: "обране", parentId: null, order: 0, content: "Chosen branch" },
+      { id: "альтернатива", parentId: null, order: 1, content: "Alternative" },
+      { id: "глибоко", parentId: "альтернатива", order: 0, content: "Nested alternative" },
+      { id: "другий-root", parentId: null, order: 2, content: "# Second root" },
+      { id: duplicateBlockId, parentId: "другий-root", order: 0, content: "Chosen branch" }
     ]);
+    expect(effectiveStates(metadata, outputState)).toEqual({
+      "обране": true,
+      "альтернатива": false,
+      "глибоко": false,
+      "другий-root": true,
+      [duplicateBlockId]: true
+    });
+
+    const expectedBeforeDeleteTopology = [
+      { id: "корінь", parentId: null, order: 0, content: richMarkdown },
+      { id: "обране", parentId: "корінь", order: 0, content: "Chosen branch" },
+      { id: "альтернатива", parentId: "корінь", order: 1, content: "Alternative" },
+      { id: "глибоко", parentId: "альтернатива", order: 0, content: "Nested alternative" },
+      { id: "другий-root", parentId: null, order: 1, content: "# Second root" },
+      { id: duplicateBlockId, parentId: "другий-root", order: 0, content: "Chosen branch" }
+    ];
 
     const beforeDeleteSnapshot = history.undo(deletedSnapshot);
     expect(beforeDeleteSnapshot).not.toBeNull();
     expect(getBlock(beforeDeleteSnapshot!.metadata, "корінь")?.content).toBe(richMarkdown);
     expect(beforeDeleteSnapshot!.outputState.activeProfileId).toBe("draft");
+    expect(blockTopology(beforeDeleteSnapshot!.metadata)).toEqual(expectedBeforeDeleteTopology);
+    expect(effectiveStates(beforeDeleteSnapshot!.metadata, beforeDeleteSnapshot!.outputState)).toEqual({
+      "корінь": false,
+      "обране": true,
+      "альтернатива": false,
+      "глибоко": false,
+      "другий-root": true,
+      [duplicateBlockId]: true
+    });
     const redone = history.redo(beforeDeleteSnapshot!);
     expect(redone).not.toBeNull();
     metadata = redone!.metadata;
@@ -200,6 +265,20 @@ describe("Output Profiles integrated lifecycle", () => {
     selectedBlockId = redone!.selectedBlockId;
     expect(metadata).toEqual(deletedSnapshot.metadata);
     expect(outputState.activeProfileId).toBe("draft");
+    expect(blockTopology(metadata)).toEqual([
+      { id: "обране", parentId: null, order: 0, content: "Chosen branch" },
+      { id: "альтернатива", parentId: null, order: 1, content: "Alternative" },
+      { id: "глибоко", parentId: "альтернатива", order: 0, content: "Nested alternative" },
+      { id: "другий-root", parentId: null, order: 2, content: "# Second root" },
+      { id: duplicateBlockId, parentId: "другий-root", order: 0, content: "Chosen branch" }
+    ]);
+    expect(effectiveStates(metadata, outputState)).toEqual({
+      "обране": true,
+      "альтернатива": false,
+      "глибоко": false,
+      "другий-root": true,
+      [duplicateBlockId]: true
+    });
     expect(effectiveStates(metadata, outputState)).toEqual(
       effectiveStates(deletedSnapshot.metadata, deletedSnapshot.outputState)
     );
@@ -218,17 +297,20 @@ describe("Output Profiles integrated lifecycle", () => {
     expect(reparsed.body).toContain("Chosen branch");
     expect(reparsed.body).toContain("Nested alternative");
     expect(reloaded.metadata.prefix).toBe(metadata.prefix);
-    expect(reloaded.metadata.blocks.map(({ id, parentId, order, content }) => ({
-      id,
-      parentId,
-      order,
-      content
-    }))).toEqual(metadata.blocks.map(({ id, parentId, order, content }) => ({
-      id,
-      parentId,
-      order,
-      content
-    })));
+    expect(blockTopology(reloaded.metadata)).toEqual([
+      { id: "обране", parentId: null, order: 0, content: "Chosen branch" },
+      { id: "альтернатива", parentId: null, order: 1, content: "Alternative" },
+      { id: "глибоко", parentId: "альтернатива", order: 0, content: "Nested alternative" },
+      { id: "другий-root", parentId: null, order: 2, content: "# Second root" },
+      { id: duplicateBlockId, parentId: "другий-root", order: 0, content: "Chosen branch" }
+    ]);
+    expect(effectiveStates(reloaded.metadata, reloaded.outputState)).toEqual({
+      "обране": true,
+      "альтернатива": false,
+      "глибоко": false,
+      "другий-root": true,
+      [duplicateBlockId]: true
+    });
     expect(selectedBlockId && getBlock(reloaded.metadata, selectedBlockId)).not.toBeNull();
   });
 
