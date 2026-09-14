@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   resolveOverviewArrowTarget,
-  resolveOverviewCardSelectionState
+  resolveOverviewCardSelectionState,
+  startOverviewSelectionAnimation
 } from "../src/overviewNavigation";
 import { BranchTreeMetadata } from "../src/types";
 
@@ -67,9 +68,47 @@ describe("overview arrow navigation", () => {
     expect(cardStyles).not.toContain("border-color 140ms ease");
     expect(cardStyles).not.toContain("background-color 140ms ease");
     expect(cardStyles).toContain("box-shadow 140ms ease");
-    expect(source).toContain("this.animateOverviewSelectedCard(selectedCard)");
-    expect(styles).toContain(".arbor-overview-card.is-selection-entering");
-    expect(styles).toContain("@keyframes arbor-overview-card-focus-enter");
+    expect(source).toContain("startOverviewSelectionAnimation(");
+    expect(styles).not.toContain(".arbor-overview-card.is-selection-entering");
+    expect(styles).not.toContain("@keyframes arbor-overview-card-focus-enter");
+  });
+
+  it("cancels stale motion before rapidly animating the current card", () => {
+    let previousCancelCount = 0;
+    let currentCancelCount = 0;
+    let animateCount = 0;
+    let receivedFrames: Keyframe[] = [];
+    let receivedOptions: KeyframeAnimationOptions | undefined;
+    const previous = {
+      cancel: () => { previousCancelCount += 1; }
+    } as Animation;
+    const current = {
+      cancel: () => { currentCancelCount += 1; }
+    } as Animation;
+    const card = {
+      animate: (frames: Keyframe[], options: KeyframeAnimationOptions) => {
+        animateCount += 1;
+        receivedFrames = frames;
+        receivedOptions = options;
+        return current;
+      }
+    } as unknown as HTMLElement;
+
+    expect(startOverviewSelectionAnimation(card, previous, false)).toBe(current);
+    expect(previousCancelCount).toBe(1);
+    expect(animateCount).toBe(1);
+    expect(receivedOptions).toMatchObject({ duration: 240, fill: "none" });
+    expect(receivedFrames).toHaveLength(3);
+    expect(receivedFrames.map((frame) => frame.transform)).toEqual([
+      "translate3d(0, 2px, 0) scale(0.992)",
+      "translate3d(0, -1px, 0) scale(1.004)",
+      "translate3d(0, 0, 0) scale(1)"
+    ]);
+    expect(receivedFrames.every((frame) => !("backgroundColor" in frame) && !("borderColor" in frame))).toBe(true);
+
+    expect(startOverviewSelectionAnimation(card, current, true)).toBeNull();
+    expect(currentCancelCount).toBe(1);
+    expect(animateCount).toBe(1);
   });
 
   it("uses dashed borders for every directly or inherited excluded card", () => {

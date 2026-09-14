@@ -96,7 +96,8 @@ import { getBreadcrumbScrollInsets, getChildArrowIcon, getChildArrowKey, getHori
 import { buildOverviewLayout, buildOverviewLinkPath } from "../model/overviewLayout";
 import {
   resolveOverviewArrowTarget,
-  resolveOverviewCardSelectionState
+  resolveOverviewCardSelectionState,
+  startOverviewSelectionAnimation
 } from "../overviewNavigation";
 import { resolveColumnWheelTarget } from "../columnWheelNavigation";
 import { ARBOR_THEME_VARIABLES, resolveArborThemeVariables } from "../theme";
@@ -571,6 +572,7 @@ export class ArborView extends FileView {
   private shouldRestoreOverviewKeyboardFocusAfterMutation = false;
   private pendingOverviewViewportPosition: { left: number; top: number } | null = null;
   private overviewRenderVersion = 0;
+  private overviewSelectionAnimation: Animation | null = null;
   private outputRenderVersion = 0;
   private isExportingTreeOverview = false;
   private overviewPanState: {
@@ -749,6 +751,8 @@ export class ArborView extends FileView {
     this.stopHorizontalScrollMotion();
     this.cleanupDragPreview();
     this.cleanupOverviewPan();
+    this.overviewSelectionAnimation?.cancel();
+    this.overviewSelectionAnimation = null;
     await this.commitEditIfNeeded();
     return super.onClose();
   }
@@ -1901,6 +1905,8 @@ export class ArborView extends FileView {
     this.cleanupDragPreview();
     this.cleanupViewportPan();
     this.cleanupOverviewPan();
+    this.overviewSelectionAnimation?.cancel();
+    this.overviewSelectionAnimation = null;
     this.contentEl.empty();
     this.frameEl = null;
     this.touchDockEl = null;
@@ -3228,16 +3234,10 @@ export class ArborView extends FileView {
   }
 
   private animateOverviewSelectedCard(selectedCard: HTMLElement): void {
-    this.overviewSurfaceEl?.querySelectorAll<HTMLElement>(".arbor-overview-card.is-selection-entering")
-      .forEach((card) => card.removeClass("is-selection-entering"));
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return;
-    }
-    selectedCard.addClass("is-selection-entering");
-    selectedCard.addEventListener(
-      "animationend",
-      () => selectedCard.removeClass("is-selection-entering"),
-      { once: true }
+    this.overviewSelectionAnimation = startOverviewSelectionAnimation(
+      selectedCard,
+      this.overviewSelectionAnimation,
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
     );
   }
 
