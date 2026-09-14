@@ -42,6 +42,12 @@ export interface BranchTreeMetadata {
   blocks: BranchBlock[];
 }
 
+export interface BranchTreeMutationResult {
+  metadata: BranchTreeMetadata;
+  selectedBlockId: BranchBlockId | null;
+  duplicateMap?: Record<BranchBlockId, BranchBlockId>;
+}
+
 export type ArborStorageFormat = "legacy-v1" | "structure-v2" | null;
 
 export interface ParsedBranchDocument {
@@ -89,6 +95,7 @@ export interface BranchColumnModel {
 export interface BranchHistoryEntry {
   label: string;
   metadata: BranchTreeMetadata;
+  outputState: ArborOutputState;
   selectedBlockId: BranchBlockId | null;
 }
 

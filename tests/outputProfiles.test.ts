@@ -6,12 +6,20 @@ import {
   deleteProfile,
   getActiveOutputProfile,
   normalizeOutputState,
+  reconcileProfilesAfterTreeChange,
   renameProfile,
   resolveOutputStates,
   setActiveOutputProfile,
   setBlockOnlyState,
   setSubtreeState
 } from "../src/outputProfiles";
+import {
+  addChild,
+  deleteBlockAndLiftChildren,
+  deleteSubtree,
+  duplicateSubtree,
+  moveBlockToParentAtIndex
+} from "../src/model/tree";
 import { ArborOutputProfile, ArborOutputState, BranchTreeMetadata } from "../src/types";
 
 function sampleTree(): BranchTreeMetadata {
@@ -30,6 +38,10 @@ function sampleTree(): BranchTreeMetadata {
 
 function profile(rules: ArborOutputProfile["rules"]): ArborOutputProfile {
   return { id: "draft", name: "Draft", rules };
+}
+
+function outputState(rules: ArborOutputProfile["rules"]): ArborOutputState {
+  return { version: 1, activeProfileId: "draft", profiles: [profile(rules)] };
 }
 
 describe("output profile state", () => {
@@ -192,5 +204,81 @@ describe("output profile state", () => {
     expect(setActiveOutputProfile(createDefaultOutputState(), " full ", sampleTree())).toEqual(createDefaultOutputState());
     expect(setSubtreeState(sampleTree(), paddedProfile, "root", "include")).toEqual({ id: "full", name: "Full tree", rules: [] });
     expect(setBlockOnlyState(sampleTree(), paddedProfile, "root", "include")).toEqual({ id: "full", name: "Full tree", rules: [] });
+  });
+
+  it("preserves a moved subtree's effective state under its new parent", () => {
+    const before = sampleTree();
+    const afterMove = moveBlockToParentAtIndex(before, "other", null, 2);
+    const reconciled = reconcileProfilesAfterTreeChange(before, afterMove, outputState([
+      { blockId: "root", state: "exclude" },
+      { blockId: "chosen", state: "include" }
+    ]));
+
+    expect(resolveOutputStates(afterMove, reconciled.profiles[0]).get("other")?.included).toBe(false);
+    expect(reconciled.profiles[0].rules).toContainEqual({ blockId: "other", state: "exclude" });
+  });
+
+  it("preserves lifted children's effective states after deleting their parent", () => {
+    const before = sampleTree();
+    const { metadata: afterDelete } = deleteBlockAndLiftChildren(before, "root");
+    const reconciled = reconcileProfilesAfterTreeChange(before, afterDelete, outputState([
+      { blockId: "root", state: "exclude" },
+      { blockId: "chosen", state: "include" }
+    ]));
+    const resolutions = resolveOutputStates(afterDelete, reconciled.profiles[0]);
+
+    expect(resolutions.get("chosen")?.included).toBe(true);
+    expect(resolutions.get("nested")?.included).toBe(true);
+    expect(resolutions.get("other")?.included).toBe(false);
+    expect(reconciled.profiles[0].rules).toEqual([{ blockId: "other", state: "exclude" }]);
+  });
+
+  it("prunes rules for blocks removed by a tree mutation", () => {
+    const before = sampleTree();
+    const { metadata: afterDelete } = deleteSubtree(before, "chosen");
+    const reconciled = reconcileProfilesAfterTreeChange(before, afterDelete, outputState([
+      { blockId: "root", state: "exclude" },
+      { blockId: "chosen", state: "include" },
+      { blockId: "nested", state: "exclude" }
+    ]));
+
+    expect(reconciled.profiles[0].rules).toEqual([{ blockId: "root", state: "exclude" }]);
+  });
+
+  it("lets genuinely new children inherit their new parent's effective state", () => {
+    const before = sampleTree();
+    const { metadata: afterAdd, selectedBlockId } = addChild(before, "root");
+    const reconciled = reconcileProfilesAfterTreeChange(before, afterAdd, outputState([
+      { blockId: "root", state: "exclude" }
+    ]));
+
+    expect(resolveOutputStates(afterAdd, reconciled.profiles[0]).get(selectedBlockId)?.included).toBe(false);
+    expect(reconciled.profiles[0].rules.some((rule) => rule.blockId === selectedBlockId)).toBe(false);
+  });
+
+  it("copies source effective states onto duplicated subtree IDs", () => {
+    const before = sampleTree();
+    const duplicated = duplicateSubtree(before, "chosen");
+    const reconciled = reconcileProfilesAfterTreeChange(
+      before,
+      duplicated.metadata,
+      outputState([
+        { blockId: "root", state: "exclude" },
+        { blockId: "chosen", state: "include" }
+      ]),
+      duplicated.duplicateMap
+    );
+    const duplicateChildId = Object.entries(duplicated.duplicateMap ?? {})
+      .find(([, sourceId]) => sourceId === "nested")?.[0];
+    const resolutions = resolveOutputStates(duplicated.metadata, reconciled.profiles[0]);
+
+    expect(duplicated.duplicateMap?.[duplicated.selectedBlockId!]).toBe("chosen");
+    expect(resolutions.get(duplicated.selectedBlockId!)?.included).toBe(true);
+    expect(resolutions.get(duplicateChildId!)?.included).toBe(true);
+    expect(reconciled.profiles[0].rules).toContainEqual({
+      blockId: duplicated.selectedBlockId!,
+      state: "include"
+    });
+    expect(reconciled.profiles[0].rules.some((rule) => rule.blockId === duplicateChildId)).toBe(false);
   });
 });

@@ -3,6 +3,7 @@ import {
   BranchBlock,
   BranchBlockId,
   BranchColumnModel,
+  BranchTreeMutationResult,
   BranchTreeMetadata
 } from "../types";
 import { deepClone, extractSnippet, generateBlockId, nowIso, sortBlocks } from "../utils";
@@ -480,7 +481,7 @@ export function deleteSubtree(
 export function duplicateBlock(
   metadata: BranchTreeMetadata,
   blockId: BranchBlockId
-): { metadata: BranchTreeMetadata; selectedBlockId: BranchBlockId | null } {
+): BranchTreeMutationResult {
   const target = getBlock(metadata, blockId);
   if (!target) {
     return { metadata, selectedBlockId: ensureSelectedBlock(metadata, null) };
@@ -500,13 +501,17 @@ export function duplicateBlock(
   inserted.forEach((block, index) => {
     block.order = index;
   });
-  return { metadata: next, selectedBlockId: duplicate.id };
+  return {
+    metadata: next,
+    selectedBlockId: duplicate.id,
+    duplicateMap: { [duplicate.id]: original.id }
+  };
 }
 
 export function duplicateSubtree(
   metadata: BranchTreeMetadata,
   blockId: BranchBlockId
-): { metadata: BranchTreeMetadata; selectedBlockId: BranchBlockId | null } {
+): BranchTreeMutationResult {
   const target = getBlock(metadata, blockId);
   if (!target) {
     return { metadata, selectedBlockId: ensureSelectedBlock(metadata, null) };
@@ -548,5 +553,11 @@ export function duplicateSubtree(
     }
   }
 
-  return { metadata: next, selectedBlockId: rootDuplicate.id };
+  return {
+    metadata: next,
+    selectedBlockId: rootDuplicate.id,
+    duplicateMap: Object.fromEntries(
+      [...idMap].map(([sourceId, duplicateId]) => [duplicateId, sourceId])
+    )
+  };
 }

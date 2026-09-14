@@ -313,3 +313,42 @@ export function setBlockOnlyState(
 
   return normalizeProfile(withRules(changed, [...changed.rules, ...childOverrides]), metadata);
 }
+
+export function reconcileProfilesAfterTreeChange(
+  before: BranchTreeMetadata,
+  after: BranchTreeMetadata,
+  state: ArborOutputState,
+  duplicateMap: Readonly<Record<BranchBlockId, BranchBlockId>> = {}
+): ArborOutputState {
+  const beforeBlockIds = validTreeBlockIds(before);
+  const afterBlockIds = validTreeBlockIds(after);
+  const normalized = normalizeOutputState(state, before, beforeBlockIds);
+
+  const profiles = normalized.profiles.map((profile) => {
+    const priorResolutions = resolveOutputStates(before, profile);
+    const rules: ArborOutputRule[] = [];
+
+    const visit = (parentId: BranchBlockId | null, inheritedIncluded: boolean) => {
+      for (const block of getChildren(after, parentId)) {
+        const sourceId = priorResolutions.has(block.id) ? block.id : duplicateMap[block.id];
+        const desiredIncluded = sourceId === undefined
+          ? inheritedIncluded
+          : priorResolutions.get(sourceId)?.included ?? inheritedIncluded;
+
+        if (desiredIncluded !== inheritedIncluded) {
+          rules.push({
+            blockId: block.id,
+            state: desiredIncluded ? "include" : "exclude"
+          });
+        }
+
+        visit(block.id, desiredIncluded);
+      }
+    };
+
+    visit(null, true);
+    return withRules(profile, rules);
+  });
+
+  return normalizeOutputState({ ...normalized, profiles }, after, afterBlockIds);
+}

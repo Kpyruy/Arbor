@@ -1,15 +1,22 @@
 import { HISTORY_LIMIT } from "./constants";
-import { BranchHistoryEntry, BranchTreeMetadata, BranchBlockId } from "./types";
+import { ArborOutputState, BranchHistoryEntry, BranchTreeMetadata, BranchBlockId } from "./types";
 import { cloneMetadata } from "./model/tree";
+import { deepClone } from "./utils";
 
 export class BranchHistory {
   private undoStack: BranchHistoryEntry[] = [];
   private redoStack: BranchHistoryEntry[] = [];
 
-  push(label: string, metadata: BranchTreeMetadata, selectedBlockId: BranchBlockId | null): void {
+  push(
+    label: string,
+    metadata: BranchTreeMetadata,
+    outputState: ArborOutputState,
+    selectedBlockId: BranchBlockId | null
+  ): void {
     this.undoStack.push({
       label,
       metadata: cloneMetadata(metadata),
+      outputState: deepClone(outputState),
       selectedBlockId
     });
 
@@ -29,6 +36,7 @@ export class BranchHistory {
     this.redoStack.push({
       label: current.label,
       metadata: cloneMetadata(current.metadata),
+      outputState: deepClone(current.outputState),
       selectedBlockId: current.selectedBlockId
     });
     return previous;
@@ -43,6 +51,7 @@ export class BranchHistory {
     this.undoStack.push({
       label: current.label,
       metadata: cloneMetadata(current.metadata),
+      outputState: deepClone(current.outputState),
       selectedBlockId: current.selectedBlockId
     });
     return next;

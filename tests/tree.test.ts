@@ -4,6 +4,7 @@ import {
   buildLinearOrder,
   cloneMetadata,
   deleteBlockAndLiftChildren,
+  duplicateBlock,
   duplicateSubtree,
   ensureSelectedBlock,
   getPreferredChildBlock,
@@ -70,12 +71,22 @@ describe("tree operations", () => {
   });
 
   it("duplicates an entire subtree and preserves descendant structure", () => {
-    const { metadata, selectedBlockId } = duplicateSubtree(sampleTree(), "a1");
+    const { metadata, selectedBlockId, duplicateMap } = duplicateSubtree(sampleTree(), "a1");
     const duplicate = metadata.blocks.find((block) => block.id === selectedBlockId)!;
     const duplicateChildren = metadata.blocks.filter((block) => block.parentId === duplicate.id);
     expect(duplicate.parentId).toBe("a");
     expect(duplicateChildren).toHaveLength(1);
     expect(duplicateChildren[0].content).toBe("A.1.1");
+    expect(duplicateMap).toEqual({
+      [duplicate.id]: "a1",
+      [duplicateChildren[0].id]: "a11"
+    });
+  });
+
+  it("maps a duplicated block's new ID back to its source ID", () => {
+    const { selectedBlockId, duplicateMap } = duplicateBlock(sampleTree(), "a2");
+
+    expect(duplicateMap).toEqual({ [selectedBlockId!]: "a2" });
   });
 
   it("clones metadata before mutation helpers rely on snapshots", () => {

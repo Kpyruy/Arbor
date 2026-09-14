@@ -55,14 +55,17 @@ import {
   ImportedBranchDocument,
   LinearizedBranchDocument,
   ArborPresentationMode,
+  ArborOutputState,
+  BranchTreeMutationResult,
   ArborSettings
 } from "../types";
+import { createDefaultOutputState, reconcileProfilesAfterTreeChange } from "../outputProfiles";
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
 import { buildCleanExportDocument, CleanExportMode } from "../storage/cleanExport";
 import { loadImportedBranchDocument } from "../storage/reconcile";
 import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
-import { extractPathLabel, extractSnippet, hashString } from "../utils";
+import { deepClone, extractPathLabel, extractSnippet, hashString } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
 import { getEnteringBreadcrumbIds } from "../breadcrumbAnimation";
 import { resolveBranchCardInteraction } from "../cardInteraction";
@@ -107,6 +110,9 @@ interface EditingSession {
 interface LoadedFileState {
   frontmatter: string;
   metadata: BranchTreeMetadata;
+  outputState: ArborOutputState;
+  outputRaw: string;
+  outputError: string | null;
   selectedBlockId: BranchBlockId | null;
   staleMetadata: BranchTreeMetadata | null;
   origin: ImportedBranchDocument["origin"];
@@ -693,6 +699,9 @@ export class ArborView extends FileView {
     return {
       frontmatter: parsed.frontmatter,
       metadata: loaded.metadata,
+      outputState: loaded.outputState,
+      outputRaw: loaded.outputRaw,
+      outputError: loaded.outputError,
       selectedBlockId,
       staleMetadata: loaded.staleMetadata,
       origin: loaded.origin,
@@ -1441,8 +1450,19 @@ export class ArborView extends FileView {
     }
 
     const restored = cloneMetadata(parsed.metadata ?? this.state.staleMetadata ?? createEmptyTree());
-    this.history.push("Rebuild tree from metadata", this.state.metadata, this.state.selectedBlockId);
+    const beforeMetadata = cloneMetadata(this.state.metadata);
+    this.history.push(
+      "Rebuild tree from metadata",
+      this.state.metadata,
+      this.state.outputState,
+      this.state.selectedBlockId
+    );
     this.state.metadata = restored;
+    this.state.outputState = reconcileProfilesAfterTreeChange(
+      beforeMetadata,
+      restored,
+      this.state.outputState
+    );
     this.state.selectedBlockId = ensureSelectedBlock(restored, this.state.selectedBlockId);
     this.state.linearized = linearizeTree(restored);
     this.state.origin = "metadata";
@@ -1467,6 +1487,7 @@ export class ArborView extends FileView {
     }
 
     this.state.metadata = cloneMetadata(previous.metadata);
+    this.state.outputState = previous.outputState;
     this.state.selectedBlockId = ensureSelectedBlock(previous.metadata, previous.selectedBlockId);
     this.state.linearized = linearizeTree(this.state.metadata);
     this.editingSession = null;
@@ -1489,6 +1510,7 @@ export class ArborView extends FileView {
     }
 
     this.state.metadata = cloneMetadata(next.metadata);
+    this.state.outputState = next.outputState;
     this.state.selectedBlockId = ensureSelectedBlock(next.metadata, next.selectedBlockId);
     this.state.linearized = linearizeTree(this.state.metadata);
     this.editingSession = null;
@@ -4386,7 +4408,7 @@ export class ArborView extends FileView {
 
   private async applyMutation(
     label: string,
-    mutate: (metadata: BranchTreeMetadata) => { metadata: BranchTreeMetadata; selectedBlockId: BranchBlockId | null },
+    mutate: (metadata: BranchTreeMetadata) => BranchTreeMutationResult,
     autofocusSelection = false
   ): Promise<void> {
     if (!this.state) {
@@ -4395,9 +4417,16 @@ export class ArborView extends FileView {
 
     await this.commitEditIfNeeded();
 
-    this.history.push(label, this.state.metadata, this.state.selectedBlockId);
-    const result = mutate(cloneMetadata(this.state.metadata));
+    const beforeMetadata = cloneMetadata(this.state.metadata);
+    this.history.push(label, beforeMetadata, this.state.outputState, this.state.selectedBlockId);
+    const result = mutate(cloneMetadata(beforeMetadata));
     this.state.metadata = normalizeMetadata(result.metadata);
+    this.state.outputState = reconcileProfilesAfterTreeChange(
+      beforeMetadata,
+      this.state.metadata,
+      this.state.outputState,
+      result.duplicateMap
+    );
     this.state.selectedBlockId = ensureSelectedBlock(this.state.metadata, result.selectedBlockId);
     this.state.linearized = linearizeTree(this.state.metadata);
     this.state.origin = "metadata";
@@ -4429,6 +4458,7 @@ export class ArborView extends FileView {
     return {
       label,
       metadata: cloneMetadata(this.state?.metadata ?? createEmptyTree()),
+      outputState: deepClone(this.state?.outputState ?? createDefaultOutputState()),
       selectedBlockId: this.state?.selectedBlockId ?? null
     };
   }
@@ -4476,7 +4506,7 @@ export class ArborView extends FileView {
       this.preserveOverviewViewportPosition();
     }
 
-    this.history.push("Edit block", this.state.metadata, this.state.selectedBlockId);
+    this.history.push("Edit block", this.state.metadata, this.state.outputState, this.state.selectedBlockId);
     this.state.metadata = normalizeMetadata(updateBlockContent(this.state.metadata, blockId, value));
     this.state.selectedBlockId = blockId;
     this.state.linearized = linearizeTree(this.state.metadata);
@@ -4582,7 +4612,9 @@ export class ArborView extends FileView {
     const document = buildBranchDocument(
       this.state.frontmatter,
       this.state.linearized.body,
-      metadata
+      metadata,
+      this.state.outputState,
+      this.state.outputError ? this.state.outputRaw : undefined
     );
 
     this.isPersisting = true;
