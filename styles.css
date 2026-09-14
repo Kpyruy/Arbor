@@ -489,10 +489,46 @@
   place-items: center;
 }
 
+.arbor-output-profile-button {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  right: 56px;
+  min-width: 44px;
+  max-width: 120px;
+  height: 32px;
+  overflow: hidden;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 42%, var(--background-modifier-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background-secondary) 96%, var(--background-primary));
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.77rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arbor-output-profile-button:hover,
+.arbor-output-profile-button:focus-visible {
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+
+.arbor-output-profile-button:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--interactive-accent) 58%, transparent);
+  outline-offset: 2px;
+}
+
 .arbor-view.is-rtl .arbor-overview-exit,
 .arbor-view.is-rtl .arbor-overview-button {
   right: auto;
   left: 12px;
+}
+
+.arbor-view.is-rtl .arbor-output-profile-button {
+  right: auto;
+  left: 56px;
 }
 
 .arbor-overview-exit svg,
@@ -501,6 +537,134 @@
   height: 16px;
   color: currentColor;
   stroke: currentColor;
+}
+
+.arbor-output-profiles-modal {
+  width: min(640px, calc(100vw - 48px));
+  max-height: min(720px, calc(100vh - 48px));
+}
+
+.arbor-output-profiles-modal .modal-content {
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.arbor-output-profiles-heading,
+.arbor-output-profiles-warning,
+.arbor-output-profile-row,
+.arbor-output-profile-name,
+.arbor-output-profile-name-actions,
+.arbor-output-profiles-confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.arbor-output-profiles-heading {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.arbor-output-profiles-heading p,
+.arbor-output-profiles-warning p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.arbor-output-profiles-warning {
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--background-modifier-error);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--background-modifier-error) 10%, var(--background-primary));
+}
+
+.arbor-output-profiles-warning > div,
+.arbor-output-profile-details {
+  min-width: 0;
+}
+
+.arbor-output-profiles-list {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.arbor-output-profile-row {
+  min-width: 0;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-secondary);
+}
+
+.arbor-output-profile-row.is-active {
+  border-color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 10%, var(--background-secondary));
+}
+
+.arbor-output-profile-details {
+  display: grid;
+  gap: 4px;
+}
+
+.arbor-output-profile-name strong {
+  overflow-wrap: anywhere;
+}
+
+.arbor-output-profile-active {
+  color: var(--interactive-accent);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+}
+
+.arbor-output-profile-counts {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.arbor-output-profile-name-modal,
+.arbor-output-profiles-confirm-modal {
+  width: min(420px, calc(100vw - 40px));
+}
+
+.arbor-output-profile-name-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.arbor-output-profile-name-field input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.arbor-output-profile-name-error {
+  min-height: 1.4em;
+  margin-top: 6px;
+  color: var(--text-error);
+  visibility: hidden;
+}
+
+.arbor-output-profile-name-error.is-visible {
+  visibility: visible;
+}
+
+.arbor-output-profile-name-actions,
+.arbor-output-profiles-confirm-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.arbor-output-profiles-confirm-modal p {
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
 .arbor-theme-studio-modal {
@@ -2168,6 +2332,7 @@
 }
 
 .arbor-view.has-touch-controls .arbor-zoom-indicator,
+.arbor-view.has-touch-controls .arbor-output-profile-button,
 .arbor-view.has-touch-controls .arbor-markdown-button,
 .arbor-view.has-touch-controls .arbor-theme-button,
 .arbor-view.has-touch-controls .arbor-view-menu-button,
@@ -2196,12 +2361,19 @@
 .arbor-view.has-touch-controls .arbor-markdown-button { right: 48px; }
 .arbor-view.has-touch-controls .arbor-theme-button { right: 96px; }
 .arbor-view.has-touch-controls .arbor-zoom-indicator { right: 144px; }
+.arbor-view.has-touch-controls .arbor-output-profile-button {
+  right: 192px;
+  min-width: 44px;
+  max-width: calc(100% - 248px);
+  padding: 0 10px;
+}
 .arbor-view.has-touch-controls .arbor-overview-button,
 .arbor-view.has-touch-controls .arbor-overview-exit { left: 0; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-view-menu-button { left: 0; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-markdown-button { left: 48px; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-theme-button { left: 96px; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-zoom-indicator { left: 144px; right: auto; }
+.arbor-view.has-touch-controls.is-rtl .arbor-output-profile-button { left: 192px; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-overview-button,
 .arbor-view.has-touch-controls.is-rtl .arbor-overview-exit { right: 0; left: auto; }
 
@@ -2285,7 +2457,10 @@
   .modal.arbor-theme-studio-editor-modal,
   .modal.arbor-theme-studio-confirm-modal,
   .modal.arbor-confirm-modal,
-  .modal.arbor-export-modal {
+  .modal.arbor-export-modal,
+  .modal.arbor-output-profiles-modal,
+  .modal.arbor-output-profile-name-modal,
+  .modal.arbor-output-profiles-confirm-modal {
     width: calc(100% - 24px);
     max-width: calc(100% - 24px);
     max-height: calc(100dvh - 32px);
@@ -2294,14 +2469,25 @@
   }
   .arbor-theme-studio-modal .modal-content,
   .arbor-theme-studio-editor-modal .modal-content,
-  .arbor-export-modal .modal-content { min-height: 0; overflow-y: auto; }
+  .arbor-export-modal .modal-content,
+  .arbor-output-profiles-modal .modal-content { min-height: 0; overflow-x: hidden; overflow-y: auto; }
   .arbor-theme-studio-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .arbor-theme-studio-footer,
   .arbor-theme-studio-editor-actions,
+  .arbor-output-profiles-heading,
+  .arbor-output-profiles-warning,
+  .arbor-output-profile-row,
+  .arbor-output-profile-name-actions,
+  .arbor-output-profiles-confirm-actions,
   .arbor-confirm-actions,
   .arbor-theme-confirm-actions { flex-wrap: wrap; gap: 8px; }
   .arbor-theme-studio-footer button,
   .arbor-theme-studio-editor-actions button,
+  .arbor-output-profiles-heading button,
+  .arbor-output-profiles-warning button,
+  .arbor-output-profile-row button,
+  .arbor-output-profile-name-actions button,
+  .arbor-output-profiles-confirm-actions button,
   .arbor-confirm-actions button,
   .arbor-theme-confirm-actions button { min-height: 44px; flex: 1 1 auto; white-space: normal; }
   .arbor-theme-studio-footer {
@@ -2320,6 +2506,13 @@
   .arbor-clean-export-choice { min-height: 44px; }
   .arbor-settings input[type="text"],
   .arbor-theme-studio-editor-modal input[type="text"] { font-size: 16px; max-width: 100%; }
+  .arbor-output-profile-name-modal input[type="text"] { font-size: 16px; max-width: 100%; }
+  .arbor-output-profiles-heading,
+  .arbor-output-profiles-warning,
+  .arbor-output-profile-row { align-items: stretch; flex-direction: column; }
+  .arbor-output-profiles-heading button,
+  .arbor-output-profiles-warning button,
+  .arbor-output-profile-row button { width: 100%; }
   .arbor-theme-studio-editor-modal .modal-content,
   .arbor-theme-studio-confirm-modal .modal-content { padding: 4px; }
   .arbor-theme-studio-editor-preview { grid-template-columns: minmax(0, 1fr); gap: 10px; }

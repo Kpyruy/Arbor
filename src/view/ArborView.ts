@@ -59,7 +59,12 @@ import {
   BranchTreeMutationResult,
   ArborSettings
 } from "../types";
-import { createDefaultOutputState, reconcileProfilesAfterTreeChange } from "../outputProfiles";
+import {
+  createDefaultOutputState,
+  FULL_OUTPUT_PROFILE_ID,
+  reconcileProfilesAfterTreeChange,
+  setActiveOutputProfile
+} from "../outputProfiles";
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
 import { buildCleanExportDocument, CleanExportMode } from "../storage/cleanExport";
 import { loadImportedBranchDocument } from "../storage/reconcile";
@@ -96,6 +101,11 @@ import {
 } from "../cardViewport";
 import { toBlob } from "html-to-image";
 import { clampZoomLevel, compactColumns, pinchViewport, resolvePinchZoom, shouldSaveOnEnter, useCompactLayout, TouchPoint } from "../mobile";
+import {
+  createOutputProfileButton,
+  getOutputProfileButtonPresentation,
+  OutputProfilesModal
+} from "./OutputProfilesModal";
 
 type EditingOrigin = "card" | "preview" | "overview";
 
@@ -407,6 +417,7 @@ export class ArborView extends FileView {
   private breadcrumbsEl: HTMLElement | null = null;
   private breadcrumbExitLayerEl: HTMLElement | null = null;
   private zoomIndicatorEl: HTMLButtonElement | null = null;
+  private outputProfileButtonEl: HTMLButtonElement | null = null;
   private overviewButtonEl: HTMLButtonElement | null = null;
   private markdownButtonEl: HTMLButtonElement | null = null;
   private themeButtonEl: HTMLButtonElement | null = null;
@@ -1546,6 +1557,7 @@ export class ArborView extends FileView {
     }
 
     this.ensureShell();
+    this.syncOutputProfileButton();
     this.syncTouchDock();
     this.syncViewportEdgeFades();
     this.syncBreadcrumbs();
@@ -1586,9 +1598,15 @@ export class ArborView extends FileView {
       this.bodyEl &&
       this.breadcrumbsEl &&
       this.breadcrumbExitLayerEl &&
+      this.outputProfileButtonEl &&
       this.bannerEl &&
       this.loadingOverlayEl
     ) {
+      return;
+    }
+
+    const state = this.state;
+    if (!state) {
       return;
     }
 
@@ -1636,6 +1654,9 @@ export class ArborView extends FileView {
     this.bannerEl = this.frameEl.createDiv({ cls: "arbor-banner" });
     this.loadingOverlayEl = this.frameEl.createDiv({ cls: "arbor-loading-overlay" });
     this.bodyEl = this.frameEl.createDiv({ cls: "arbor-body" });
+    this.outputProfileButtonEl = createOutputProfileButton(this.bodyEl, state.outputState);
+    this.outputProfileButtonEl.addEventListener("click", (event) => this.openOutputProfileMenu(event));
+    this.outputProfileButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
     this.overviewButtonEl = this.bodyEl.createEl("button", {
       cls: "arbor-overview-button",
       attr: { type: "button", "aria-label": "Open tree overview" }
@@ -1679,6 +1700,7 @@ export class ArborView extends FileView {
     this.contentEl.toggleClass("has-touch-controls", this.usesTouchControls);
     const overviewExit = this.frameEl.querySelector<HTMLElement>(".arbor-overview-exit");
     if (this.overviewButtonEl) (this.usesTouchControls ? this.frameEl : this.bodyEl)?.appendChild(this.overviewButtonEl);
+    if (this.outputProfileButtonEl) (this.usesTouchControls ? this.frameEl : this.bodyEl)?.appendChild(this.outputProfileButtonEl);
     if (overviewExit) {
       (this.usesTouchControls ? this.frameEl : this.overviewStageEl)?.appendChild(overviewExit);
       overviewExit.toggleClass("is-inactive-mode", this.presentationMode !== "overview");
@@ -1741,6 +1763,7 @@ export class ArborView extends FileView {
     this.breadcrumbsEl = null;
     this.breadcrumbExitLayerEl = null;
     this.zoomIndicatorEl = null;
+    this.outputProfileButtonEl = null;
     this.markdownButtonEl = null;
     this.themeButtonEl = null;
     this.overviewButtonEl = null;
@@ -3567,6 +3590,122 @@ export class ArborView extends FileView {
     }
 
     menu.showAtPosition({ x: 220, y: 120 }, this.contentEl.ownerDocument);
+  }
+
+  private syncOutputProfileButton(): void {
+    if (!this.outputProfileButtonEl || !this.state) {
+      return;
+    }
+    const presentation = getOutputProfileButtonPresentation(this.state.outputState);
+    this.outputProfileButtonEl.setText(presentation.text);
+    this.outputProfileButtonEl.setAttr("aria-label", presentation.ariaLabel);
+  }
+
+  private openOutputProfileMenu(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!this.state) {
+      return;
+    }
+
+    const menu = new Menu();
+    const profiles = [
+      { id: FULL_OUTPUT_PROFILE_ID, name: "Full tree" },
+      ...this.state.outputState.profiles.map((profile) => ({ id: profile.id, name: profile.name }))
+    ];
+    profiles.forEach((profile) => {
+      menu.addItem((item) =>
+        item
+          .setTitle(profile.name)
+          .setIcon(profile.id === this.state?.outputState.activeProfileId ? "check" : "circle")
+          .setDisabled(Boolean(this.state?.outputError))
+          .onClick(() => void this.activateOutputProfile(profile.id))
+      );
+    });
+    menu.addSeparator();
+    menu.addItem((item) =>
+      item
+        .setTitle("Manage output profiles…")
+        .setIcon("list-tree")
+        .onClick(() => this.openOutputProfilesManager())
+    );
+
+    const anchor = this.outputProfileButtonEl;
+    if (anchor) {
+      const rect = anchor.getBoundingClientRect();
+      menu.showAtPosition({ x: rect.left, y: rect.bottom + 6 }, anchor.ownerDocument);
+    }
+  }
+
+  private openOutputProfilesManager(): void {
+    if (!this.state) {
+      return;
+    }
+    new OutputProfilesModal(this.app, {
+      initialState: deepClone(this.state.outputState),
+      metadata: cloneMetadata(this.state.metadata),
+      outputError: this.state.outputError,
+      activate: (state) => this.applyActiveOutputProfile(state),
+      mutate: (label, state) => this.applyOutputProfileMutation(label, state),
+      reset: () => this.resetInvalidOutputProfiles(),
+      closed: () => undefined
+    }).open();
+  }
+
+  private async activateOutputProfile(profileId: string): Promise<ArborOutputState> {
+    if (!this.state) {
+      return createDefaultOutputState();
+    }
+    const next = setActiveOutputProfile(this.state.outputState, profileId, this.state.metadata);
+    return this.applyActiveOutputProfile(next);
+  }
+
+  private async applyActiveOutputProfile(next: ArborOutputState): Promise<ArborOutputState> {
+    if (!this.state || this.state.outputError) {
+      return deepClone(this.state?.outputState ?? createDefaultOutputState());
+    }
+    await this.commitEditIfNeeded();
+    if (!this.state) {
+      return createDefaultOutputState();
+    }
+    this.state.outputState = deepClone(next);
+    await this.persistState("Switch output profile");
+    this.render();
+    return deepClone(this.state.outputState);
+  }
+
+  private async applyOutputProfileMutation(
+    label: string,
+    next: ArborOutputState
+  ): Promise<ArborOutputState> {
+    if (!this.state || this.state.outputError) {
+      return deepClone(this.state?.outputState ?? createDefaultOutputState());
+    }
+    await this.commitEditIfNeeded();
+    if (!this.state) {
+      return createDefaultOutputState();
+    }
+    this.history.push(label, this.state.metadata, this.state.outputState, this.state.selectedBlockId);
+    this.state.outputState = deepClone(next);
+    await this.persistState(label);
+    this.render();
+    return deepClone(this.state.outputState);
+  }
+
+  private async resetInvalidOutputProfiles(): Promise<ArborOutputState> {
+    if (!this.state || !this.state.outputError) {
+      return deepClone(this.state?.outputState ?? createDefaultOutputState());
+    }
+    await this.commitEditIfNeeded();
+    if (!this.state) {
+      return createDefaultOutputState();
+    }
+    this.state.outputState = createDefaultOutputState();
+    this.state.outputRaw = "";
+    this.state.outputError = null;
+    await this.persistState("Reset output profiles");
+    this.render();
+    return deepClone(this.state.outputState);
   }
 
   private addViewToggleMenuItem(menu: Menu, title: string, enabled: boolean, callback: () => void | Promise<void>): void {
