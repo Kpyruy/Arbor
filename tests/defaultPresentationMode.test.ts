@@ -67,15 +67,29 @@ describe("default presentation mode", () => {
     expect(reservedBreadcrumbStyles).toContain("pointer-events: none;");
   });
 
-  it("keeps profile and mode controls above the overview interaction surface", () => {
-    const styles = readProjectFile("styles.css");
-    const modeControls = styles.slice(
-      styles.indexOf(".arbor-overview-exit,"),
-      styles.indexOf(".arbor-output-profiles-modal")
+  it("keeps one persistent profile and mode control layer outside presentation stages", () => {
+    const source = readProjectFile("src/view/ArborView.ts");
+    const touchDock = source.slice(
+      source.indexOf("  private syncTouchDock(): void"),
+      source.indexOf("  private teardownShell(): void")
+    );
+    const controlPlacement = touchDock.slice(
+      touchDock.indexOf("const controlsHost"),
+      touchDock.indexOf('if (this.presentationMode === "output")')
     );
 
-    expect(modeControls).toContain("z-index: 4;");
-    expect(modeControls).toContain("pointer-events: auto;");
+    expect(source).toContain('this.modeControlsEl = this.bodyEl.createDiv({ cls: "arbor-mode-controls" });');
+    expect(source).toContain("this.outputProfileButtonEl = createOutputProfileButton(this.modeControlsEl, state.outputState);");
+    expect(source).toContain('this.overviewButtonEl = this.modeControlsEl.createEl("button"');
+    expect(source).not.toContain("appendChild(this.overviewButtonEl)");
+    expect(source).not.toContain("appendChild(this.outputProfileButtonEl)");
+    expect(source).not.toContain('cls: "arbor-overview-exit"');
+    expect(touchDock).toContain("const controlsHost = this.usesTouchControls ? this.frameEl : this.bodyEl;");
+    expect(touchDock).toContain("if (this.modeControlsEl && this.modeControlsEl.parentElement !== controlsHost)");
+    expect(controlPlacement).not.toContain("this.presentationMode");
+    expect(source).toContain("private syncOverviewModeButton(): void");
+    expect(source).toContain('this.overviewButtonEl.setAttr("aria-label", isOverview ? "Return to branch editor" : "Open tree overview");');
+    expect(source).toContain('setIcon(this.overviewButtonEl, isOverview ? "git-fork" : "map");');
   });
 
   it("places Output preview immediately above clean export in the view menu", () => {
@@ -119,7 +133,7 @@ describe("default presentation mode", () => {
   it("places the overview switch in the canvas and relies on one accessible tooltip", () => {
     const source = readProjectFile("src/view/ArborView.ts");
 
-    expect(source).toContain('this.overviewButtonEl = this.bodyEl.createEl("button"');
+    expect(source).toContain('this.overviewButtonEl = this.modeControlsEl.createEl("button"');
     expect(source).toContain('attr: { type: "button", "aria-label": "Open tree overview" }');
   });
 
@@ -137,30 +151,32 @@ describe("default presentation mode", () => {
       styles.indexOf(".arbor-zoom-indicator,"),
       styles.indexOf(".arbor-breadcrumb-connector::before")
     );
-    const overviewControls = styles.slice(
-      styles.indexOf(".arbor-overview-exit,"),
-      styles.indexOf(".arbor-overview-exit svg")
+    const modeControls = styles.slice(
+      styles.indexOf(".arbor-mode-controls {"),
+      styles.indexOf(".arbor-overview-button,")
     );
-    const baseOverviewControls = overviewControls.slice(0, overviewControls.indexOf(".arbor-view.is-rtl"));
     const rtlTopControls = styles.slice(
       styles.indexOf(".arbor-view.is-rtl .arbor-zoom-indicator,"),
       styles.indexOf(".arbor-markdown-button svg,")
     );
-    const rtlOverviewControls = styles.slice(
-      styles.indexOf(".arbor-view.is-rtl .arbor-overview-exit,"),
-      styles.indexOf(".arbor-overview-exit svg,")
+    const rtlModeControls = styles.slice(
+      styles.indexOf(".arbor-view.is-rtl .arbor-mode-controls"),
+      styles.indexOf(".arbor-overview-button svg")
     );
 
     expect(topControls).toContain("right: 4px;");
     expect(topControls).toContain("right: 124px;");
     expect(topControls).toContain("right: 84px;");
-    expect(overviewControls).toContain("right: 12px;");
-    expect(baseOverviewControls).not.toContain("left: 12px;");
+    expect(modeControls).toContain("top: 12px;");
+    expect(modeControls).toContain("right: 12px;");
+    expect(modeControls).toContain("z-index: 6;");
+    expect(modeControls).toContain("flex-direction: row;");
     expect(styles).toContain(".arbor-view.is-rtl .arbor-zoom-indicator");
     expect(rtlTopControls).toContain("left: 124px;");
     expect(rtlTopControls).toContain("left: 84px;");
-    expect(styles).toContain(".arbor-view.is-rtl .arbor-overview-button");
-    expect(rtlOverviewControls).toContain("left: 12px;");
+    expect(rtlModeControls).toContain("left: 12px;");
+    expect(rtlModeControls).toContain("flex-direction: row-reverse;");
+    expect(styles).not.toContain(".arbor-overview-exit");
   });
 
   it("opens Theme studio from a dedicated toolbar button", () => {

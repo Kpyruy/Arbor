@@ -526,6 +526,7 @@ export class ArborView extends FileView {
   private breadcrumbsEl: HTMLElement | null = null;
   private breadcrumbExitLayerEl: HTMLElement | null = null;
   private zoomIndicatorEl: HTMLButtonElement | null = null;
+  private modeControlsEl: HTMLElement | null = null;
   private outputProfileButtonEl: HTMLButtonElement | null = null;
   private overviewButtonEl: HTMLButtonElement | null = null;
   private markdownButtonEl: HTMLButtonElement | null = null;
@@ -1681,6 +1682,7 @@ export class ArborView extends FileView {
 
     this.ensureShell();
     this.syncOutputProfileButton();
+    this.syncOverviewModeButton();
     this.syncTouchDock();
     this.syncViewportEdgeFades();
     this.syncBreadcrumbs();
@@ -1689,7 +1691,6 @@ export class ArborView extends FileView {
     this.syncBanner();
     this.syncLoadingOverlay();
     if (this.presentationMode === "output") {
-      this.overviewButtonEl?.setCssStyles({ display: "" });
       this.overviewStageEl?.setCssStyles({ display: "none" });
       this.columnsStageEl?.setCssStyles({ display: "none" });
       this.previewPaneEl?.setCssStyles({ display: "none" });
@@ -1700,14 +1701,12 @@ export class ArborView extends FileView {
 
     this.outputStageEl?.setCssStyles({ display: "none" });
     if (this.presentationMode === "overview") {
-      this.overviewButtonEl?.setCssStyles({ display: "none" });
       this.columnsStageEl?.setCssStyles({ display: "none" });
       this.previewPaneEl?.setCssStyles({ display: "none" });
       await this.syncTreeOverview();
       return;
     }
 
-    this.overviewButtonEl?.setCssStyles({ display: "" });
     this.overviewStageEl?.setCssStyles({ display: "none" });
     this.columnsStageEl?.setCssStyles({ display: "" });
     this.previewPaneEl?.setCssStyles({ display: "" });
@@ -1732,6 +1731,7 @@ export class ArborView extends FileView {
       this.bodyEl &&
       this.breadcrumbsEl &&
       this.breadcrumbExitLayerEl &&
+      this.modeControlsEl &&
       this.outputProfileButtonEl &&
       this.bannerEl &&
       this.loadingOverlayEl &&
@@ -1789,15 +1789,22 @@ export class ArborView extends FileView {
     this.bannerEl = this.frameEl.createDiv({ cls: "arbor-banner" });
     this.loadingOverlayEl = this.frameEl.createDiv({ cls: "arbor-loading-overlay" });
     this.bodyEl = this.frameEl.createDiv({ cls: "arbor-body" });
-    this.outputProfileButtonEl = createOutputProfileButton(this.bodyEl, state.outputState);
+    this.modeControlsEl = this.bodyEl.createDiv({ cls: "arbor-mode-controls" });
+    this.outputProfileButtonEl = createOutputProfileButton(this.modeControlsEl, state.outputState);
     this.outputProfileButtonEl.addEventListener("click", (event) => this.openOutputProfileMenu(event));
     this.outputProfileButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
-    this.overviewButtonEl = this.bodyEl.createEl("button", {
+    this.overviewButtonEl = this.modeControlsEl.createEl("button", {
       cls: "arbor-overview-button",
       attr: { type: "button", "aria-label": "Open tree overview" }
     });
     setIcon(this.overviewButtonEl, "map");
-    this.overviewButtonEl.addEventListener("click", () => this.openTreeOverview());
+    this.overviewButtonEl.addEventListener("click", () => {
+      if (this.presentationMode === "overview") {
+        this.closeTreeOverview();
+        return;
+      }
+      this.openTreeOverview();
+    });
     this.overviewButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
     this.columnsStageEl = this.bodyEl.createDiv({ cls: "arbor-columns-stage" });
     this.columnsViewportEl = this.columnsStageEl.createDiv({ cls: "arbor-columns-viewport" });
@@ -1835,12 +1842,9 @@ export class ArborView extends FileView {
     if (!this.frameEl || !this.state) return;
     this.contentEl.toggleClass("is-compact", this.compactLayout);
     this.contentEl.toggleClass("has-touch-controls", this.usesTouchControls);
-    const overviewExit = this.frameEl.querySelector<HTMLElement>(".arbor-overview-exit");
-    if (this.overviewButtonEl) (this.usesTouchControls ? this.frameEl : this.bodyEl)?.appendChild(this.overviewButtonEl);
-    if (this.outputProfileButtonEl) (this.usesTouchControls ? this.frameEl : this.bodyEl)?.appendChild(this.outputProfileButtonEl);
-    if (overviewExit) {
-      (this.usesTouchControls ? this.frameEl : this.overviewStageEl)?.appendChild(overviewExit);
-      overviewExit.toggleClass("is-inactive-mode", this.presentationMode !== "overview");
+    const controlsHost = this.usesTouchControls ? this.frameEl : this.bodyEl;
+    if (this.modeControlsEl && this.modeControlsEl.parentElement !== controlsHost) {
+      controlsHost?.appendChild(this.modeControlsEl);
     }
     if (this.presentationMode === "output") {
       this.touchDockEl?.remove();
@@ -1905,6 +1909,7 @@ export class ArborView extends FileView {
     this.breadcrumbsEl = null;
     this.breadcrumbExitLayerEl = null;
     this.zoomIndicatorEl = null;
+    this.modeControlsEl = null;
     this.outputProfileButtonEl = null;
     this.markdownButtonEl = null;
     this.themeButtonEl = null;
@@ -2676,14 +2681,6 @@ export class ArborView extends FileView {
 
     if (!this.overviewStageEl || !this.overviewViewportEl || !this.overviewSceneEl || !this.overviewSurfaceEl) {
       this.overviewStageEl = this.bodyEl.createDiv({ cls: "arbor-overview-stage" });
-      const exitButton = this.overviewStageEl.createEl("button", {
-        cls: "arbor-overview-exit",
-        attr: { type: "button", "aria-label": "Return to branch editor" }
-      });
-      setIcon(exitButton, "git-fork");
-      exitButton.addEventListener("click", () => this.closeTreeOverview());
-      if (this.usesTouchControls) this.frameEl?.appendChild(exitButton);
-
       this.overviewViewportEl = this.overviewStageEl.createDiv({ cls: "arbor-overview-viewport" });
       this.overviewViewportEl.tabIndex = 0;
       this.overviewSceneEl = this.overviewViewportEl.createDiv({ cls: "arbor-overview-scene" });
@@ -3832,6 +3829,15 @@ export class ArborView extends FileView {
     const presentation = getOutputProfileButtonPresentation(this.state.outputState);
     this.outputProfileButtonEl.setText(presentation.text);
     this.outputProfileButtonEl.setAttr("aria-label", presentation.ariaLabel);
+  }
+
+  private syncOverviewModeButton(): void {
+    if (!this.overviewButtonEl) {
+      return;
+    }
+    const isOverview = this.presentationMode === "overview";
+    this.overviewButtonEl.setAttr("aria-label", isOverview ? "Return to branch editor" : "Open tree overview");
+    setIcon(this.overviewButtonEl, isOverview ? "git-fork" : "map");
   }
 
   private openOutputProfileMenu(event: MouseEvent): void {

@@ -473,7 +473,22 @@
   min-height: 0;
 }
 
-.arbor-overview-exit,
+.arbor-mode-controls {
+  position: absolute;
+  z-index: 6;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.arbor-mode-controls > button {
+  pointer-events: auto;
+}
+
 .arbor-overview-button,
 .arbor-overview-editor-actions button {
   border: 1px solid color-mix(in srgb, var(--background-modifier-border) 76%, transparent);
@@ -483,13 +498,9 @@
   cursor: pointer;
 }
 
-.arbor-overview-exit,
 .arbor-overview-button {
-  position: absolute;
-  z-index: 4;
-  top: 12px;
-  right: 12px;
   display: grid;
+  flex: 0 0 32px;
   width: 32px;
   height: 32px;
   padding: 0;
@@ -498,10 +509,7 @@
 }
 
 .arbor-output-profile-button {
-  position: absolute;
-  z-index: 4;
-  top: 12px;
-  right: 56px;
+  flex: 0 1 auto;
   min-width: 44px;
   max-width: 120px;
   height: 32px;
@@ -513,7 +521,6 @@
   color: var(--text-muted);
   cursor: pointer;
   font-size: 0.77rem;
-  pointer-events: auto;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -529,18 +536,12 @@
   outline-offset: 2px;
 }
 
-.arbor-view.is-rtl .arbor-overview-exit,
-.arbor-view.is-rtl .arbor-overview-button {
+.arbor-view.is-rtl .arbor-mode-controls {
   right: auto;
   left: 12px;
+  flex-direction: row-reverse;
 }
 
-.arbor-view.is-rtl .arbor-output-profile-button {
-  right: auto;
-  left: 56px;
-}
-
-.arbor-overview-exit svg,
 .arbor-overview-button svg {
   width: 16px;
   height: 16px;
@@ -1018,8 +1019,6 @@
   font-size: 0.76rem;
 }
 
-.arbor-overview-exit:hover,
-.arbor-overview-exit:focus-visible,
 .arbor-overview-button:hover,
 .arbor-overview-button:focus-visible,
 .arbor-overview-editor-actions button:hover,
@@ -2540,8 +2539,7 @@
 
 .arbor-view.has-touch-controls .arbor-frame::before,
 .arbor-view.is-compact .arbor-viewport-fades,
-.arbor-view.is-compact .arbor-preview-pane,
-.arbor-overview-exit.is-inactive-mode {
+.arbor-view.is-compact .arbor-preview-pane {
   display: none;
 }
 
@@ -2565,8 +2563,7 @@
 .arbor-view.has-touch-controls .arbor-markdown-button,
 .arbor-view.has-touch-controls .arbor-theme-button,
 .arbor-view.has-touch-controls .arbor-view-menu-button,
-.arbor-view.has-touch-controls .arbor-overview-button,
-.arbor-view.has-touch-controls .arbor-overview-exit {
+.arbor-view.has-touch-controls .arbor-overview-button {
   top: 0;
   min-width: 44px;
   height: 44px;
@@ -2575,13 +2572,24 @@
   border-radius: 12px;
 }
 
+.arbor-view.has-touch-controls .arbor-mode-controls {
+  top: 0;
+  right: 0;
+  left: 0;
+  display: block;
+  height: 44px;
+}
+
+.arbor-view.has-touch-controls .arbor-mode-controls > button {
+  position: absolute;
+}
+
 /* Obsidian's responsive button rule restores horizontal padding on tablets.
    Explicitly reserve the icon's content box so the SVG cannot shrink to a dot. */
 .arbor-view.has-touch-controls .arbor-markdown-button,
 .arbor-view.has-touch-controls .arbor-theme-button,
 .arbor-view.has-touch-controls .arbor-view-menu-button,
-.arbor-view.has-touch-controls .arbor-overview-button,
-.arbor-view.has-touch-controls .arbor-overview-exit {
+.arbor-view.has-touch-controls .arbor-overview-button {
   flex: 0 0 44px;
   padding: 0;
 }
@@ -2596,15 +2604,13 @@
   max-width: calc(100% - 248px);
   padding: 0 10px;
 }
-.arbor-view.has-touch-controls .arbor-overview-button,
-.arbor-view.has-touch-controls .arbor-overview-exit { left: 0; right: auto; }
+.arbor-view.has-touch-controls .arbor-overview-button { left: 0; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-view-menu-button { left: 0; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-markdown-button { left: 48px; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-theme-button { left: 96px; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-zoom-indicator { left: 144px; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-output-profile-button { left: 192px; right: auto; }
-.arbor-view.has-touch-controls.is-rtl .arbor-overview-button,
-.arbor-view.has-touch-controls.is-rtl .arbor-overview-exit { right: 0; left: auto; }
+.arbor-view.has-touch-controls.is-rtl .arbor-overview-button { right: 0; left: auto; }
 
 .arbor-touch-dock {
   display: flex;
