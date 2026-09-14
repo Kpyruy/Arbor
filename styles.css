@@ -1436,6 +1436,7 @@
 }
 
 .arbor-card {
+  position: relative;
   min-height: calc(var(--bw-card-min-height) * var(--bw-zoom));
   padding: calc(12px * var(--bw-zoom)) calc(14px * var(--bw-zoom));
   cursor: pointer;
@@ -1554,6 +1555,66 @@
   cursor: text;
   border-color: color-mix(in srgb, var(--interactive-accent) 62%, var(--background-modifier-border));
   background: color-mix(in srgb, var(--background-secondary) 84%, var(--interactive-accent) 16%);
+}
+
+.arbor-card.is-output-excluded-direct,
+.arbor-overview-card.is-output-excluded-direct {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--text-muted) 58%, var(--background-modifier-border));
+}
+
+.arbor-card.is-output-excluded-direct > .arbor-card-content,
+.arbor-card.is-output-excluded-direct > .arbor-editor,
+.arbor-overview-card.is-output-excluded-direct > .arbor-overview-card-content,
+.arbor-overview-card.is-output-excluded-direct > .arbor-editor {
+  opacity: 0.68;
+}
+
+.arbor-card.is-output-excluded-inherited > .arbor-card-content,
+.arbor-card.is-output-excluded-inherited > .arbor-editor,
+.arbor-overview-card.is-output-excluded-inherited > .arbor-overview-card-content,
+.arbor-overview-card.is-output-excluded-inherited > .arbor-editor {
+  opacity: 0.82;
+}
+
+.arbor-card.is-output-excluded-inherited,
+.arbor-overview-card.is-output-excluded-inherited {
+  border-color: color-mix(in srgb, var(--text-faint) 40%, var(--background-modifier-border));
+}
+
+.arbor-card.is-output-excluded-direct.is-editing > .arbor-editor,
+.arbor-card.is-output-excluded-inherited.is-editing > .arbor-editor,
+.arbor-overview-card.is-output-excluded-direct.is-editing > .arbor-editor,
+.arbor-overview-card.is-output-excluded-inherited.is-editing > .arbor-editor {
+  opacity: 1;
+}
+
+.arbor-output-state-badge {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
+  z-index: 2;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  background: var(--background-secondary-alt);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.arbor-output-state-badge svg {
+  width: 13px;
+  height: 13px;
+}
+
+.arbor-card.is-output-excluded-direct > .arbor-card-content,
+.arbor-overview-card.is-output-excluded-direct > .arbor-overview-card-content {
+  padding-inline-end: 24px;
+  box-sizing: border-box;
 }
 
 .arbor-card.is-hover-linked,

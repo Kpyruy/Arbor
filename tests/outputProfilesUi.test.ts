@@ -3,8 +3,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { ArborOutputState, BranchTreeMetadata } from "../src/types";
 
 type OutputProfilesUiModule = typeof import("../src/view/OutputProfilesModal");
+type ArborViewUiModule = typeof import("../src/view/ArborView");
 
 let ui: OutputProfilesUiModule;
+let arborViewUi: ArborViewUiModule;
 
 beforeAll(async () => {
   const bundled = await build({
@@ -17,8 +19,8 @@ beforeAll(async () => {
     plugins: [{
       name: "obsidian-test-host",
       setup(builder) {
-        builder.onResolve({ filter: /^obsidian$/ }, () => ({ path: "obsidian", namespace: "test-host" }));
-        builder.onLoad({ filter: /.*/, namespace: "test-host" }, () => ({
+        builder.onResolve({ filter: /^obsidian$/ }, () => ({ path: "obsidian", namespace: "obsidian-host" }));
+        builder.onLoad({ filter: /.*/, namespace: "obsidian-host" }, () => ({
           contents: "export class ButtonComponent {} export class Menu {} export class Modal {}",
           loader: "js"
         }));
@@ -28,6 +30,48 @@ beforeAll(async () => {
   const source = bundled.outputFiles[0].text;
   const loaded: unknown = await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
   ui = loaded as OutputProfilesUiModule;
+
+  const arborViewBundle = await build({
+    absWorkingDir: process.cwd(),
+    entryPoints: ["src/view/ArborView.ts"],
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    write: false,
+    plugins: [{
+      name: "arbor-view-test-host",
+      setup(builder) {
+        builder.onResolve({ filter: /^obsidian$/ }, () => ({ path: "obsidian", namespace: "test-host" }));
+        builder.onLoad({ filter: /.*/, namespace: "test-host" }, () => ({
+          contents: [
+            "export class App {}",
+            "export class ButtonComponent {}",
+            "export class FileView {}",
+            "export class MarkdownView {}",
+            "export class Menu {}",
+            "export class Modal {}",
+            "export class Notice {}",
+            "export class TFile {}",
+            "export class WorkspaceLeaf {}",
+            "export const MarkdownRenderer = {};",
+            "export const Platform = {};",
+            "export const setIcon = () => undefined;"
+          ].join("\n"),
+          loader: "js"
+        }));
+        builder.onResolve({ filter: /^html-to-image$/ }, () => ({ path: "html-to-image", namespace: "html-host" }));
+        builder.onLoad({ filter: /.*/, namespace: "html-host" }, () => ({
+          contents: "export const toBlob = async () => null;",
+          loader: "js"
+        }));
+      }
+    }]
+  });
+  const arborViewSource = arborViewBundle.outputFiles[0].text;
+  const arborViewLoaded: unknown = await import(
+    `data:text/javascript;base64,${Buffer.from(arborViewSource).toString("base64")}`
+  );
+  arborViewUi = arborViewLoaded as ArborViewUiModule;
 });
 
 function tree(): BranchTreeMetadata {
@@ -229,4 +273,43 @@ describe("Output Profiles manager UI", () => {
       expect(coordinator.isBusy(channel)).toBe(false);
     }
   );
+
+  it("exposes block-only and subtree output actions only for custom profiles", () => {
+    expect(arborViewUi.getBlockOutputMenuActions(outputState("draft")).map((action) => action.label)).toEqual([
+      "Include block only",
+      "Exclude block only",
+      "Include subtree",
+      "Exclude subtree"
+    ]);
+    expect(arborViewUi.getBlockOutputMenuActions(outputState("full")).map((action) => action.label)).toEqual([
+      "Create output profile"
+    ]);
+  });
+
+  it("describes direct and inherited output exclusion without relying on color", () => {
+    const state = outputState("draft");
+    const includedState: ArborOutputState = {
+      ...state,
+      profiles: [{ ...state.profiles[0], rules: [] }]
+    };
+
+    const direct = arborViewUi.getOutputCardPresentation(tree(), state, "root");
+    const inherited = arborViewUi.getOutputCardPresentation(tree(), state, "child");
+
+    expect(direct).toMatchObject({
+      className: "is-output-excluded-direct",
+      badgeIcon: "eye-off"
+    });
+    expect(direct.ariaLabel).toContain("Excluded directly from output profile Draft");
+    expect(inherited).toMatchObject({
+      className: "is-output-excluded-inherited",
+      badgeIcon: null
+    });
+    expect(inherited.ariaLabel).toContain('Inherited exclusion from ancestor "Root"');
+    expect(arborViewUi.getOutputCardPresentation(tree(), includedState, "root")).toMatchObject({
+      className: null,
+      badgeIcon: null,
+      ariaLabel: "Root. Included in output profile Draft."
+    });
+  });
 });

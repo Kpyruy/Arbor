@@ -55,6 +55,9 @@ import {
   ImportedBranchDocument,
   LinearizedBranchDocument,
   ArborPresentationMode,
+  ArborOutputProfile,
+  ArborOutputResolution,
+  ArborOutputRuleState,
   ArborOutputState,
   BranchTreeMutationResult,
   ArborSettings
@@ -62,7 +65,11 @@ import {
 import {
   createDefaultOutputState,
   FULL_OUTPUT_PROFILE_ID,
+  getActiveOutputProfile,
   reconcileProfilesAfterTreeChange,
+  resolveOutputStates,
+  setBlockOnlyState,
+  setSubtreeState,
   setActiveOutputProfile
 } from "../outputProfiles";
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
@@ -129,6 +136,82 @@ interface LoadedFileState {
   linearized: LinearizedBranchDocument;
 }
 
+export type BlockOutputMenuActionId =
+  | "create-profile"
+  | "include-block"
+  | "exclude-block"
+  | "include-subtree"
+  | "exclude-subtree";
+
+export interface BlockOutputMenuAction {
+  id: BlockOutputMenuActionId;
+  label: string;
+  icon: string;
+  state?: ArborOutputRuleState;
+  scope?: "block" | "subtree";
+}
+
+export interface OutputCardPresentation {
+  className: "is-output-excluded-direct" | "is-output-excluded-inherited" | null;
+  badgeIcon: "eye-off" | null;
+  ariaLabel: string;
+  tooltip: string | null;
+}
+
+export function getBlockOutputMenuActions(state: ArborOutputState): BlockOutputMenuAction[] {
+  if (getActiveOutputProfile(state).id === FULL_OUTPUT_PROFILE_ID) {
+    return [{ id: "create-profile", label: "Create output profile", icon: "list-plus" }];
+  }
+
+  return [
+    { id: "include-block", label: "Include block only", icon: "eye", state: "include", scope: "block" },
+    { id: "exclude-block", label: "Exclude block only", icon: "eye-off", state: "exclude", scope: "block" },
+    { id: "include-subtree", label: "Include subtree", icon: "list-tree", state: "include", scope: "subtree" },
+    { id: "exclude-subtree", label: "Exclude subtree", icon: "list-x", state: "exclude", scope: "subtree" }
+  ];
+}
+
+export function getOutputCardPresentation(
+  metadata: BranchTreeMetadata,
+  state: ArborOutputState,
+  blockId: BranchBlockId,
+  profile: ArborOutputProfile = getActiveOutputProfile(state),
+  resolutions: ReadonlyMap<BranchBlockId, ArborOutputResolution> = resolveOutputStates(metadata, profile)
+): OutputCardPresentation {
+  const block = getBlock(metadata, blockId);
+  const blockLabel = block ? extractPathLabel(block.content) : "Block";
+  const resolution = resolutions.get(blockId);
+
+  if (!resolution || resolution.included) {
+    return {
+      className: null,
+      badgeIcon: null,
+      ariaLabel: `${blockLabel}. Included in output profile ${profile.name}.`,
+      tooltip: null
+    };
+  }
+
+  if (resolution.source === "direct") {
+    const reason = `Excluded directly from output profile ${profile.name}.`;
+    return {
+      className: "is-output-excluded-direct",
+      badgeIcon: "eye-off",
+      ariaLabel: `${blockLabel}. ${reason}`,
+      tooltip: reason
+    };
+  }
+
+  const ancestor = resolution.ruleBlockId ? getBlock(metadata, resolution.ruleBlockId) : null;
+  const ancestorLabel = ancestor ? extractPathLabel(ancestor.content) : "an ancestor";
+  const reason = `Inherited exclusion from ancestor "${ancestorLabel}" in output profile ${profile.name}.`;
+  return {
+    className: "is-output-excluded-inherited",
+    badgeIcon: null,
+    ariaLabel: `${blockLabel}. ${reason}`,
+    tooltip: reason
+  };
+}
+
 interface LoadingOverlayState {
   title: string;
   description: string;
@@ -168,6 +251,8 @@ interface BranchViewContext {
   searchRelatedIds: Set<BranchBlockId>;
   previewVisibleIds: Set<BranchBlockId> | null;
   overviewNodes: BranchOverviewNode[];
+  outputProfile: ArborOutputProfile;
+  outputResolutions: Map<BranchBlockId, ArborOutputResolution>;
 }
 
 class ArborConfirmModal extends Modal {
@@ -1986,6 +2071,8 @@ export class ArborView extends FileView {
     const searchQuery = this.previewSearchQuery.trim().toLocaleLowerCase();
     const searchMatchedIds = new Set<BranchBlockId>();
     const searchRelatedIds = new Set<BranchBlockId>();
+    const outputProfile = getActiveOutputProfile(this.state!.outputState);
+    const outputResolutions = resolveOutputStates(metadata, outputProfile);
 
     if (searchQuery.length > 0) {
       for (const block of metadata.blocks) {
@@ -2034,7 +2121,9 @@ export class ArborView extends FileView {
       searchMatchedIds,
       searchRelatedIds,
       previewVisibleIds,
-      overviewNodes
+      overviewNodes,
+      outputProfile,
+      outputResolutions
     };
   }
 
@@ -2391,10 +2480,12 @@ export class ArborView extends FileView {
     if (isEditingCard) {
       card.addClass("is-editing");
       this.syncEditorNode(card, block);
+      this.syncOutputCardPresentation(card, block.id, context);
       return;
     }
 
     await this.syncCardContentNode(card, block);
+    this.syncOutputCardPresentation(card, block.id, context);
   }
 
   private wireEditorElement(editor: HTMLTextAreaElement, block: BranchBlock, origin: EditingOrigin): void {
@@ -2608,6 +2699,7 @@ export class ArborView extends FileView {
           image.addEventListener("load", () => this.render(), { once: true });
         });
       }
+      this.syncOutputCardPresentation(card, block.id, this.viewContext);
       card.addEventListener("pointerdown", (event) => event.stopPropagation());
       card.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -2704,6 +2796,7 @@ export class ArborView extends FileView {
     this.wireEditorElement(editor, block, "overview");
     editor.value = session.value;
     this.resizeEditor(editor);
+    this.syncOutputCardPresentation(card, block.id, this.viewContext);
     window.requestAnimationFrame(() => {
       if (this.editingSession !== session) {
         return;
@@ -2734,6 +2827,7 @@ export class ArborView extends FileView {
     content.querySelectorAll("img").forEach((image) => {
       image.addEventListener("load", () => this.render(), { once: true });
     });
+    this.syncOutputCardPresentation(card, block.id, this.viewContext);
     card.focus({ preventScroll: true });
   }
 
@@ -4866,6 +4960,9 @@ export class ArborView extends FileView {
         );
     }
 
+    menu.addSeparator();
+    this.addBlockOutputMenuItems(menu, blockId);
+
     menu
       .addSeparator()
       .addItem((item) =>
@@ -4896,6 +4993,118 @@ export class ArborView extends FileView {
     this.applyDangerMenuItemStyles(menu);
 
     return menu;
+  }
+
+  private addBlockOutputMenuItems(menu: Menu, blockId: BranchBlockId): void {
+    if (!this.state) {
+      return;
+    }
+
+    getBlockOutputMenuActions(this.state.outputState).forEach((action) => {
+      menu.addItem((item) => {
+        item
+          .setTitle(action.label)
+          .setIcon(action.icon)
+          .setDisabled(Boolean(this.state?.outputError));
+
+        if (action.id === "create-profile") {
+          item.onClick(() => this.openOutputProfilesManager());
+          return;
+        }
+
+        item.onClick(() => void this.applyOutputMutation(action.label, (profile) => {
+          if (!action.state || !action.scope || !this.state) {
+            return profile;
+          }
+          return action.scope === "block"
+            ? setBlockOnlyState(this.state.metadata, profile, blockId, action.state)
+            : setSubtreeState(this.state.metadata, profile, blockId, action.state);
+        }));
+      });
+    });
+  }
+
+  private async applyOutputMutation(
+    label: string,
+    mutate: (profile: ArborOutputProfile) => ArborOutputProfile
+  ): Promise<void> {
+    if (!this.state || this.state.outputError) {
+      return;
+    }
+
+    await this.commitEditIfNeeded();
+    if (!this.state || this.state.outputError) {
+      return;
+    }
+
+    const activeProfile = getActiveOutputProfile(this.state.outputState);
+    if (activeProfile.id === FULL_OUTPUT_PROFILE_ID) {
+      return;
+    }
+
+    const selectedBlockId = this.state.selectedBlockId;
+    this.history.push(label, this.state.metadata, this.state.outputState, selectedBlockId);
+    const updatedProfile = mutate(activeProfile);
+    this.state.outputState = deepClone({
+      ...this.state.outputState,
+      profiles: this.state.outputState.profiles.map((profile) =>
+        profile.id === activeProfile.id ? updatedProfile : profile
+      )
+    });
+    this.pendingFocusBlockId = selectedBlockId;
+    this.pendingScrollBlockId = selectedBlockId;
+    this.shouldRestoreOverviewKeyboardFocusAfterMutation =
+      this.presentationMode === "overview" &&
+      this.overviewViewportEl?.contains(this.contentEl.ownerDocument.activeElement) === true;
+    await this.persistState(label);
+    this.render();
+  }
+
+  private syncOutputCardPresentation(
+    card: HTMLElement,
+    blockId: BranchBlockId,
+    context: BranchViewContext | null = this.viewContext
+  ): void {
+    card.removeClass("is-output-excluded-direct", "is-output-excluded-inherited");
+    const existingBadge = card.querySelector<HTMLElement>(".arbor-output-state-badge");
+
+    if (!this.state) {
+      existingBadge?.remove();
+      card.removeAttribute("aria-label");
+      card.removeAttribute("title");
+      return;
+    }
+
+    const presentation = getOutputCardPresentation(
+      this.state.metadata,
+      this.state.outputState,
+      blockId,
+      context?.outputProfile,
+      context?.outputResolutions
+    );
+    if (presentation.className) {
+      card.addClass(presentation.className);
+    }
+    card.setAttr("aria-label", presentation.ariaLabel);
+    if (presentation.tooltip) {
+      card.setAttr("title", presentation.tooltip);
+    } else {
+      card.removeAttribute("title");
+    }
+
+    if (!presentation.badgeIcon) {
+      existingBadge?.remove();
+      return;
+    }
+
+    const badge = existingBadge ?? card.createSpan({
+        cls: "arbor-output-state-badge",
+        attr: { "aria-hidden": "true" }
+      });
+    if (badge.dataset.icon !== presentation.badgeIcon) {
+      setIcon(badge, presentation.badgeIcon);
+      badge.dataset.icon = presentation.badgeIcon;
+    }
   }
 
   private async copyBlockLink(blockId: BranchBlockId): Promise<void> {
