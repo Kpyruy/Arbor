@@ -4,11 +4,17 @@ import {
   createDefaultOutputState,
   createProfile,
   deleteProfile,
+  excludeAll,
   getActiveOutputProfile,
+  includeAll,
+  includeOnlySelectedBranch,
+  invertSelection,
   normalizeOutputState,
   reconcileProfilesAfterTreeChange,
   renameProfile,
+  resetProfile,
   resolveOutputStates,
+  rootBlocksOnly,
   setActiveOutputProfile,
   setBlockOnlyState,
   setSubtreeState
@@ -42,6 +48,13 @@ function profile(rules: ArborOutputProfile["rules"]): ArborOutputProfile {
 
 function outputState(rules: ArborOutputProfile["rules"]): ArborOutputState {
   return { version: 1, activeProfileId: "draft", profiles: [profile(rules)] };
+}
+
+function includedIds(metadata: BranchTreeMetadata, candidate: ArborOutputProfile): string[] {
+  const resolved = resolveOutputStates(metadata, candidate);
+  return metadata.blocks
+    .filter((block) => resolved.get(block.id)?.included)
+    .map((block) => block.id);
 }
 
 describe("output profile state", () => {
@@ -280,5 +293,76 @@ describe("output profile state", () => {
       state: "include"
     });
     expect(reconciled.profiles[0].rules.some((rule) => rule.blockId === duplicateChildId)).toBe(false);
+  });
+
+  it("applies include, exclude and reset presets with minimal root transitions", () => {
+    const tree = sampleTree();
+    const initial = profile([
+      { blockId: "root", state: "exclude" },
+      { blockId: "chosen", state: "include" }
+    ]);
+    const included = includeAll(tree, initial);
+    const excluded = excludeAll(tree, initial);
+    const reset = resetProfile(tree, initial);
+
+    expect(includedIds(tree, included)).toEqual(["root", "sibling", "chosen", "nested", "other"]);
+    expect(included.rules).toEqual([]);
+    expect(includedIds(tree, excluded)).toEqual([]);
+    expect(excluded.rules).toEqual([
+      { blockId: "root", state: "exclude" },
+      { blockId: "sibling", state: "exclude" }
+    ]);
+    expect(includedIds(tree, reset)).toEqual(["root", "sibling", "chosen", "nested", "other"]);
+    expect(reset.rules).toEqual([]);
+  });
+
+  it("inverts the current effective selection and minimizes transition rules", () => {
+    const tree = sampleTree();
+    const inverted = invertSelection(tree, profile([
+      { blockId: "root", state: "exclude" },
+      { blockId: "chosen", state: "include" }
+    ]));
+
+    expect(includedIds(tree, inverted)).toEqual(["root", "other"]);
+    expect(inverted.rules).toEqual([
+      { blockId: "chosen", state: "exclude" },
+      { blockId: "sibling", state: "exclude" }
+    ]);
+  });
+
+  it("includes only the selected active path and its whole subtree", () => {
+    const tree = sampleTree();
+    const selected = includeOnlySelectedBranch(tree, profile([]), "chosen");
+
+    expect(includedIds(tree, selected)).toEqual(["root", "chosen", "nested"]);
+    expect(selected.rules).toEqual([
+      { blockId: "other", state: "exclude" },
+      { blockId: "sibling", state: "exclude" }
+    ]);
+  });
+
+  it("keeps only root blocks in the root-blocks preset", () => {
+    const tree = sampleTree();
+    const roots = rootBlocksOnly(tree, profile([]));
+
+    expect(includedIds(tree, roots)).toEqual(["root", "sibling"]);
+    expect(roots.rules).toEqual([
+      { blockId: "chosen", state: "exclude" },
+      { blockId: "other", state: "exclude" }
+    ]);
+  });
+
+  it("keeps presets immutable for Full tree and ignores an unknown selected branch", () => {
+    const tree = sampleTree();
+    const full = getActiveOutputProfile(createDefaultOutputState());
+    const initial = profile([{ blockId: "root", state: "exclude" }]);
+
+    expect(includeAll(tree, full)).toEqual(full);
+    expect(excludeAll(tree, full)).toEqual(full);
+    expect(invertSelection(tree, full)).toEqual(full);
+    expect(includeOnlySelectedBranch(tree, full, "chosen")).toEqual(full);
+    expect(rootBlocksOnly(tree, full)).toEqual(full);
+    expect(resetProfile(tree, full)).toEqual(full);
+    expect(includeOnlySelectedBranch(tree, initial, "missing")).toEqual(initial);
   });
 });

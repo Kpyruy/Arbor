@@ -3738,6 +3738,7 @@ export class ArborView extends FileView {
     new OutputProfilesModal(this.app, {
       initialState: deepClone(this.state.outputState),
       metadata: cloneMetadata(this.state.metadata),
+      selectedBlockId: this.state.selectedBlockId,
       outputError: this.state.outputError,
       activate: (state) => this.applyActiveOutputProfile(state),
       mutate: (label, state) => this.applyOutputProfileMutation(label, state),
@@ -3781,6 +3782,11 @@ export class ArborView extends FileView {
     }
     this.history.push(label, this.state.metadata, this.state.outputState, this.state.selectedBlockId);
     this.state.outputState = deepClone(next);
+    this.pendingFocusBlockId = this.state.selectedBlockId;
+    this.pendingScrollBlockId = this.state.selectedBlockId;
+    this.shouldRestoreOverviewKeyboardFocusAfterMutation =
+      this.presentationMode === "overview" &&
+      this.overviewViewportEl?.contains(this.contentEl.ownerDocument.activeElement) === true;
     await this.persistState(label);
     this.render();
     return deepClone(this.state.outputState);

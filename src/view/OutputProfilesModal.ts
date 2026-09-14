@@ -2,13 +2,19 @@ import { App, ButtonComponent, Menu, Modal } from "obsidian";
 import {
   createProfile,
   deleteProfile,
+  excludeAll,
   FULL_OUTPUT_PROFILE_ID,
   getActiveOutputProfile,
+  includeAll,
+  includeOnlySelectedBranch,
+  invertSelection,
   renameProfile,
+  resetProfile,
   resolveOutputStates,
+  rootBlocksOnly,
   setActiveOutputProfile
 } from "../outputProfiles";
-import { ArborOutputProfile, ArborOutputState, BranchTreeMetadata } from "../types";
+import { ArborOutputProfile, ArborOutputState, BranchBlockId, BranchTreeMetadata } from "../types";
 
 export type OutputProfileActionId = "activate" | "duplicate" | "rename" | "delete";
 
@@ -18,6 +24,22 @@ export interface OutputProfileActionModel {
   disabled: boolean;
 }
 
+export type OutputProfilePresetActionId =
+  | "include-all"
+  | "exclude-all"
+  | "invert-selection"
+  | "selected-branch"
+  | "root-blocks"
+  | "reset-profile";
+
+export interface OutputProfilePresetActionModel {
+  id: OutputProfilePresetActionId;
+  label: string;
+  icon: string;
+  disabled: boolean;
+  requiresConfirmation: boolean;
+}
+
 export interface OutputProfileRowModel {
   id: string;
   name: string;
@@ -25,6 +47,7 @@ export interface OutputProfileRowModel {
   includedCount: number;
   excludedCount: number;
   actions: OutputProfileActionModel[];
+  presetActions: OutputProfilePresetActionModel[];
 }
 
 export interface OutputProfileManagerModel {
@@ -36,6 +59,7 @@ export interface OutputProfileManagerModel {
 export interface OutputProfilesController {
   initialState: ArborOutputState;
   metadata: BranchTreeMetadata;
+  selectedBlockId: BranchBlockId | null;
   outputError: string | null;
   activate: (state: ArborOutputState) => Promise<ArborOutputState>;
   mutate: (label: string, state: ArborOutputState) => Promise<ArborOutputState>;
@@ -196,7 +220,8 @@ export function buildOutputProfileManagerModel(
   state: ArborOutputState,
   metadata: BranchTreeMetadata,
   outputError: string | null = null,
-  busy = false
+  busy = false,
+  selectedBlockId: BranchBlockId | null = null
 ): OutputProfileManagerModel {
   const mutationDisabled = outputError !== null || busy;
   const profiles = [fullTreeProfile(), ...state.profiles].map((profile): OutputProfileRowModel => {
@@ -217,7 +242,11 @@ export function buildOutputProfileManagerModel(
       isActive: profile.id === state.activeProfileId,
       includedCount,
       excludedCount: metadata.blocks.length - includedCount,
-      actions
+      actions,
+      presetActions:
+        profile.id === state.activeProfileId && profile.id !== FULL_OUTPUT_PROFILE_ID
+          ? buildOutputProfilePresetActions(metadata, profile, selectedBlockId, mutationDisabled)
+          : []
     };
   });
 
@@ -243,6 +272,61 @@ export function duplicateOutputProfileState(
   const sourceActive = setActiveOutputProfile(state, profileId, metadata);
   const duplicated = createProfile(sourceActive, id, name, metadata);
   return setActiveOutputProfile(duplicated, state.activeProfileId, metadata);
+}
+
+export function applyOutputProfilePreset(
+  metadata: BranchTreeMetadata,
+  profile: ArborOutputProfile,
+  actionId: OutputProfilePresetActionId,
+  selectedBlockId: BranchBlockId | null
+): ArborOutputProfile {
+  if (actionId === "include-all") return includeAll(metadata, profile);
+  if (actionId === "exclude-all") return excludeAll(metadata, profile);
+  if (actionId === "invert-selection") return invertSelection(metadata, profile);
+  if (actionId === "selected-branch") {
+    return selectedBlockId ? includeOnlySelectedBranch(metadata, profile, selectedBlockId) : profile;
+  }
+  if (actionId === "root-blocks") return rootBlocksOnly(metadata, profile);
+  return resetProfile(metadata, profile);
+}
+
+function changedRuleCount(before: ArborOutputProfile, after: ArborOutputProfile): number {
+  const beforeRules = new Map(before.rules.map((rule) => [rule.blockId, rule.state]));
+  const afterRules = new Map(after.rules.map((rule) => [rule.blockId, rule.state]));
+  const blockIds = new Set([...beforeRules.keys(), ...afterRules.keys()]);
+  return [...blockIds].filter((blockId) => beforeRules.get(blockId) !== afterRules.get(blockId)).length;
+}
+
+export function buildOutputProfilePresetActions(
+  metadata: BranchTreeMetadata,
+  profile: ArborOutputProfile,
+  selectedBlockId: BranchBlockId | null,
+  disabled = false
+): OutputProfilePresetActionModel[] {
+  const definitions: Array<Pick<OutputProfilePresetActionModel, "id" | "label" | "icon">> = [
+    { id: "include-all", label: "Include all", icon: "eye" },
+    { id: "exclude-all", label: "Exclude all", icon: "eye-off" },
+    { id: "invert-selection", label: "Invert selection", icon: "refresh-cw" },
+    { id: "selected-branch", label: "Include only selected branch", icon: "git-branch" },
+    { id: "root-blocks", label: "Root blocks only", icon: "rows-3" },
+    { id: "reset-profile", label: "Reset profile", icon: "rotate-ccw" }
+  ];
+
+  return definitions.map((definition) => {
+    const next = applyOutputProfilePreset(metadata, profile, definition.id, selectedBlockId);
+    const changes = changedRuleCount(profile, next);
+    return {
+      ...definition,
+      disabled:
+        disabled ||
+        changes === 0 ||
+        (definition.id === "selected-branch" && selectedBlockId === null),
+      requiresConfirmation:
+        definition.id === "exclude-all" ||
+        definition.id === "reset-profile" ||
+        changes > 1
+    };
+  });
 }
 
 class OutputProfilesConfirmModal extends Modal {
@@ -474,7 +558,8 @@ export class OutputProfilesModal extends Modal {
       this.state,
       this.controller.metadata,
       this.controller.outputError,
-      busy
+      busy,
+      this.controller.selectedBlockId
     );
 
     if (this.controller.outputError && model.resetAction) {
@@ -535,6 +620,21 @@ export class OutputProfilesModal extends Modal {
         item.onClick(() => this.runProfileAction(action.id, profile.id));
       });
     });
+    if (profile.presetActions.length > 0) {
+      menu.addSeparator();
+      profile.presetActions.forEach((action) => {
+        menu.addItem((item) => {
+          item
+            .setTitle(action.label)
+            .setIcon(action.icon)
+            .setDisabled(action.disabled)
+            .onClick(() => this.runPresetAction(profile.id, action));
+          if (action.id === "exclude-all" || action.id === "reset-profile") {
+            item.setWarning(true);
+          }
+        });
+      });
+    }
     const rect = anchor.getBoundingClientRect();
     menu.showAtPosition({ x: rect.left, y: rect.bottom + 6 }, anchor.ownerDocument);
   }
@@ -553,6 +653,78 @@ export class OutputProfilesModal extends Modal {
       return;
     }
     this.confirmDelete(profileId);
+  }
+
+  private runPresetAction(profileId: string, action: OutputProfilePresetActionModel): void {
+    if (action.disabled || this.controller.outputError) {
+      return;
+    }
+    if (action.requiresConfirmation) {
+      this.confirmPreset(profileId, action);
+      return;
+    }
+    void this.applyPreset(profileId, action);
+  }
+
+  private confirmPreset(profileId: string, action: OutputProfilePresetActionModel): void {
+    const profile = findProfile(this.state, profileId);
+    if (!profile || profile.id === FULL_OUTPUT_PROFILE_ID || this.confirmationOpen) {
+      return;
+    }
+
+    this.confirmationOpen = true;
+    const description = action.id === "exclude-all"
+      ? `This will exclude every block from ${profile.name}.`
+      : action.id === "reset-profile"
+        ? `This will clear every output rule in ${profile.name}.`
+        : `This preset replaces multiple output rules in ${profile.name}.`;
+    new OutputProfilesConfirmModal(
+      this.app,
+      `${action.label}?`,
+      description,
+      action.label,
+      async () => {
+        try {
+          await this.applyPreset(profileId, action);
+        } finally {
+          this.confirmationOpen = false;
+        }
+      },
+      () => {
+        this.confirmationOpen = false;
+      }
+    ).open();
+  }
+
+  private async applyPreset(
+    profileId: string,
+    action: OutputProfilePresetActionModel
+  ): Promise<void> {
+    await this.runManagerOperation(async () => {
+      const profile = findProfile(this.state, profileId);
+      if (
+        !profile ||
+        profile.id === FULL_OUTPUT_PROFILE_ID ||
+        this.state.activeProfileId !== profile.id ||
+        this.controller.outputError
+      ) {
+        return;
+      }
+
+      const updatedProfile = applyOutputProfilePreset(
+        this.controller.metadata,
+        profile,
+        action.id,
+        this.controller.selectedBlockId
+      );
+      const next: ArborOutputState = {
+        ...this.state,
+        profiles: this.state.profiles.map((candidate) =>
+          candidate.id === profile.id ? updatedProfile : candidate
+        )
+      };
+      this.state = await this.controller.mutate(action.label, next);
+    });
   }
 
   private openCreate(): void {

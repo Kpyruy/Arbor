@@ -1,4 +1,4 @@
-import { getChildren, getDescendantIds } from "./model/tree";
+import { getActivePath, getChildren, getDescendantIds } from "./model/tree";
 import {
   ArborOutputProfile,
   ArborOutputResolution,
@@ -91,6 +91,34 @@ function normalizeProfile(profile: ArborOutputProfile, metadata: BranchTreeMetad
 
 function withRules(profile: ArborOutputProfile, rules: ArborOutputRule[]): ArborOutputProfile {
   return { id: profile.id, name: profile.name, rules };
+}
+
+function buildProfileFromDesiredStates(
+  metadata: BranchTreeMetadata,
+  profile: ArborOutputProfile,
+  desiredStates: ReadonlyMap<BranchBlockId, boolean>
+): ArborOutputProfile {
+  if (normalizeProfileId(profile.id) === FULL_OUTPUT_PROFILE_ID) {
+    return fullOutputProfile();
+  }
+
+  const normalized = normalizeProfile(profile, metadata);
+  const rules: ArborOutputRule[] = [];
+  const visit = (parentId: BranchBlockId | null, inheritedIncluded: boolean) => {
+    for (const block of getChildren(metadata, parentId)) {
+      const included = desiredStates.get(block.id) ?? inheritedIncluded;
+      if (included !== inheritedIncluded) {
+        rules.push({
+          blockId: block.id,
+          state: included ? "include" : "exclude"
+        });
+      }
+      visit(block.id, included);
+    }
+  };
+
+  visit(null, true);
+  return normalizeProfile(withRules(normalized, rules), metadata);
 }
 
 export function createDefaultOutputState(): ArborOutputState {
@@ -312,6 +340,75 @@ export function setBlockOnlyState(
   });
 
   return normalizeProfile(withRules(changed, [...changed.rules, ...childOverrides]), metadata);
+}
+
+export function includeAll(
+  metadata: BranchTreeMetadata,
+  profile: ArborOutputProfile
+): ArborOutputProfile {
+  const desiredStates = new Map(metadata.blocks.map((block) => [block.id, true]));
+  return buildProfileFromDesiredStates(metadata, profile, desiredStates);
+}
+
+export function excludeAll(
+  metadata: BranchTreeMetadata,
+  profile: ArborOutputProfile
+): ArborOutputProfile {
+  const desiredStates = new Map(metadata.blocks.map((block) => [block.id, false]));
+  return buildProfileFromDesiredStates(metadata, profile, desiredStates);
+}
+
+export function invertSelection(
+  metadata: BranchTreeMetadata,
+  profile: ArborOutputProfile
+): ArborOutputProfile {
+  const normalized = normalizeProfileId(profile.id) === FULL_OUTPUT_PROFILE_ID
+    ? fullOutputProfile()
+    : normalizeProfile(profile, metadata);
+  if (normalized.id === FULL_OUTPUT_PROFILE_ID) {
+    return normalized;
+  }
+
+  const current = resolveOutputStates(metadata, normalized);
+  const desiredStates = new Map(
+    metadata.blocks.map((block) => [block.id, !(current.get(block.id)?.included ?? true)])
+  );
+  return buildProfileFromDesiredStates(metadata, normalized, desiredStates);
+}
+
+export function includeOnlySelectedBranch(
+  metadata: BranchTreeMetadata,
+  profile: ArborOutputProfile,
+  selectedBlockId: BranchBlockId
+): ArborOutputProfile {
+  if (normalizeProfileId(profile.id) === FULL_OUTPUT_PROFILE_ID) {
+    return fullOutputProfile();
+  }
+  if (!metadata.blocks.some((block) => block.id === selectedBlockId)) {
+    return normalizeProfile(profile, metadata);
+  }
+
+  const includedIds = new Set<BranchBlockId>([
+    ...getActivePath(metadata, selectedBlockId).map((block) => block.id),
+    ...getDescendantIds(metadata, selectedBlockId)
+  ]);
+  const desiredStates = new Map(metadata.blocks.map((block) => [block.id, includedIds.has(block.id)]));
+  return buildProfileFromDesiredStates(metadata, profile, desiredStates);
+}
+
+export function rootBlocksOnly(
+  metadata: BranchTreeMetadata,
+  profile: ArborOutputProfile
+): ArborOutputProfile {
+  const desiredStates = new Map(metadata.blocks.map((block) => [block.id, block.parentId === null]));
+  return buildProfileFromDesiredStates(metadata, profile, desiredStates);
+}
+
+export function resetProfile(
+  metadata: BranchTreeMetadata,
+  profile: ArborOutputProfile
+): ArborOutputProfile {
+  return includeAll(metadata, profile);
 }
 
 export function reconcileProfilesAfterTreeChange(

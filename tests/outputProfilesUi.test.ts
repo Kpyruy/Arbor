@@ -286,6 +286,49 @@ describe("Output Profiles manager UI", () => {
     ]);
   });
 
+  it("groups all bulk presets on the active custom profile", () => {
+    const model = ui.buildOutputProfileManagerModel(outputState("draft"), tree(), null, false, "child");
+    const draft = model.profiles.find((profile) => profile.id === "draft");
+    const full = model.profiles.find((profile) => profile.id === "full");
+
+    expect(draft?.presetActions.map((action) => action.label)).toEqual([
+      "Include all",
+      "Exclude all",
+      "Invert selection",
+      "Include only selected branch",
+      "Root blocks only",
+      "Reset profile"
+    ]);
+    expect(full?.presetActions).toEqual([]);
+    expect(draft?.presetActions.find((action) => action.id === "exclude-all")?.requiresConfirmation).toBe(true);
+    expect(draft?.presetActions.find((action) => action.id === "reset-profile")?.requiresConfirmation).toBe(true);
+    expect(draft?.presetActions.find((action) => action.id === "include-all")?.requiresConfirmation).toBe(false);
+    expect(draft?.presetActions.find((action) => action.id === "root-blocks")?.requiresConfirmation).toBe(true);
+  });
+
+  it("disables the selected-branch preset when no block is selected", () => {
+    const model = ui.buildOutputProfileManagerModel(outputState("draft"), tree(), null, false, null);
+    const selectedBranch = model.profiles
+      .find((profile) => profile.id === "draft")
+      ?.presetActions.find((action) => action.id === "selected-branch");
+
+    expect(selectedBranch?.disabled).toBe(true);
+  });
+
+  it("disables preset mutations while malformed metadata is locked", () => {
+    const model = ui.buildOutputProfileManagerModel(
+      outputState("draft"),
+      tree(),
+      "Invalid output metadata",
+      false,
+      "child"
+    );
+    const presets = model.profiles.find((profile) => profile.id === "draft")?.presetActions ?? [];
+
+    expect(presets).toHaveLength(6);
+    expect(presets.every((action) => action.disabled)).toBe(true);
+  });
+
   it("describes direct and inherited output exclusion without relying on color", () => {
     const state = outputState("draft");
     const includedState: ArborOutputState = {
