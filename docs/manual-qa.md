@@ -46,15 +46,43 @@
 - Confirm the terminal `%% arbor:structure` footer is readable JSON with only block ID, parent, and order.
 - Disable the plugin and confirm the note is still readable as markdown.
 
+## Output Profiles
+
+- Open an existing Arbor note without output metadata and confirm the active profile is `Full tree` and every card is included.
+- Open the profile pill, choose `Manage output profiles…`, and create, duplicate, rename, activate, and delete a custom profile.
+- Confirm names cannot be empty, duplicate names are rejected without regard to letter case, and `Full tree` cannot be renamed or deleted.
+- Switch profiles and reload Obsidian; confirm the active profile and its rules persist. Confirm switching alone does not add an Arbor undo step.
+- In a custom profile, right-click a card and test `Include block only`, `Exclude block only`, `Include subtree`, and `Exclude subtree`.
+- Exclude a parent, include one nested child, and confirm direct versus inherited exclusions have distinct non-color indicators, tooltips, and screen-reader labels.
+- Run `Include all`, `Exclude all`, `Invert selection`, `Include only selected branch`, `Root blocks only`, and `Reset profile`; confirm the result matches each label and reset asks for confirmation.
+- Duplicate, reorder, and reparent included and excluded branches; delete a parent while lifting its children; undo and redo each change. Confirm effective output stays stable for surviving blocks.
+
+## Output Preview
+
+- Open `Output preview` for a custom profile and confirm only included blocks render, in depth-first order, with headings, tasks, callouts, code, links, embeds, comments, tables, footnotes, and Unicode text intact.
+- Edit the tree or profile, reopen/refresh the preview, and confirm it updates without creating a temporary Markdown file or changing the source note.
+- Use `Open in Markdown` and confirm it still opens the complete original Arbor note, including blocks excluded by the active profile.
+- Return to the editor and confirm the same selected block remains usable.
+- Repeat the preview flow on desktop and mobile, in both `Left to right` and `Right to left` layouts; verify controls stay reachable and long rendered blocks do not overflow.
+
 ## Clean Export Copy
 
 - Open a saved Arbor note with YAML, nested blocks, code, tasks, and embeds.
-- Choose Export clean copy…, choose Keep YAML frontmatter, and create the export.
+- Activate a custom profile with an excluded parent and an explicitly included descendant.
+- Choose Export clean copy…, choose Keep YAML and Omit excluded blocks, and create the export.
 - Confirm <source> — export.md opens in a normal Markdown tab; it has no ARBOR badge, visible block markers, or structure footer.
-- Confirm the order, content, and spacing match the readable source while the original Arbor note stays open and unchanged.
-- Repeat with Text only and confirm the YAML frontmatter is absent.
+- Confirm the export matches Output Preview exactly: the excluded parent is absent, its included descendant remains in depth-first order, and the original Arbor note stays open and unchanged.
+- Repeat with Keep excluded blocks as comments. Confirm excluded block IDs and content are inside valid HTML comments and Markdown containing `--` cannot close a comment early.
+- Repeat with Export body only and confirm the YAML frontmatter is absent.
 - Export again and confirm — export 2.md is created without overwriting the first copy.
 - Cancel the modal and confirm no file is created.
+
+## Output Metadata Recovery
+
+- Copy an Arbor note, then deliberately make its terminal `%% arbor:output` JSON invalid while leaving `%% arbor:structure` intact.
+- Open the copy and confirm Arbor falls back to `Full tree`, displays a warning, and still recovers the complete visible tree.
+- Make and save an unrelated tree edit; confirm the malformed output footer remains byte-for-byte unchanged.
+- Choose `Reset output profiles`, confirm it, and verify the malformed footer is removed only then.
 
 ## Rich Markdown Round-Trip
 

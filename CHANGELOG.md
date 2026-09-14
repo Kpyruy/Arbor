@@ -2,6 +2,26 @@
 
 All notable changes to Arbor should be documented in this file.
 
+## Unreleased
+
+### Added
+
+- added named Output Profiles so one complete Arbor tree can produce independent Draft, Short, Final, or other versions
+- added block-only and subtree include/exclude controls with direct and inherited visual states
+- added bulk presets for include all, exclude all, invert, selected branch only, root blocks only, and reset
+- added Output Preview inside the current Arbor view, using the same filtered projection as clean Markdown export
+- added clean-export handling for omitted blocks or safely preserved HTML comments, with independent YAML keep/remove choices
+
+### Changed
+
+- tree mutations, duplicate, delete/lift, reload, and Arbor undo/redo now preserve effective Output Profile choices
+- existing notes continue to open as `Full tree` without adding output metadata until a custom profile is used
+- malformed output metadata remains untouched until the user explicitly resets it
+
+### Fixed
+
+- kept visible block markers on their own lines after reparenting beneath a block with no trailing separator
+
 ## 0.2.7 - 2026-09-03
 
 ### Added

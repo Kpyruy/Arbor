@@ -56,9 +56,23 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Auto-open managed Arbor notes in Arbor view
 - File Explorer labels that mark managed notes with `ARBOR`
 - Clean Markdown export copies with an optional YAML frontmatter
+- Named Output Profiles for producing several clean versions from one complete tree
 - Safe rebuild when the note changed in plain Markdown mode
 
 Use a clean export copy as the Markdown handoff for Pandoc or another DOCX converter; Arbor does not generate DOCX directly.
+
+## Output Profiles
+
+Output Profiles let one Arbor note hold the complete tree while producing different versions such as `Draft`, `Short version`, or `Final`.
+
+- `Full tree` is built in, always includes every block, and is the default for existing notes.
+- Use the profile pill in the Arbor toolbar, then **Manage output profiles…**, to create, duplicate, rename, delete, or switch profiles.
+- In a custom profile, right-click a card to **Include block only**, **Exclude block only**, **Include subtree**, or **Exclude subtree**. Inherited exclusions stay visible in the editor and explain which parent rule caused them.
+- Presets in **Output profiles** provide **Include all**, **Exclude all**, **Invert selection**, **Include only selected branch**, **Root blocks only**, and **Reset profile**.
+- **Output preview** renders only the included Markdown in the current Arbor view. It never creates a temporary file or changes the source note.
+- **Export clean copy…** exports the active profile and can either omit excluded blocks or keep them as HTML comments. YAML frontmatter can be kept or removed independently.
+
+The source `.md` always retains the complete Arbor tree. Switching profiles, previewing, and exporting change the output version—not the source content.
 
 ## Install
 
@@ -213,6 +227,8 @@ Arbor includes a compact view menu in the top-right corner of the editor.
 
 Current menu actions:
 
+- switch the active Output Profile or open `Manage output profiles…`
+- open `Output preview`
 - toggle `Selected block panel`
 - toggle breadcrumb path
 - toggle breadcrumb flow
@@ -251,6 +267,7 @@ Each Arbor note contains:
 
 - the visible Markdown body
 - machine-written block markers before each block in the visible body
+- an optional `%% arbor:output` comment for custom Output Profiles
 - one readable structure footer at the end of the same note
 
 Example shape:
