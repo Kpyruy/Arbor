@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { resolveOverviewArrowTarget } from "../src/overviewNavigation";
+import {
+  resolveOverviewArrowTarget,
+  resolveOverviewCardSelectionState
+} from "../src/overviewNavigation";
 import { BranchTreeMetadata } from "../src/types";
 
 const tree: BranchTreeMetadata = {
@@ -32,6 +35,52 @@ describe("overview arrow navigation", () => {
   it("mirrors parent and child keys in RTL", () => {
     expect(resolveOverviewArrowTarget(tree, "first", "ArrowRight", "rtl")).toBe("root");
     expect(resolveOverviewArrowTarget(tree, "first", "ArrowLeft", "rtl")).toBe("leaf");
+  });
+
+  it("animates only the newly selected overview card", () => {
+    const activePathIds = new Set(["root", "second"]);
+
+    expect(resolveOverviewCardSelectionState("second", "second", activePathIds, true)).toEqual({
+      active: true,
+      onPath: false,
+      animate: true
+    });
+    expect(resolveOverviewCardSelectionState("root", "second", activePathIds, true)).toEqual({
+      active: false,
+      onPath: true,
+      animate: false
+    });
+    expect(resolveOverviewCardSelectionState("first", "second", activePathIds, true)).toEqual({
+      active: false,
+      onPath: false,
+      animate: false
+    });
+    expect(resolveOverviewCardSelectionState("second", "second", activePathIds, false).animate).toBe(false);
+  });
+
+  it("keeps overview selection animation local without flashing every border", () => {
+    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const cardStart = styles.indexOf(".arbor-overview-card {\n  position: absolute;");
+    const cardStyles = styles.slice(cardStart, styles.indexOf("}", cardStart) + 1);
+
+    expect(cardStyles).not.toContain("border-color 140ms ease");
+    expect(cardStyles).not.toContain("background-color 140ms ease");
+    expect(cardStyles).toContain("box-shadow 140ms ease");
+    expect(source).toContain("this.animateOverviewSelectedCard(selectedCard)");
+    expect(styles).toContain(".arbor-overview-card.is-selection-entering");
+    expect(styles).toContain("@keyframes arbor-overview-card-focus-enter");
+  });
+
+  it("uses dashed borders for every directly or inherited excluded card", () => {
+    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const exclusionsStart = styles.indexOf(".arbor-card.is-output-excluded-direct,");
+    const exclusionStyles = styles.slice(exclusionsStart, styles.indexOf("}", exclusionsStart) + 1);
+
+    expect(exclusionStyles).toContain(".arbor-card.is-output-excluded-inherited");
+    expect(exclusionStyles).toContain(".arbor-overview-card.is-output-excluded-direct");
+    expect(exclusionStyles).toContain(".arbor-overview-card.is-output-excluded-inherited");
+    expect(exclusionStyles).toContain("border-style: dashed;");
   });
 
   it("reuses numeric child navigation inside the overview keyboard handler", () => {

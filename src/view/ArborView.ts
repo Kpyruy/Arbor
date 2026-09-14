@@ -94,7 +94,10 @@ import {
 import { buildSinglePageTreeOverviewPdf } from "../treeOverviewPdf";
 import { getBreadcrumbScrollInsets, getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey, getVisualBreadcrumbOrder } from "../layoutDirection";
 import { buildOverviewLayout, buildOverviewLinkPath } from "../model/overviewLayout";
-import { resolveOverviewArrowTarget } from "../overviewNavigation";
+import {
+  resolveOverviewArrowTarget,
+  resolveOverviewCardSelectionState
+} from "../overviewNavigation";
 import { resolveColumnWheelTarget } from "../columnWheelNavigation";
 import { ARBOR_THEME_VARIABLES, resolveArborThemeVariables } from "../theme";
 import {
@@ -3196,19 +3199,46 @@ export class ArborView extends FileView {
     const activePathIds = new Set(getActivePath(this.state.metadata, selectedBlockId).map((block) => block.id));
     const cards = this.overviewSurfaceEl.querySelectorAll<HTMLElement>(".arbor-overview-card");
     let selectedCard: HTMLElement | null = null;
+    let shouldAnimateSelectedCard = false;
     cards.forEach((card) => {
       const blockId = card.dataset.blockId;
-      const isActive = blockId === selectedBlockId;
-      card.toggleClass("is-active", isActive);
-      card.toggleClass("is-on-path", !isActive && Boolean(blockId && activePathIds.has(blockId)));
-      if (isActive) {
+      if (!blockId) {
+        return;
+      }
+      const presentation = resolveOverviewCardSelectionState(
+        blockId,
+        selectedBlockId,
+        activePathIds,
+        selectionChanged
+      );
+      card.toggleClass("is-active", presentation.active);
+      card.toggleClass("is-on-path", presentation.onPath);
+      if (presentation.active) {
         selectedCard = card;
+        shouldAnimateSelectedCard = presentation.animate;
       }
     });
 
+    if (shouldAnimateSelectedCard && selectedCard) {
+      this.animateOverviewSelectedCard(selectedCard);
+    }
     if (selectionChanged && selectedCard) {
       this.revealOverviewSelectedCard(selectedCard);
     }
+  }
+
+  private animateOverviewSelectedCard(selectedCard: HTMLElement): void {
+    this.overviewSurfaceEl?.querySelectorAll<HTMLElement>(".arbor-overview-card.is-selection-entering")
+      .forEach((card) => card.removeClass("is-selection-entering"));
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+    selectedCard.addClass("is-selection-entering");
+    selectedCard.addEventListener(
+      "animationend",
+      () => selectedCard.removeClass("is-selection-entering"),
+      { once: true }
+    );
   }
 
   private revealOverviewSelectedCard(selectedCard: HTMLElement): void {

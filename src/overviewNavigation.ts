@@ -2,6 +2,26 @@ import { getFirstChildBlock, getNextSibling, getParentBlock, getPreviousSibling 
 import { getChildArrowKey, getParentArrowKey } from "./layoutDirection";
 import { BranchBlockId, BranchTreeMetadata } from "./types";
 
+export interface OverviewCardSelectionState {
+  active: boolean;
+  onPath: boolean;
+  animate: boolean;
+}
+
+export function resolveOverviewCardSelectionState(
+  blockId: BranchBlockId,
+  selectedBlockId: BranchBlockId | null,
+  activePathIds: ReadonlySet<BranchBlockId>,
+  selectionChanged: boolean
+): OverviewCardSelectionState {
+  const active = blockId === selectedBlockId;
+  return {
+    active,
+    onPath: !active && activePathIds.has(blockId),
+    animate: active && selectionChanged
+  };
+}
+
 export function resolveOverviewArrowTarget(
   metadata: BranchTreeMetadata,
   selectedBlockId: BranchBlockId,
