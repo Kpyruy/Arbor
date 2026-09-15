@@ -17,10 +17,6 @@ function escapeCommentPayload(value: string): string {
   return value.replace(/--/g, "&#45;&#45;");
 }
 
-function escapeCommentId(value: string): string {
-  return escapeCommentPayload(value.replace(/&/g, "&amp;").replace(/"/g, "&quot;"));
-}
-
 export function buildCleanExportDocument(
   frontmatter: string,
   metadata: BranchTreeMetadata,
@@ -42,7 +38,7 @@ export function buildCleanExportDocument(
 
     const after = entry.block.after || (index < projection.entries.length - 1 ? "\n" : "");
     return [
-      `<!-- arbor:excluded id="${escapeCommentId(entry.block.id)}"`,
+      "<!--",
       escapeCommentPayload(entry.block.content),
       `-->${after}`
     ].join("\n");

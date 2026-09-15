@@ -54,7 +54,9 @@ describe("clean Arbor exports", () => {
       expect(output.startsWith("---\ntags: [draft]\n---\n")).toBe(options.frontmatter === "keep");
       expect(output).toContain("> [!note] Introduction");
       expect(output).toContain("# Root\n\nChild");
-      expect(output.includes('<!-- arbor:excluded id="next"')).toBe(options.excluded === "comment");
+      expect(output).not.toContain("arbor:excluded");
+      const hasCommentedNextBlock = output.includes("<!--\n# Next\n-->");
+      expect(hasCommentedNextBlock).toBe(options.excluded === "comment");
       expect(output.includes("# Next")).toBe(options.excluded === "comment");
       expect(output).not.toContain("arbor:block:v1");
       expect(output).not.toContain("arbor:structure");
@@ -126,7 +128,9 @@ describe("clean Arbor exports", () => {
       { frontmatter: "omit", excluded: "comment" }
     );
 
-    expect(output).toContain('<!-- arbor:excluded id="unsafe&#45;&#45;id"');
+    expect(output.startsWith("<!--\n")).toBe(true);
+    expect(output).not.toContain("unsafe--id");
+    expect(output).not.toContain("arbor:");
     expect(output).toContain("<!&#45;&#45; nested &#45;&#45;>");
     expect(output).toContain("alpha&#45;&#45;beta");
     expect(output).toContain("const token = '&#45;&#45;';");
