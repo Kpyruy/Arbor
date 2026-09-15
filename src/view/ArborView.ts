@@ -3938,6 +3938,7 @@ export class ArborView extends FileView {
       return createDefaultOutputState();
     }
     this.state.outputState = deepClone(next);
+    this.syncVisibleOutputCardPresentations();
     this.render();
     await this.persistState("Switch output profile");
     return deepClone(this.state.outputState);
@@ -5281,6 +5282,33 @@ export class ArborView extends FileView {
       setIcon(badge, presentation.badgeIcon);
       badge.dataset.icon = presentation.badgeIcon;
     }
+  }
+
+  private syncVisibleOutputCardPresentations(): void {
+    if (!this.state) {
+      return;
+    }
+
+    const outputProfile = getActiveOutputProfile(this.state.outputState);
+    const outputResolutions = resolveOutputStates(this.state.metadata, outputProfile);
+    const context = this.viewContext
+      ? { ...this.viewContext, outputProfile, outputResolutions }
+      : null;
+    if (context) {
+      this.viewContext = context;
+    }
+    this.syncOutputProfileButton();
+
+    const syncCard = (card: HTMLElement): void => {
+      const blockId = card.dataset.blockId;
+      if (blockId) {
+        this.syncOutputCardPresentation(card, blockId, context);
+      }
+    };
+    this.columnsEl?.querySelectorAll<HTMLElement>(".arbor-card[data-block-id]").forEach(syncCard);
+    this.overviewSurfaceEl
+      ?.querySelectorAll<HTMLElement>(".arbor-overview-card[data-block-id]")
+      .forEach(syncCard);
   }
 
   private async copyBlockLink(blockId: BranchBlockId): Promise<void> {

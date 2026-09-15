@@ -386,6 +386,50 @@ describe("Output Profiles manager UI", () => {
     await expect(activation).resolves.toMatchObject({ activeProfileId: "draft" });
   });
 
+  it("updates visible Tree Overview cards before profile persistence finishes", async () => {
+    const pendingSave = deferred();
+    const classNames = new Set<string>();
+    const attributes = new Map<string, string>();
+    const badge = { dataset: {} };
+    const card = {
+      dataset: { blockId: "root" },
+      addClass: (...names: string[]) => names.forEach((name) => classNames.add(name)),
+      removeClass: (...names: string[]) => names.forEach((name) => classNames.delete(name)),
+      querySelector: () => null,
+      setAttr: (name: string, value: string) => attributes.set(name, value),
+      removeAttribute: (name: string) => attributes.delete(name),
+      createSpan: () => badge
+    } as unknown as HTMLElement;
+    const view = Object.create(arborViewUi.ArborView.prototype) as ArborViewUiModule["ArborView"] & {
+      state: {
+        metadata: BranchTreeMetadata;
+        outputState: ArborOutputState;
+        outputError: null;
+      };
+      viewContext: null;
+      overviewSurfaceEl: { querySelectorAll: () => HTMLElement[] };
+      commitEditIfNeeded: () => Promise<void>;
+      persistState: () => Promise<void>;
+      render: () => void;
+      applyActiveOutputProfile: (next: ArborOutputState) => Promise<ArborOutputState>;
+    };
+    view.state = { metadata: tree(), outputState: outputState("full"), outputError: null };
+    view.viewContext = null;
+    view.overviewSurfaceEl = { querySelectorAll: () => [card] };
+    view.commitEditIfNeeded = async () => undefined;
+    view.persistState = () => pendingSave.promise;
+    view.render = () => undefined;
+
+    const activation = view.applyActiveOutputProfile(outputState("draft"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(classNames.has("is-output-excluded-direct")).toBe(true);
+    expect(attributes.get("aria-label")).toContain("Excluded directly from output profile Draft");
+    pendingSave.resolve();
+    await activation;
+  });
+
   it("keeps only the accessible Obsidian tooltip on excluded cards", () => {
     const attributes = new Map<string, string>([["title", "stale browser tooltip"]]);
     const badge = { dataset: {} };
