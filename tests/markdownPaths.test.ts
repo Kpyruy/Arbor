@@ -9,7 +9,11 @@ describe("available Markdown paths", () => {
   });
 
   it("uses the first free numbered filename without overwriting an existing export", () => {
-    const existing = new Set(["Drafts/Essay — export.md", "Drafts/Essay — export 2.md"]);
+    const existing = new Set([
+      "Drafts/Essay — export.md",
+      "Drafts/Essay — export 1.md",
+      "Drafts/Essay — export 2.md"
+    ]);
 
     expect(buildAvailableMarkdownPath("Drafts", "Essay — export", (path) => existing.has(path))).toBe(
       "Drafts/Essay — export 3.md"
@@ -18,5 +22,13 @@ describe("available Markdown paths", () => {
 
   it("does not add a leading slash in the vault root", () => {
     expect(buildAvailableMarkdownPath("", "Essay — export", () => false)).toBe("Essay — export.md");
+  });
+
+  it("normalizes Obsidian's root folder and numbers repeated exports from one", () => {
+    const existing = new Set(["Essay — export.md"]);
+
+    expect(buildAvailableMarkdownPath("/", "Essay — export", (path) => existing.has(path))).toBe(
+      "Essay — export 1.md"
+    );
   });
 });

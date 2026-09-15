@@ -358,6 +358,63 @@ describe("Output Profiles manager UI", () => {
     });
   });
 
+  it("renders an active profile before its asynchronous persistence finishes", async () => {
+    const pendingSave = deferred();
+    const renderedProfileIds: string[] = [];
+    const view = Object.create(arborViewUi.ArborView.prototype) as ArborViewUiModule["ArborView"] & {
+      state: {
+        metadata: BranchTreeMetadata;
+        outputState: ArborOutputState;
+        outputError: null;
+      };
+      commitEditIfNeeded: () => Promise<void>;
+      persistState: () => Promise<void>;
+      render: () => void;
+      applyActiveOutputProfile: (next: ArborOutputState) => Promise<ArborOutputState>;
+    };
+    view.state = { metadata: tree(), outputState: outputState("full"), outputError: null };
+    view.commitEditIfNeeded = async () => undefined;
+    view.persistState = () => pendingSave.promise;
+    view.render = () => renderedProfileIds.push(view.state.outputState.activeProfileId);
+
+    const activation = view.applyActiveOutputProfile(outputState("draft"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(renderedProfileIds).toEqual(["draft"]);
+    pendingSave.resolve();
+    await expect(activation).resolves.toMatchObject({ activeProfileId: "draft" });
+  });
+
+  it("keeps only the accessible Obsidian tooltip on excluded cards", () => {
+    const attributes = new Map<string, string>([["title", "stale browser tooltip"]]);
+    const badge = { dataset: {} };
+    const card = {
+      addClass: () => undefined,
+      removeClass: () => undefined,
+      querySelector: () => null,
+      setAttr: (name: string, value: string) => attributes.set(name, value),
+      removeAttribute: (name: string) => attributes.delete(name),
+      createSpan: () => badge
+    } as unknown as HTMLElement;
+    const view = Object.create(arborViewUi.ArborView.prototype) as ArborViewUiModule["ArborView"] & {
+      state: {
+        metadata: BranchTreeMetadata;
+        outputState: ArborOutputState;
+        outputError: null;
+      };
+      viewContext: null;
+      syncOutputCardPresentation: (card: HTMLElement, blockId: string) => void;
+    };
+    view.state = { metadata: tree(), outputState: outputState("draft"), outputError: null };
+    view.viewContext = null;
+
+    view.syncOutputCardPresentation(card, "root");
+
+    expect(attributes.get("aria-label")).toContain("Excluded directly from output profile Draft");
+    expect(attributes.has("title")).toBe(false);
+  });
+
   it("marks a new child inherited from an excluded parent as excluded", () => {
     const before = tree();
     const created = addChild(before, "root");

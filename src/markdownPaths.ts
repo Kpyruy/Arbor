@@ -3,11 +3,12 @@ export function buildAvailableMarkdownPath(
   baseName: string,
   exists: (candidate: string) => boolean
 ): string {
-  let index = 1;
+  const normalizedFolderPath = folderPath === "/" ? "" : folderPath;
+  let index = 0;
   while (true) {
-    const suffix = index === 1 ? "" : ` ${index}`;
+    const suffix = index === 0 ? "" : ` ${index}`;
     const fileName = `${baseName}${suffix}.md`;
-    const candidate = folderPath ? `${folderPath}/${fileName}` : fileName;
+    const candidate = normalizedFolderPath ? `${normalizedFolderPath}/${fileName}` : fileName;
     if (!exists(candidate)) {
       return candidate;
     }

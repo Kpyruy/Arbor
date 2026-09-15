@@ -160,7 +160,6 @@ export interface OutputCardPresentation {
   className: "is-output-excluded-direct" | "is-output-excluded-inherited" | null;
   badgeIcon: "eye-off" | null;
   ariaLabel: string;
-  tooltip: string | null;
 }
 
 export function getBlockOutputMenuActions(state: ArborOutputState): BlockOutputMenuAction[] {
@@ -191,8 +190,7 @@ export function getOutputCardPresentation(
     return {
       className: null,
       badgeIcon: null,
-      ariaLabel: `${blockLabel}. Included in output profile ${profile.name}.`,
-      tooltip: null
+      ariaLabel: `${blockLabel}. Included in output profile ${profile.name}.`
     };
   }
 
@@ -201,8 +199,7 @@ export function getOutputCardPresentation(
     return {
       className: "is-output-excluded-direct",
       badgeIcon: "eye-off",
-      ariaLabel: `${blockLabel}. ${reason}`,
-      tooltip: reason
+      ariaLabel: `${blockLabel}. ${reason}`
     };
   }
 
@@ -212,8 +209,7 @@ export function getOutputCardPresentation(
   return {
     className: "is-output-excluded-inherited",
     badgeIcon: "eye-off",
-    ariaLabel: `${blockLabel}. ${reason}`,
-    tooltip: reason
+    ariaLabel: `${blockLabel}. ${reason}`
   };
 }
 
@@ -2561,6 +2557,9 @@ export class ArborView extends FileView {
     }
 
     await this.syncCardContentNode(card, block);
+    if (context !== this.viewContext) {
+      return;
+    }
     this.syncOutputCardPresentation(card, block.id, context);
   }
 
@@ -3939,8 +3938,8 @@ export class ArborView extends FileView {
       return createDefaultOutputState();
     }
     this.state.outputState = deepClone(next);
-    await this.persistState("Switch output profile");
     this.render();
+    await this.persistState("Switch output profile");
     return deepClone(this.state.outputState);
   }
 
@@ -5267,11 +5266,7 @@ export class ArborView extends FileView {
       card.addClass(presentation.className);
     }
     card.setAttr("aria-label", presentation.ariaLabel);
-    if (presentation.tooltip) {
-      card.setAttr("title", presentation.tooltip);
-    } else {
-      card.removeAttribute("title");
-    }
+    card.removeAttribute("title");
 
     if (!presentation.badgeIcon) {
       existingBadge?.remove();
