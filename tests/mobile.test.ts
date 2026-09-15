@@ -57,4 +57,13 @@ describe("mobile interaction policy", () => {
     expect(compactBranchStyles).toContain("min-height: calc(100px * var(--bw-zoom));");
     expect(compactBranchStyles).toContain("font-size: calc(16px * var(--bw-content-zoom));");
   });
+
+  it("keeps the mobile profile pill slightly separated from the adjacent controls", () => {
+    const styles = readFileSync(resolve(process.cwd(), "styles.css"), "utf8");
+
+    expect(styles).toContain(".arbor-view.has-touch-controls .arbor-output-profile-button {\n  right: 200px;");
+    expect(styles).toContain(
+      ".arbor-view.has-touch-controls.is-rtl .arbor-output-profile-button { left: 200px; right: auto; }"
+    );
+  });
 });

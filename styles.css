@@ -2605,7 +2605,7 @@
 .arbor-view.has-touch-controls .arbor-theme-button { right: 96px; }
 .arbor-view.has-touch-controls .arbor-zoom-indicator { right: 144px; }
 .arbor-view.has-touch-controls .arbor-output-profile-button {
-  right: 192px;
+  right: 200px;
   min-width: 44px;
   max-width: calc(100% - 248px);
   padding: 0 10px;
@@ -2615,7 +2615,7 @@
 .arbor-view.has-touch-controls.is-rtl .arbor-markdown-button { left: 48px; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-theme-button { left: 96px; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-zoom-indicator { left: 144px; right: auto; }
-.arbor-view.has-touch-controls.is-rtl .arbor-output-profile-button { left: 192px; right: auto; }
+.arbor-view.has-touch-controls.is-rtl .arbor-output-profile-button { left: 200px; right: auto; }
 .arbor-view.has-touch-controls.is-rtl .arbor-overview-button { right: 0; left: auto; }
 
 .arbor-touch-dock {
