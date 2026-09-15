@@ -5,20 +5,26 @@ import { getReleaseNote, shouldShowReleaseNotice } from "../src/releaseNotice";
 
 describe("release notice", () => {
   it("does not show a release note on a fresh install", () => {
-    expect(shouldShowReleaseNotice(undefined, "0.2.8", true)).toBe(false);
+    expect(shouldShowReleaseNotice(undefined, "0.2.9", true)).toBe(false);
   });
 
   it("shows only the current registered release after an update", () => {
-    expect(shouldShowReleaseNotice("0.2.7", "0.2.8", false)).toBe(true);
-    const releaseNote = getReleaseNote("0.2.8");
-    expect(releaseNote?.version).toBe("0.2.8");
-    expect(typeof releaseNote?.title).toBe("string");
-    expect(Array.isArray(releaseNote?.changes)).toBe(true);
+    expect(shouldShowReleaseNotice("0.2.8", "0.2.9", false)).toBe(true);
+    const releaseNote = getReleaseNote("0.2.9");
+    expect(releaseNote).toMatchObject({
+      version: "0.2.9",
+      title: "Shape every draft"
+    });
+    expect(releaseNote?.changes).toEqual(expect.arrayContaining([
+      expect.stringContaining("Output Profiles"),
+      expect.stringContaining("Output Preview"),
+      expect.stringContaining("clean Markdown")
+    ]));
   });
 
   it("does not repeat a seen, downgraded, or unregistered release", () => {
-    expect(shouldShowReleaseNotice("0.2.8", "0.2.8", false)).toBe(false);
-    expect(shouldShowReleaseNotice("0.2.9", "0.2.8", false)).toBe(false);
+    expect(shouldShowReleaseNotice("0.2.9", "0.2.9", false)).toBe(false);
+    expect(shouldShowReleaseNotice("0.3.0", "0.2.9", false)).toBe(false);
     expect(shouldShowReleaseNotice("0.2.4", "9.9.9", false)).toBe(false);
   });
 

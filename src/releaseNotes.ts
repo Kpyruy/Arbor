@@ -10,6 +10,20 @@ export interface ArborReleaseNote {
 
 export const ARBOR_RELEASE_NOTES: readonly ArborReleaseNote[] = [
   {
+    version: "0.2.9",
+    title: "Shape every draft",
+    changes: [
+      "Output Profiles let one complete Arbor tree hold Draft, Short, Final and other versions.",
+      "Include or exclude individual blocks and complete subtrees, with inherited choices shown directly on cards.",
+      "Output Preview renders the active profile before export, using the same projection as the clean Markdown copy.",
+      "Clean Markdown export can omit hidden blocks or preserve them as plain comments without Arbor labels."
+    ],
+    action: {
+      label: "Open Arbor settings",
+      id: "open-settings"
+    }
+  },
+  {
     version: "0.2.8",
     title: "Take Arbor with you",
     changes: [

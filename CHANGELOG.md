@@ -4,6 +4,8 @@ All notable changes to Arbor should be documented in this file.
 
 ## Unreleased
 
+## 0.2.9 - 2026-09-15
+
 ### Added
 
 - added named Output Profiles so one complete Arbor tree can produce independent Draft, Short, Final, or other versions
@@ -21,6 +23,13 @@ All notable changes to Arbor should be documented in this file.
 ### Fixed
 
 - kept visible block markers on their own lines after reparenting beneath a block with no trailing separator
+- removed Arbor labels and block IDs from excluded content preserved as HTML comments in clean exports
+- generated numbered clean-export filenames reliably, including for notes stored in the vault root
+- refreshed Output Profile styling immediately in both the Branch Editor and Tree Overview
+- kept Output Profile and Tree Overview controls interactive while moving between presentation modes
+- prevented stale Tree Overview selection animations and profile renders from overwriting the latest state
+- removed duplicate native tooltips from excluded cards while preserving accessible Obsidian tooltips
+- refined mobile spacing for the Output Profile control
 
 ## 0.2.7 - 2026-09-03
 
