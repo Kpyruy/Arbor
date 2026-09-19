@@ -49,6 +49,13 @@ describe("Obsidian plugin review compatibility", () => {
     }
   });
 
+  it("keeps extracted modal and overview DOM owners present", () => {
+    expect(readSource("src/view/modals/ArborConfirmModal.ts")).toContain("export class ArborConfirmModal");
+    expect(readSource("src/view/modals/CleanExportModal.ts")).toContain("export class CleanExportModal");
+    expect(readSource("src/view/modals/TreeOverviewExportModal.ts")).toContain("export class TreeOverviewExportModal");
+    expect(readSource("src/view/overview/overviewDom.ts")).toContain("export function renderOverviewLinks(");
+  });
+
   it("does not use Obsidian APIs newer than the declared minimum version", () => {
     const main = readSource("src/main.ts");
 

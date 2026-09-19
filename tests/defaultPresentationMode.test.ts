@@ -87,7 +87,7 @@ describe("default presentation mode", () => {
   });
 
   it("groups Tree Overview export format and quality into stable columns", () => {
-    const modal = sourceClass("src/view/ArborView.ts", "TreeOverviewExportModal");
+    const modal = sourceClass("src/view/modals/TreeOverviewExportModal.ts", "TreeOverviewExportModal");
 
     expect(modal).toContain('const formatGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });');
     expect(modal).toContain('const qualityGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });');

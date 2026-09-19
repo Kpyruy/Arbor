@@ -70,7 +70,7 @@ import {
   setActiveOutputProfile
 } from "../outputProfiles";
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
-import { buildCleanExportDocument, CleanExportOptions } from "../storage/cleanExport";
+import { buildCleanExportDocument } from "../storage/cleanExport";
 import { loadImportedBranchDocument } from "../storage/reconcile";
 import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
@@ -83,14 +83,11 @@ import { resolveNumericChildTarget } from "../numericNavigation";
 import {
   resolveTreeOverviewExportSize,
   resolveTreeOverviewExportLinkStyle,
-  DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY,
-  MOBILE_TREE_OVERVIEW_EXPORT_LIMITS,
-  TreeOverviewExportFormat,
-  TreeOverviewExportQuality
+  MOBILE_TREE_OVERVIEW_EXPORT_LIMITS
 } from "../treeOverviewExport";
 import { buildSinglePageTreeOverviewPdf } from "../treeOverviewPdf";
 import { getBreadcrumbScrollInsets, getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey, getVisualBreadcrumbOrder } from "../layoutDirection";
-import { buildOverviewLayout, buildOverviewLinkPath } from "../model/overviewLayout";
+import { buildOverviewLayout } from "../model/overviewLayout";
 import {
   resolveOverviewArrowTarget,
   resolveOverviewCardSelectionState,
@@ -128,6 +125,10 @@ import {
   getOutputCardPresentation,
   syncOutputCardPresentation
 } from "./output/outputPresentation";
+import { ArborConfirmModal } from "./modals/ArborConfirmModal";
+import { CleanExportModal } from "./modals/CleanExportModal";
+import { TreeOverviewExportModal } from "./modals/TreeOverviewExportModal";
+import { applyOverviewLayout } from "./overview/overviewDom";
 export {
   getBlockOutputMenuActions,
   getOutputCardPresentation
@@ -143,250 +144,6 @@ interface DragState {
   targetParentId: BranchBlockId | null;
   targetIndex: number;
   columnKey: string;
-}
-
-interface TreeOverviewExportOptions {
-  format: TreeOverviewExportFormat;
-  quality: TreeOverviewExportQuality;
-}
-
-class ArborConfirmModal extends Modal {
-  private resolved = false;
-  private resolver: (value: boolean) => void = () => undefined;
-
-  constructor(
-    app: App,
-    private readonly titleText: string,
-    private readonly bodyText: string,
-    private readonly confirmText: string
-  ) {
-    super(app);
-  }
-
-  waitForChoice(): Promise<boolean> {
-    return new Promise((resolve) => {
-      this.resolver = resolve;
-      this.open();
-    });
-  }
-
-  onOpen(): void {
-    const { contentEl, modalEl } = this;
-    modalEl.addClass("arbor-confirm-modal");
-    contentEl.empty();
-    contentEl.createEl("h3", { text: this.titleText });
-    contentEl.createEl("p", { text: this.bodyText });
-
-    const actionsEl = contentEl.createDiv({ cls: "arbor-confirm-actions" });
-    new ButtonComponent(actionsEl)
-      .setButtonText("Cancel")
-      .onClick(() => this.finish(false));
-
-    new ButtonComponent(actionsEl)
-      .setButtonText(this.confirmText)
-      .setWarning()
-      .setCta()
-      .onClick(() => this.finish(true));
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
-    if (!this.resolved) {
-      this.resolved = true;
-      this.resolver(false);
-    }
-  }
-
-  private finish(value: boolean): void {
-    if (this.resolved) {
-      return;
-    }
-
-    this.resolved = true;
-    this.resolver(value);
-    this.close();
-  }
-}
-
-class CleanExportModal extends Modal {
-  private resolved = false;
-  private options: CleanExportOptions = { frontmatter: "keep", excluded: "omit" };
-  private resolver: (value: CleanExportOptions | null) => void = () => undefined;
-
-  waitForChoice(): Promise<CleanExportOptions | null> {
-    return new Promise((resolve) => {
-      this.resolver = resolve;
-      this.open();
-    });
-  }
-
-  onOpen(): void {
-    const { contentEl } = this;
-    contentEl.empty();
-    this.modalEl.addClass("arbor-export-modal");
-    contentEl.createEl("h3", { text: "Create clean export copy" });
-    contentEl.createEl("p", {
-      text: "Choose what the Markdown copy should keep. The source note stays unchanged."
-    });
-
-    const choicesEl = contentEl.createDiv({ cls: "arbor-clean-export-choices" });
-    const frontmatterGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });
-    frontmatterGroup.createEl("strong", { text: "YAML frontmatter" });
-    this.addChoice(frontmatterGroup, { group: "frontmatter", value: "keep" }, "Keep YAML");
-    this.addChoice(frontmatterGroup, { group: "frontmatter", value: "omit" }, "Export body only");
-    const excludedGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });
-    excludedGroup.createEl("strong", { text: "Excluded blocks" });
-    this.addChoice(excludedGroup, { group: "excluded", value: "omit" }, "Omit excluded blocks");
-    this.addChoice(
-      excludedGroup,
-      { group: "excluded", value: "comment" },
-      "Keep excluded blocks as comments"
-    );
-
-    const actionsEl = contentEl.createDiv({ cls: "arbor-confirm-actions" });
-    new ButtonComponent(actionsEl)
-      .setButtonText("Cancel")
-      .onClick(() => this.finish(null));
-    new ButtonComponent(actionsEl)
-      .setButtonText("Create export")
-      .setCta()
-      .onClick(() => this.finish({ ...this.options }));
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
-    if (!this.resolved) {
-      this.resolved = true;
-      this.resolver(null);
-    }
-  }
-
-  private addChoice(
-    container: HTMLElement,
-    choice:
-      | { group: "frontmatter"; value: CleanExportOptions["frontmatter"] }
-      | { group: "excluded"; value: CleanExportOptions["excluded"] },
-    label: string
-  ): void {
-    const choiceEl = container.createEl("label", { cls: "arbor-clean-export-choice" });
-    const input = choiceEl.createEl("input", {
-      attr: {
-        type: "radio",
-        name: `arbor-clean-export-${choice.group}`,
-        value: choice.value
-      }
-    });
-    input.checked = this.options[choice.group] === choice.value;
-    input.addEventListener("change", () => {
-      if (!input.checked) {
-        return;
-      }
-      if (choice.group === "frontmatter") {
-        this.options = { ...this.options, frontmatter: choice.value };
-      } else {
-        this.options = { ...this.options, excluded: choice.value };
-      }
-    });
-    choiceEl.createSpan({ text: label });
-  }
-
-  private finish(value: CleanExportOptions | null): void {
-    if (this.resolved) {
-      return;
-    }
-    this.resolved = true;
-    this.resolver(value);
-    this.close();
-  }
-}
-
-class TreeOverviewExportModal extends Modal {
-  private resolved = false;
-  private format: TreeOverviewExportFormat = "png";
-  private quality: TreeOverviewExportQuality = Platform.isMobile ? "standard" : DEFAULT_TREE_OVERVIEW_EXPORT_QUALITY;
-  private resolver: (value: TreeOverviewExportOptions | null) => void = () => undefined;
-
-  waitForChoice(): Promise<TreeOverviewExportOptions | null> {
-    return new Promise((resolve) => {
-      this.resolver = resolve;
-      this.open();
-    });
-  }
-
-  onOpen(): void {
-    const { contentEl } = this;
-    contentEl.empty();
-    contentEl.createEl("h3", { text: "Export tree overview" });
-    this.modalEl.addClass("arbor-export-modal");
-    contentEl.createEl("p", {
-      text: "Export every branch as one full-page image or PDF. The current zoom and viewport position do not affect the result."
-    });
-
-    const choicesEl = contentEl.createDiv({ cls: "arbor-clean-export-choices" });
-    const formatGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });
-    formatGroup.createDiv({ cls: "arbor-tree-export-choice-heading", text: "Format" });
-    this.addFormatChoice(formatGroup, "png", "PNG image");
-    this.addFormatChoice(formatGroup, "pdf", "PDF — one large page");
-    const qualityGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });
-    qualityGroup.createDiv({ cls: "arbor-tree-export-choice-heading", text: "Quality" });
-    this.addQualityChoice(qualityGroup, "standard", Platform.isMobile ? "Standard — 1× (recommended)" : "Standard — 1×");
-    this.addQualityChoice(qualityGroup, "high", Platform.isMobile ? "High — 2×" : "High — 2× (recommended)");
-    this.addQualityChoice(qualityGroup, "ultra", "Ultra — 4×");
-
-    const actionsEl = contentEl.createDiv({ cls: "arbor-confirm-actions" });
-    new ButtonComponent(actionsEl)
-      .setButtonText("Cancel")
-      .onClick(() => this.finish(null));
-    new ButtonComponent(actionsEl)
-      .setButtonText("Export tree overview")
-      .setCta()
-      .onClick(() => this.finish({ format: this.format, quality: this.quality }));
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
-    if (!this.resolved) {
-      this.resolved = true;
-      this.resolver(null);
-    }
-  }
-
-  private addFormatChoice(container: HTMLElement, value: TreeOverviewExportFormat, label: string): void {
-    const choiceEl = container.createEl("label", { cls: "arbor-clean-export-choice" });
-    const input = choiceEl.createEl("input", {
-      attr: { type: "radio", name: "arbor-tree-export-format", value }
-    });
-    input.checked = this.format === value;
-    input.addEventListener("change", () => {
-      if (input.checked) {
-        this.format = value;
-      }
-    });
-    choiceEl.createSpan({ text: label });
-  }
-
-  private addQualityChoice(container: HTMLElement, value: TreeOverviewExportQuality, label: string): void {
-    const choiceEl = container.createEl("label", { cls: "arbor-clean-export-choice" });
-    const input = choiceEl.createEl("input", {
-      attr: { type: "radio", name: "arbor-tree-export-quality", value }
-    });
-    input.checked = this.quality === value;
-    input.addEventListener("change", () => {
-      if (input.checked) {
-        this.quality = value;
-      }
-    });
-    choiceEl.createSpan({ text: label });
-  }
-
-  private finish(value: TreeOverviewExportOptions | null): void {
-    if (this.resolved) {
-      return;
-    }
-    this.resolved = true;
-    this.resolver(value);
-    this.close();
-  }
 }
 
 export class ArborView extends FileView {
@@ -977,7 +734,7 @@ export class ArborView extends FileView {
         direction: this.plugin.settings.layoutDirection
       });
       this.prepareTreeOverviewExportFrame(frame, scene, surface, layout.width, layout.height, padding);
-      this.applyOverviewLayout(scene, surface, cardsById, layout, 1);
+      applyOverviewLayout(scene, surface, cardsById, layout, 1, this.plugin.settings.layoutDirection);
       this.applyTreeOverviewExportLinkStyle(surface);
       await this.waitForTreeOverviewExportAssets(surface);
 
@@ -2643,7 +2400,7 @@ export class ArborView extends FileView {
       cardHeights: measuredHeights,
       direction: this.plugin.settings.layoutDirection
     });
-    this.applyOverviewLayout(scene, surface, cardsById, layout, zoom);
+    applyOverviewLayout(scene, surface, cardsById, layout, zoom, this.plugin.settings.layoutDirection);
     previousSurface.remove();
     surface.removeClass("is-staging");
     this.overviewSurfaceEl = surface;
@@ -2656,36 +2413,6 @@ export class ArborView extends FileView {
     }
     this.restoreOverviewKeyboardFocusAfterMutation();
     this.syncTouchDock();
-  }
-
-  private applyOverviewLayout(
-    scene: HTMLElement,
-    surface: HTMLElement,
-    cardsById: ReadonlyMap<BranchBlockId, HTMLElement>,
-    layout: ReturnType<typeof buildOverviewLayout>,
-    zoom: number
-  ): void {
-    scene.setCssProps({
-      "--arbor-overview-zoom": String(zoom),
-      "--arbor-overview-width": `${layout.width * zoom}px`,
-      "--arbor-overview-height": `${layout.height * zoom}px`
-    });
-    scene.dataset.overviewWidth = String(layout.width);
-    scene.dataset.overviewHeight = String(layout.height);
-    surface.setCssProps({
-      "--arbor-overview-surface-width": `${layout.width}px`,
-      "--arbor-overview-surface-height": `${layout.height}px`
-    });
-    layout.nodes.forEach((node) => {
-      cardsById.get(node.id)?.setCssProps({
-        "--arbor-overview-x": `${node.x}px`,
-        "--arbor-overview-y": `${node.y}px`,
-        "--arbor-overview-card-width": `${node.width}px`,
-        "--arbor-overview-card-height": `${node.height}px`
-      });
-    });
-    surface.querySelector(".arbor-overview-links")?.remove();
-    this.renderOverviewLinks(surface, layout);
   }
 
   private openOverviewEditorInPlace(block: BranchBlock): boolean {
@@ -2734,30 +2461,6 @@ export class ArborView extends FileView {
     });
     this.syncOutputCardPresentation(card, block.id, this.viewContext);
     card.focus({ preventScroll: true });
-  }
-
-  private renderOverviewLinks(scene: HTMLElement, layout: ReturnType<typeof buildOverviewLayout>): void {
-    const svg = scene.createSvg("svg", {
-      cls: "arbor-overview-links",
-      attr: {
-        viewBox: `0 0 ${layout.width} ${layout.height}`,
-        width: layout.width,
-        height: layout.height
-      },
-      prepend: true
-    });
-    const nodesById = new Map(layout.nodes.map((node) => [node.id, node]));
-    layout.links.forEach((link) => {
-      const parent = nodesById.get(link.parentId);
-      const child = nodesById.get(link.childId);
-      if (!parent || !child) {
-        return;
-      }
-      svg.createSvg("path", {
-        cls: "arbor-overview-link",
-        attr: { d: buildOverviewLinkPath(parent, child, this.plugin.settings.layoutDirection) }
-      });
-    });
   }
 
   private handleOverviewPointerDown(event: PointerEvent): void {
