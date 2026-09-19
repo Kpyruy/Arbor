@@ -1,32 +1,17 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-
-function readProjectFile(relativePath: string): string {
-  return readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), "utf8");
-}
+import { readSource, sourceClass, sourceMethod } from "./helpers/viewSource";
 
 describe("default presentation mode", () => {
   it("defaults to the branch editor and restores the selected startup mode when a note opens", () => {
-    expect(readProjectFile("src/settings.ts")).toContain('defaultPresentationMode: "editor"');
-    expect(readProjectFile("src/view/ArborView.ts")).toContain("this.presentationMode = this.plugin.settings.defaultPresentationMode;");
+    expect(readSource("src/settings.ts")).toContain('defaultPresentationMode: "editor"');
+    expect(readSource("src/view/ArborView.ts")).toContain("this.presentationMode = this.plugin.settings.defaultPresentationMode;");
   });
 
   it("keeps Output Preview inside the Arbor leaf and never writes while opening, refreshing or closing", () => {
-    const source = readProjectFile("src/view/ArborView.ts");
-    const types = readProjectFile("src/types.ts");
-    const openAndClose = source.slice(
-      source.indexOf("  openOutputPreview(): void"),
-      source.indexOf("  selectBlock(blockId:")
-    );
-    const refresh = source.slice(
-      source.indexOf("  async refreshView(): Promise<void>"),
-      source.indexOf("  async refreshLayoutDirection(): Promise<void>")
-    );
-    const outputRender = source.slice(
-      source.indexOf("  private async syncOutputPreview(): Promise<void>"),
-      source.indexOf("  private async syncPreview(")
-    );
+    const types = readSource("src/types.ts");
+    const openAndClose = sourceMethod("src/view/ArborView.ts", "ArborView", "openOutputPreview");
+    const refresh = sourceMethod("src/view/ArborView.ts", "ArborView", "refreshView");
+    const outputRender = sourceMethod("src/view/ArborView.ts", "ArborView", "syncOutputPreview");
 
     expect(types).toContain('export type ArborPresentationMode = "editor" | "overview" | "output";');
     expect(openAndClose).toContain('this.presentationMode = "output";');
@@ -42,16 +27,9 @@ describe("default presentation mode", () => {
   });
 
   it("keeps the header row reserved while Output Preview hides breadcrumbs", () => {
-    const source = readProjectFile("src/view/ArborView.ts");
-    const styles = readProjectFile("styles.css");
-    const renderNow = source.slice(
-      source.indexOf("  private async renderNow(): Promise<void>"),
-      source.indexOf("  private ensureShell(): void")
-    );
-    const breadcrumbs = source.slice(
-      source.indexOf("  private syncBreadcrumbs(): void"),
-      source.indexOf("  private getBreadcrumbLabel(")
-    );
+    const styles = readSource("styles.css");
+    const renderNow = sourceMethod("src/view/ArborView.ts", "ArborView", "renderNow");
+    const breadcrumbs = sourceMethod("src/view/ArborView.ts", "ArborView", "syncBreadcrumbs");
     const reservedBreadcrumbStart = styles.indexOf(".arbor-breadcrumbs.is-reserved-hidden");
     const reservedBreadcrumbStyles = styles.slice(
       reservedBreadcrumbStart,
@@ -68,11 +46,8 @@ describe("default presentation mode", () => {
   });
 
   it("keeps one persistent profile and mode control layer outside presentation stages", () => {
-    const source = readProjectFile("src/view/ArborView.ts");
-    const touchDock = source.slice(
-      source.indexOf("  private syncTouchDock(): void"),
-      source.indexOf("  private teardownShell(): void")
-    );
+    const source = readSource("src/view/ArborView.ts");
+    const touchDock = sourceMethod("src/view/ArborView.ts", "ArborView", "syncTouchDock");
     const controlPlacement = touchDock.slice(
       touchDock.indexOf("const controlsHost"),
       touchDock.indexOf('if (this.presentationMode === "output")')
@@ -93,11 +68,7 @@ describe("default presentation mode", () => {
   });
 
   it("places Output preview immediately above clean export in the view menu", () => {
-    const source = readProjectFile("src/view/ArborView.ts");
-    const menu = source.slice(
-      source.indexOf("  private openViewMenu("),
-      source.indexOf("  private syncOutputProfileButton(")
-    );
+    const menu = sourceMethod("src/view/ArborView.ts", "ArborView", "openViewMenu");
     const outputPreviewIndex = menu.indexOf('setTitle("Output preview")');
     const cleanExportIndex = menu.indexOf('setTitle("Export clean copy…")');
 
@@ -106,11 +77,7 @@ describe("default presentation mode", () => {
   });
 
   it("groups Tree Overview export format and quality into stable columns", () => {
-    const source = readProjectFile("src/view/ArborView.ts");
-    const modal = source.slice(
-      source.indexOf("class TreeOverviewExportModal extends Modal"),
-      source.indexOf("export class ArborView")
-    );
+    const modal = sourceClass("src/view/ArborView.ts", "TreeOverviewExportModal");
 
     expect(modal).toContain('const formatGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });');
     expect(modal).toContain('const qualityGroup = choicesEl.createDiv({ cls: "arbor-clean-export-group" });');
@@ -119,11 +86,7 @@ describe("default presentation mode", () => {
   });
 
   it("refreshes the same Output Preview when the active profile changes", () => {
-    const source = readProjectFile("src/view/ArborView.ts");
-    const switchProfile = source.slice(
-      source.indexOf("  private async applyActiveOutputProfile("),
-      source.indexOf("  private async applyOutputProfileMutation(")
-    );
+    const switchProfile = sourceMethod("src/view/ArborView.ts", "ArborView", "applyActiveOutputProfile");
 
     expect(switchProfile).toContain('await this.persistState("Switch output profile")');
     expect(switchProfile).toContain("this.render();");
@@ -131,14 +94,14 @@ describe("default presentation mode", () => {
   });
 
   it("places the overview switch in the canvas and relies on one accessible tooltip", () => {
-    const source = readProjectFile("src/view/ArborView.ts");
+    const source = readSource("src/view/ArborView.ts");
 
     expect(source).toContain('this.overviewButtonEl = this.modeControlsEl.createEl("button"');
     expect(source).toContain('attr: { type: "button", "aria-label": "Open tree overview" }');
   });
 
   it("centres the selected block only when opening the overview", () => {
-    const source = readProjectFile("src/view/ArborView.ts");
+    const source = readSource("src/view/ArborView.ts");
 
     expect(source).toContain("private shouldCenterOverviewOnNextRender = false;");
     expect(source).toContain("this.shouldCenterOverviewOnNextRender = true;\n      this.presentationMode = \"overview\";");
@@ -146,7 +109,7 @@ describe("default presentation mode", () => {
   });
 
   it("places floating controls opposite the reading direction", () => {
-    const styles = readProjectFile("styles.css");
+    const styles = readSource("styles.css");
     const topControls = styles.slice(
       styles.indexOf(".arbor-zoom-indicator,"),
       styles.indexOf(".arbor-breadcrumb-connector::before")
@@ -180,7 +143,7 @@ describe("default presentation mode", () => {
   });
 
   it("opens Theme studio from a dedicated toolbar button", () => {
-    const source = readProjectFile("src/view/ArborView.ts");
+    const source = readSource("src/view/ArborView.ts");
 
     expect(source).toContain('cls: "arbor-theme-button"');
     expect(source).toContain('"aria-label": "Open theme studio"');
@@ -188,7 +151,7 @@ describe("default presentation mode", () => {
   });
 
   it("reserves the control edge before laying out breadcrumbs", () => {
-    const styles = readProjectFile("styles.css");
+    const styles = readSource("styles.css");
     const breadcrumbs = styles.slice(
       styles.indexOf(".arbor-breadcrumbs {"),
       styles.indexOf(".arbor-breadcrumbs button,")
@@ -213,7 +176,7 @@ describe("default presentation mode", () => {
   });
 
   it("animates only the newly active breadcrumb", () => {
-    const styles = readProjectFile("styles.css");
+    const styles = readSource("styles.css");
     const breadcrumbButton = styles.slice(
       styles.indexOf(".arbor-breadcrumbs button,"),
       styles.indexOf(".arbor-breadcrumb-exiting {")
@@ -234,11 +197,7 @@ describe("default presentation mode", () => {
   });
 
   it("cancels an in-flight editor scroll before arrow navigation renders the next selection", () => {
-    const view = readProjectFile("src/view/ArborView.ts");
-    const selectBlock = view.slice(
-      view.indexOf("  selectBlock(blockId:"),
-      view.indexOf("  async createRootBlock()")
-    );
+    const selectBlock = sourceMethod("src/view/ArborView.ts", "ArborView", "selectBlock");
 
     expect(selectBlock).toContain("if (selectionChanged) {\n      this.stopHorizontalScrollMotion(false);");
     expect(selectBlock.indexOf("this.stopHorizontalScrollMotion(false);")).toBeLessThan(
@@ -247,7 +206,7 @@ describe("default presentation mode", () => {
   });
 
   it("reserves the next column layout before synchronizing editor cards", () => {
-    const view = readProjectFile("src/view/ArborView.ts");
+    const view = readSource("src/view/ArborView.ts");
 
     expect(view).toContain("this.armSceneWidthForPendingScroll(columns.length)");
     expect(view.indexOf("this.armSceneWidthForPendingScroll(columns.length)")).toBeLessThan(
@@ -256,8 +215,8 @@ describe("default presentation mode", () => {
   });
 
   it("gives the newly selected card an explicit focus-entry animation", () => {
-    const view = readProjectFile("src/view/ArborView.ts");
-    const styles = readProjectFile("styles.css");
+    const view = readSource("src/view/ArborView.ts");
+    const styles = readSource("styles.css");
 
     expect(view).toContain("this.animateSelectedCard(pendingScrollBlockId)");
     expect(view).toContain('card.addClass("is-selection-entering")');
@@ -272,19 +231,15 @@ describe("default presentation mode", () => {
   });
 
   it("keeps an already visible child card still during arrow navigation", () => {
-    const view = readProjectFile("src/view/ArborView.ts");
-    const scrollIntoView = view.slice(
-      view.indexOf("  private scrollCardIntoHorizontalView("),
-      view.indexOf("  private alignColumnsToActivePath()")
-    );
+    const scrollIntoView = sourceMethod("src/view/ArborView.ts", "ArborView", "scrollCardIntoHorizontalView");
 
     expect(scrollIntoView).toContain("if (!shouldScrollLeft && !shouldScrollRight)");
     expect(scrollIntoView).not.toContain("shouldCenterSelectedBlock");
   });
 
   it("lets removed breadcrumbs exit instead of disappearing during parent navigation", () => {
-    const view = readProjectFile("src/view/ArborView.ts");
-    const styles = readProjectFile("styles.css");
+    const view = readSource("src/view/ArborView.ts");
+    const styles = readSource("styles.css");
 
     expect(view).toContain("this.animateRemovedBreadcrumbs(path)");
     expect(view).toContain('cls: "arbor-breadcrumb-exiting"');
@@ -294,13 +249,13 @@ describe("default presentation mode", () => {
   });
 
   it("keeps the selected breadcrumb on its exit animation instead of replaying its enter animation", () => {
-    const styles = readProjectFile("styles.css");
+    const styles = readSource("styles.css");
 
     expect(styles).toContain(".arbor-breadcrumb-exiting.is-active {\n  animation: arbor-breadcrumb-exit");
   });
 
   it("keeps vertical column alignment on its transform layer", () => {
-    const styles = readProjectFile("styles.css");
+    const styles = readSource("styles.css");
     const cardList = styles.slice(
       styles.indexOf(".arbor-card-list {"),
       styles.indexOf(".arbor-card-list.is-rebinding {")

@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { addChild } from "../src/model/tree";
 import { reconcileProfilesAfterTreeChange } from "../src/outputProfiles";
 import { ArborOutputState, BranchTreeMetadata } from "../src/types";
+import { deferred as createDeferred, fixtureOutput } from "./helpers/arborFixtures";
 
 type OutputProfilesUiModule = typeof import("../src/view/OutputProfilesModal");
 type ArborViewUiModule = typeof import("../src/view/ArborView");
@@ -88,23 +89,12 @@ function tree(): BranchTreeMetadata {
 }
 
 function outputState(activeProfileId = "full"): ArborOutputState {
-  return {
-    version: 1,
-    activeProfileId,
-    profiles: [{
-      id: "draft",
-      name: "Draft",
-      rules: [{ blockId: "root", state: "exclude" }]
-    }]
-  };
+  return fixtureOutput(activeProfileId);
 }
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve!: () => void;
-  const promise = new Promise<void>((complete) => {
-    resolve = complete;
-  });
-  return { promise, resolve };
+  const pending = createDeferred<void>();
+  return { promise: pending.promise, resolve: () => pending.resolve(undefined) };
 }
 
 describe("Output Profiles manager UI", () => {

@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { getEnteringBreadcrumbIds } from "../src/breadcrumbAnimation";
+import { readSource } from "./helpers/viewSource";
 
 describe("breadcrumb animation", () => {
   it("marks only blocks newly added to the path for entrance animation", () => {
@@ -17,8 +16,8 @@ describe("breadcrumb animation", () => {
   });
 
   it("applies the entrance class only from the newly entering path IDs", () => {
-    const view = readFileSync(resolve(process.cwd(), "src/view/ArborView.ts"), "utf8");
-    const styles = readFileSync(resolve(process.cwd(), "styles.css"), "utf8");
+    const view = readSource("src/view/ArborView.ts");
+    const styles = readSource("styles.css");
 
     expect(view).toContain("getEnteringBreadcrumbIds(previousPathIds, path.map((block) => block.id))");
     expect(view).toContain('button.toggleClass("is-entering", enteringBlockIds.has(block.id));');

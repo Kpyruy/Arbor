@@ -1,23 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import {
   resolveOverviewArrowTarget,
   resolveOverviewCardSelectionState,
   startOverviewSelectionAnimation
 } from "../src/overviewNavigation";
 import { BranchTreeMetadata } from "../src/types";
+import { fixtureTree } from "./helpers/arborFixtures";
+import { readSource, sourceMethod } from "./helpers/viewSource";
 
-const tree: BranchTreeMetadata = {
-  version: 1,
-  prefix: "",
-  blocks: [
-    { id: "root", parentId: null, order: 0, content: "Root", after: "" },
-    { id: "first", parentId: "root", order: 0, content: "First", after: "" },
-    { id: "second", parentId: "root", order: 1, content: "Second", after: "" },
-    { id: "leaf", parentId: "first", order: 0, content: "Leaf", after: "" }
-  ]
-};
+const tree: BranchTreeMetadata = fixtureTree();
 
 describe("overview arrow navigation", () => {
   it("moves to the parent, first child, and neighbouring siblings", () => {
@@ -60,8 +51,8 @@ describe("overview arrow navigation", () => {
   });
 
   it("keeps overview selection animation local without flashing every border", () => {
-    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
-    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const source = readSource("src/view/ArborView.ts");
+    const styles = readSource("styles.css");
     const cardStart = styles.indexOf(".arbor-overview-card {\n  position: absolute;");
     const cardStyles = styles.slice(cardStart, styles.indexOf("}", cardStart) + 1);
 
@@ -112,7 +103,7 @@ describe("overview arrow navigation", () => {
   });
 
   it("uses dashed borders for every directly or inherited excluded card", () => {
-    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const styles = readSource("styles.css");
     const exclusionsStart = styles.indexOf(".arbor-card.is-output-excluded-direct,");
     const exclusionStyles = styles.slice(exclusionsStart, styles.indexOf("}", exclusionsStart) + 1);
 
@@ -123,44 +114,28 @@ describe("overview arrow navigation", () => {
   });
 
   it("reuses numeric child navigation inside the overview keyboard handler", () => {
-    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
-    const handlerStart = source.indexOf("private handleOverviewKeyDown");
-    const handlerEnd = source.indexOf("private syncOverviewZoom", handlerStart);
-    const handler = source.slice(handlerStart, handlerEnd);
+    const handler = sourceMethod("src/view/ArborView.ts", "ArborView", "handleOverviewKeyDown");
 
     expect(handler).toContain("this.tryHandleNumericChildNavigation(event, this.state.selectedBlockId)");
   });
 
   it("reuses Ctrl/Cmd arrow creation inside the overview keyboard handler", () => {
-    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
-    const handlerStart = source.indexOf("private handleOverviewKeyDown");
-    const handlerEnd = source.indexOf("private syncOverviewZoom", handlerStart);
-    const handler = source.slice(handlerStart, handlerEnd);
+    const handler = sourceMethod("src/view/ArborView.ts", "ArborView", "handleOverviewKeyDown");
 
     expect(handler).toContain("(event.ctrlKey || event.metaKey) && this.handleDirectionalCreateShortcut(event)");
   });
 
   it("keeps the overview camera in place during keyboard navigation", () => {
-    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
-    const handlerStart = source.indexOf("private handleOverviewKeyDown");
-    const handlerEnd = source.indexOf("private syncOverviewZoom", handlerStart);
-    const handler = source.slice(handlerStart, handlerEnd);
-    const numericStart = source.indexOf("private tryHandleNumericChildNavigation");
-    const numericEnd = source.indexOf("private clearNumericNavigation", numericStart);
-    const numericNavigation = source.slice(numericStart, numericEnd);
+    const handler = sourceMethod("src/view/ArborView.ts", "ArborView", "handleOverviewKeyDown");
+    const numericNavigation = sourceMethod("src/view/ArborView.ts", "ArborView", "tryHandleNumericChildNavigation");
 
     expect(handler).not.toContain("this.shouldCenterOverviewOnNextRender = true;");
     expect(numericNavigation).not.toContain("this.presentationMode === \"overview\"");
   });
 
   it("updates selection without rebuilding the overview and smoothly reveals an off-screen card", () => {
-    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
-    const selectStart = source.indexOf("selectBlock(blockId:");
-    const selectEnd = source.indexOf("async createRootBlock", selectStart);
-    const selectBlock = source.slice(selectStart, selectEnd);
-    const followStart = source.indexOf("private revealOverviewSelectedCard");
-    const followEnd = source.indexOf("private clearOverviewZoomFrame", followStart);
-    const revealSelectedCard = source.slice(followStart, followEnd);
+    const selectBlock = sourceMethod("src/view/ArborView.ts", "ArborView", "selectBlock");
+    const revealSelectedCard = sourceMethod("src/view/ArborView.ts", "ArborView", "revealOverviewSelectedCard");
 
     expect(selectBlock).toContain('this.presentationMode === "overview"');
     expect(selectBlock).toContain("this.syncOverviewSelection(selectionChanged && options?.reveal !== false)");
@@ -169,35 +144,20 @@ describe("overview arrow navigation", () => {
   });
 
   it("uses the regular block menu when right-clicking an overview card", () => {
-    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
-    const overviewStart = source.indexOf("private async syncTreeOverview");
-    const overviewEnd = source.indexOf("private applyOverviewLayout", overviewStart);
-    const overview = source.slice(overviewStart, overviewEnd);
+    const overview = sourceMethod("src/view/ArborView.ts", "ArborView", "syncTreeOverview");
 
     expect(overview).toContain('card.addEventListener("contextmenu"');
     expect(overview).toContain("this.buildBlockMenu(node.id).showAtMouseEvent(event)");
   });
 
   it("opens overview editing from Enter and double-click without moving the camera", () => {
-    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
-    const overviewStart = source.indexOf("private async syncTreeOverview");
-    const overviewEnd = source.indexOf("private applyOverviewLayout", overviewStart);
-    const overview = source.slice(overviewStart, overviewEnd);
-    const handlerStart = source.indexOf("private handleOverviewKeyDown");
-    const handlerEnd = source.indexOf("private syncOverviewZoom", handlerStart);
-    const handler = source.slice(handlerStart, handlerEnd);
-    const editStart = source.indexOf("private beginEditingBlock");
-    const editEnd = source.indexOf("selectParentBlock", editStart);
-    const beginEditing = source.slice(editStart, editEnd);
-    const commitStart = source.indexOf("private async commitEditingSession");
-    const commitEnd = source.indexOf("private scheduleEditingSessionCommit", commitStart);
-    const commitEditing = source.slice(commitStart, commitEnd);
-    const cancelStart = source.indexOf("private cancelEditingSession");
-    const cancelEnd = source.indexOf("private async commitEditingSession", cancelStart);
-    const cancelEditing = source.slice(cancelStart, cancelEnd);
-    const inPlaceStart = source.indexOf("private openOverviewEditorInPlace");
-    const inPlaceEnd = source.indexOf("private async restoreOverviewCardContentInPlace", inPlaceStart);
-    const inPlaceEditor = source.slice(inPlaceStart, inPlaceEnd);
+    const source = readSource("src/view/ArborView.ts");
+    const overview = sourceMethod("src/view/ArborView.ts", "ArborView", "syncTreeOverview");
+    const handler = sourceMethod("src/view/ArborView.ts", "ArborView", "handleOverviewKeyDown");
+    const beginEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "beginEditingBlock");
+    const commitEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "commitEditingSession");
+    const cancelEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "cancelEditingSession");
+    const inPlaceEditor = sourceMethod("src/view/ArborView.ts", "ArborView", "openOverviewEditorInPlace");
 
     expect(overview).toContain('this.selectBlock(node.id, { focus: false, reveal: false })');
     expect(overview).toContain('this.beginEditingBlock(node.id, "overview")');
@@ -214,13 +174,9 @@ describe("overview arrow navigation", () => {
   });
 
   it("restores overview keyboard focus after deleting a block", () => {
-    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
-    const handlerStart = source.indexOf("private handleOverviewKeyDown");
-    const handlerEnd = source.indexOf("private syncOverviewZoom", handlerStart);
-    const handler = source.slice(handlerStart, handlerEnd);
-    const mutationStart = source.indexOf("private async applyMutation");
-    const mutationEnd = source.indexOf("private currentHistorySnapshot", mutationStart);
-    const mutation = source.slice(mutationStart, mutationEnd);
+    const source = readSource("src/view/ArborView.ts");
+    const handler = sourceMethod("src/view/ArborView.ts", "ArborView", "handleOverviewKeyDown");
+    const mutation = sourceMethod("src/view/ArborView.ts", "ArborView", "applyMutation");
 
     expect(handler).toContain("void this.deleteSelectedBlock()");
     expect(mutation).toContain("this.shouldRestoreOverviewKeyboardFocusAfterMutation =");
@@ -229,11 +185,8 @@ describe("overview arrow navigation", () => {
   });
 
   it("keeps the current overview visible while a structural update is rendered", () => {
-    const source = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
-    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
-    const overviewStart = source.indexOf("private async syncTreeOverview");
-    const overviewEnd = source.indexOf("private applyOverviewLayout", overviewStart);
-    const overview = source.slice(overviewStart, overviewEnd);
+    const styles = readSource("styles.css");
+    const overview = sourceMethod("src/view/ArborView.ts", "ArborView", "syncTreeOverview");
 
     expect(overview).toContain("const previousSurface = this.overviewSurfaceEl;");
     expect(overview).toContain('cls: "arbor-overview-surface is-staging"');

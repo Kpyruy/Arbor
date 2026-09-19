@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   inspectManagedBranchDocumentText,
@@ -10,62 +8,18 @@ import {
 } from "../src/opening";
 import { buildBranchDocument } from "../src/storage/document";
 import { linearizeTree } from "../src/storage/serializer";
-import { BranchTreeMetadata } from "../src/types";
+import { fixtureTree } from "./helpers/arborFixtures";
+import { sourceMethod } from "./helpers/viewSource";
 
-function readProjectFile(relativePath: string): string {
-  return readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), "utf8");
-}
-
-function sourceMethod(source: string, start: string, end: string): string {
-  const startIndex = source.indexOf(start);
-  const endIndex = source.indexOf(end, startIndex);
-  if (startIndex === -1 || endIndex === -1) {
-    throw new Error(`Could not locate source contract: ${start}`);
-  }
-  return source.slice(startIndex, endIndex);
-}
-
-function metadataFixture(): BranchTreeMetadata {
-  return {
-    version: 1,
-    prefix: "",
-    blocks: [
-      {
-        id: "root-1",
-        parentId: null,
-        order: 0,
-        content: "# Root\n\nParagraph",
-        after: "\n\n"
-      },
-      {
-        id: "child-1",
-        parentId: "root-1",
-        order: 0,
-        content: "Child block",
-        after: ""
-      }
-    ]
-  };
+function metadataFixture() {
+  return fixtureTree();
 }
 
 describe("managed note opening", () => {
   it("opens the current Arbor file in Markdown and keeps Output Preview in the existing leaf", () => {
-    const source = readProjectFile("src/view/ArborView.ts");
-    const openCurrentFile = sourceMethod(
-      source,
-      "  private async openCurrentFileInMarkdown(): Promise<void>",
-      "  async exportCleanCopy(): Promise<void>"
-    );
-    const outputPreview = sourceMethod(
-      source,
-      "  openOutputPreview(): void",
-      "  selectBlock(blockId:"
-    );
-    const outputRender = sourceMethod(
-      source,
-      "  private async syncOutputPreview(): Promise<void>",
-      "  private async syncPreview("
-    );
+    const openCurrentFile = sourceMethod("src/view/ArborView.ts", "ArborView", "openCurrentFileInMarkdown");
+    const outputPreview = sourceMethod("src/view/ArborView.ts", "ArborView", "openOutputPreview");
+    const outputRender = sourceMethod("src/view/ArborView.ts", "ArborView", "syncOutputPreview");
 
     expect(openCurrentFile).toContain("await this.openFileInMarkdownView(this.file);");
     expect(outputPreview).toContain('this.presentationMode = "output";');

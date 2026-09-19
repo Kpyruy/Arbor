@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import {
   getChildArrowKey,
   getBreadcrumbScrollInsets,
@@ -10,6 +8,7 @@ import {
   getVisualColumnOrder,
   resolveInitialLayoutDirection
 } from "../src/layoutDirection";
+import { readSource } from "./helpers/viewSource";
 
 describe("Arbor layout direction", () => {
   it("uses Obsidian UI direction only for a genuinely fresh install", () => {
@@ -49,7 +48,7 @@ describe("Arbor layout direction", () => {
   });
 
   it("keeps RTL breadcrumbs in a scrollable left-to-right track", () => {
-    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const styles = readSource("styles.css");
     const rtlBreadcrumbs = styles.slice(
       styles.indexOf(".arbor-view.is-rtl .arbor-breadcrumbs"),
       styles.indexOf(".arbor-breadcrumbs button,")
@@ -61,7 +60,7 @@ describe("Arbor layout direction", () => {
   });
 
   it("keeps RTL breadcrumb steps compact around their directional connector", () => {
-    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const styles = readSource("styles.css");
     const rtlBreadcrumbs = styles.slice(
       styles.indexOf(".arbor-view.is-rtl .arbor-breadcrumbs"),
       styles.indexOf(".arbor-breadcrumbs::after")
@@ -72,15 +71,15 @@ describe("Arbor layout direction", () => {
   });
 
   it("mirrors the full LTR breadcrumb arrow in RTL instead of collapsing its line into the chevron", () => {
-    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const styles = readSource("styles.css");
 
     expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumb-connector::before {\n  left: 8px;\n  right: 2px;");
     expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumb-connector::after {\n  right: auto;\n  left: 4px;");
   });
 
   it("exposes a top-level setting that refreshes every open Arbor view", () => {
-    const settings = readFileSync(fileURLToPath(new URL("../src/settings.ts", import.meta.url)), "utf8");
-    const main = readFileSync(fileURLToPath(new URL("../src/main.ts", import.meta.url)), "utf8");
+    const settings = readSource("src/settings.ts");
+    const main = readSource("src/main.ts");
 
     expect(settings).toContain('layoutDirection: "ltr"');
     expect(settings.indexOf('name: "Layout direction"')).toBeLessThan(settings.indexOf('name: "Default opening mode"'));
@@ -89,8 +88,8 @@ describe("Arbor layout direction", () => {
   });
 
   it("renders RTL as a CSS mirror while keeping semantic depth and card text in place", () => {
-    const view = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
-    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const view = readSource("src/view/ArborView.ts");
+    const styles = readSource("styles.css");
 
     expect(view).toContain("columnEl.dataset.columnDepth");
     expect(view).toContain("getParentArrowKey(this.plugin.settings.layoutDirection)");
@@ -109,7 +108,7 @@ describe("Arbor layout direction", () => {
   });
 
   it("anchors the mirrored editor scene to the right edge even while Arbor preserves viewport width", () => {
-    const styles = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf8");
+    const styles = readSource("styles.css");
     const rtlColumns = styles.slice(
       styles.indexOf(".arbor-view.is-rtl .arbor-columns"),
       styles.indexOf(".arbor-column {")
@@ -121,15 +120,15 @@ describe("Arbor layout direction", () => {
   });
 
   it("snaps the selected card after changing direction instead of animating from stale scroll coordinates", () => {
-    const view = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+    const view = readSource("src/view/ArborView.ts");
 
     expect(view).toContain("shouldSnapViewportAfterDirectionChange");
     expect(view).toContain("this.scrollCardIntoHorizontalView(scrollCard, columnsViewportEl, preservedSceneWidth, snapViewport);");
   });
 
   it("uses a layout-only refresh rather than rebuilding editor cards for a direction toggle", () => {
-    const main = readFileSync(fileURLToPath(new URL("../src/main.ts", import.meta.url)), "utf8");
-    const view = readFileSync(fileURLToPath(new URL("../src/view/ArborView.ts", import.meta.url)), "utf8");
+    const main = readSource("src/main.ts");
+    const view = readSource("src/view/ArborView.ts");
 
     expect(main).toContain("view.refreshLayoutDirection()");
     expect(view).toContain("async refreshLayoutDirection(): Promise<void>");
