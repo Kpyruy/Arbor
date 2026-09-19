@@ -9,14 +9,24 @@ describe("default presentation mode", () => {
 
   it("keeps Output Preview inside the Arbor leaf and never writes while opening, refreshing or closing", () => {
     const types = readSource("src/types.ts");
-    const openAndClose = sourceMethod("src/view/ArborView.ts", "ArborView", "openOutputPreview");
+    const openOutputPreview = sourceMethod("src/view/ArborView.ts", "ArborView", "openOutputPreview");
+    const closeOutputPreview = sourceMethod("src/view/ArborView.ts", "ArborView", "closeOutputPreview");
     const refresh = sourceMethod("src/view/ArborView.ts", "ArborView", "refreshView");
     const outputRender = sourceMethod("src/view/ArborView.ts", "ArborView", "syncOutputPreview");
 
     expect(types).toContain('export type ArborPresentationMode = "editor" | "overview" | "output";');
-    expect(openAndClose).toContain('this.presentationMode = "output";');
-    expect(openAndClose).not.toContain("commitEditIfNeeded");
-    expect(openAndClose).not.toContain("persistState");
+    expect(openOutputPreview).toContain('this.presentationMode = "output";');
+    expect(openOutputPreview).toContain("this.render();");
+    expect(openOutputPreview).not.toContain("commitEditIfNeeded");
+    expect(openOutputPreview).not.toContain("persistState");
+    expect(closeOutputPreview).toContain('this.presentationMode = "editor";');
+    expect(closeOutputPreview).toContain("this.render();");
+    expect(closeOutputPreview).not.toContain("commitEditIfNeeded");
+    expect(closeOutputPreview).not.toContain("persistState");
+    expect(openOutputPreview).not.toContain("vault.create");
+    expect(openOutputPreview).not.toContain("vault.modify");
+    expect(closeOutputPreview).not.toContain("vault.create");
+    expect(closeOutputPreview).not.toContain("vault.modify");
     expect(refresh).not.toContain("persistState");
     expect(outputRender).toContain("projectOutput(metadata, this.state.outputState)");
     expect(outputRender).toContain("renderVersion !== this.outputRenderVersion");

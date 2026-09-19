@@ -8,25 +8,52 @@ import {
 } from "../src/opening";
 import { buildBranchDocument } from "../src/storage/document";
 import { linearizeTree } from "../src/storage/serializer";
-import { fixtureTree } from "./helpers/arborFixtures";
 import { sourceMethod } from "./helpers/viewSource";
+import type { BranchTreeMetadata } from "../src/types";
 
-function metadataFixture() {
-  return fixtureTree();
+function metadataFixture(): BranchTreeMetadata {
+  return {
+    version: 1,
+    prefix: "",
+    blocks: [
+      {
+        id: "root-1",
+        parentId: null,
+        order: 0,
+        content: "# Root\n\nParagraph",
+        after: "\n\n"
+      },
+      {
+        id: "child-1",
+        parentId: "root-1",
+        order: 0,
+        content: "Child block",
+        after: ""
+      }
+    ]
+  };
 }
 
 describe("managed note opening", () => {
   it("opens the current Arbor file in Markdown and keeps Output Preview in the existing leaf", () => {
     const openCurrentFile = sourceMethod("src/view/ArborView.ts", "ArborView", "openCurrentFileInMarkdown");
-    const outputPreview = sourceMethod("src/view/ArborView.ts", "ArborView", "openOutputPreview");
+    const openOutputPreview = sourceMethod("src/view/ArborView.ts", "ArborView", "openOutputPreview");
+    const closeOutputPreview = sourceMethod("src/view/ArborView.ts", "ArborView", "closeOutputPreview");
     const outputRender = sourceMethod("src/view/ArborView.ts", "ArborView", "syncOutputPreview");
 
     expect(openCurrentFile).toContain("await this.openFileInMarkdownView(this.file);");
-    expect(outputPreview).toContain('this.presentationMode = "output";');
-    expect(outputPreview).toContain("this.render();");
-    expect(outputPreview).not.toContain("vault.create");
-    expect(outputPreview).not.toContain("openFileInMarkdownView");
-    expect(outputPreview).not.toContain("createCleanExportCopy");
+    expect(openOutputPreview).toContain('this.presentationMode = "output";');
+    expect(openOutputPreview).toContain("this.render();");
+    expect(closeOutputPreview).toContain('this.presentationMode = "editor";');
+    expect(closeOutputPreview).toContain("this.render();");
+    expect(openOutputPreview).not.toContain("vault.create");
+    expect(openOutputPreview).not.toContain("vault.modify");
+    expect(openOutputPreview).not.toContain("openFileInMarkdownView");
+    expect(openOutputPreview).not.toContain("createCleanExportCopy");
+    expect(closeOutputPreview).not.toContain("vault.create");
+    expect(closeOutputPreview).not.toContain("vault.modify");
+    expect(closeOutputPreview).not.toContain("openFileInMarkdownView");
+    expect(closeOutputPreview).not.toContain("createCleanExportCopy");
     expect(outputRender).not.toContain("vault.create");
     expect(outputRender).not.toContain("openFileInMarkdownView");
     expect(outputRender).not.toContain("createCleanExportCopy");
