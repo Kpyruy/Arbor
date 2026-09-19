@@ -7,9 +7,11 @@ import { deferred as createDeferred, fixtureOutput } from "./helpers/arborFixtur
 
 type OutputProfilesUiModule = typeof import("../src/view/OutputProfilesModal");
 type ArborViewUiModule = typeof import("../src/view/ArborView");
+type OutputPresentationUiModule = typeof import("../src/view/output/outputPresentation");
 
 let ui: OutputProfilesUiModule;
 let arborViewUi: ArborViewUiModule;
+let outputUi: OutputPresentationUiModule;
 
 beforeAll(async () => {
   const bundled = await build({
@@ -75,6 +77,30 @@ beforeAll(async () => {
     `data:text/javascript;base64,${Buffer.from(arborViewSource).toString("base64")}`
   );
   arborViewUi = arborViewLoaded as ArborViewUiModule;
+
+  const outputPresentationBundle = await build({
+    absWorkingDir: process.cwd(),
+    entryPoints: ["src/view/output/outputPresentation.ts"],
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    write: false,
+    plugins: [{
+      name: "output-presentation-test-host",
+      setup(builder) {
+        builder.onResolve({ filter: /^obsidian$/ }, () => ({ path: "obsidian", namespace: "test-host" }));
+        builder.onLoad({ filter: /.*/, namespace: "test-host" }, () => ({
+          contents: "export const setIcon = () => undefined;",
+          loader: "js"
+        }));
+      }
+    }]
+  });
+  const outputPresentationSource = outputPresentationBundle.outputFiles[0].text;
+  const outputPresentationLoaded: unknown = await import(
+    `data:text/javascript;base64,${Buffer.from(outputPresentationSource).toString("base64")}`
+  );
+  outputUi = outputPresentationLoaded as OutputPresentationUiModule;
 });
 
 function tree(): BranchTreeMetadata {
@@ -267,13 +293,13 @@ describe("Output Profiles manager UI", () => {
   );
 
   it("exposes block-only and subtree output actions only for custom profiles", () => {
-    expect(arborViewUi.getBlockOutputMenuActions(outputState("draft")).map((action) => action.label)).toEqual([
+    expect(outputUi.getBlockOutputMenuActions(outputState("draft")).map((action) => action.label)).toEqual([
       "Include block only",
       "Exclude block only",
       "Include subtree",
       "Exclude subtree"
     ]);
-    expect(arborViewUi.getBlockOutputMenuActions(outputState("full")).map((action) => action.label)).toEqual([
+    expect(outputUi.getBlockOutputMenuActions(outputState("full")).map((action) => action.label)).toEqual([
       "Create output profile"
     ]);
   });
@@ -328,8 +354,8 @@ describe("Output Profiles manager UI", () => {
       profiles: [{ ...state.profiles[0], rules: [] }]
     };
 
-    const direct = arborViewUi.getOutputCardPresentation(tree(), state, "root");
-    const inherited = arborViewUi.getOutputCardPresentation(tree(), state, "child");
+    const direct = outputUi.getOutputCardPresentation(tree(), state, "root");
+    const inherited = outputUi.getOutputCardPresentation(tree(), state, "child");
 
     expect(direct).toMatchObject({
       className: "is-output-excluded-direct",
@@ -341,7 +367,7 @@ describe("Output Profiles manager UI", () => {
       badgeIcon: "eye-off"
     });
     expect(inherited.ariaLabel).toContain('Inherited exclusion from ancestor "Root"');
-    expect(arborViewUi.getOutputCardPresentation(tree(), includedState, "root")).toMatchObject({
+    expect(outputUi.getOutputCardPresentation(tree(), includedState, "root")).toMatchObject({
       className: null,
       badgeIcon: null,
       ariaLabel: "Root. Included in output profile Draft."
@@ -431,21 +457,68 @@ describe("Output Profiles manager UI", () => {
       removeAttribute: (name: string) => attributes.delete(name),
       createSpan: () => badge
     } as unknown as HTMLElement;
-    const view = Object.create(arborViewUi.ArborView.prototype) as ArborViewUiModule["ArborView"] & {
-      state: {
-        metadata: BranchTreeMetadata;
-        outputState: ArborOutputState;
-        outputError: null;
-      };
-      viewContext: null;
-      syncOutputCardPresentation: (card: HTMLElement, blockId: string) => void;
-    };
-    view.state = { metadata: tree(), outputState: outputState("draft"), outputError: null };
-    view.viewContext = null;
-
-    view.syncOutputCardPresentation(card, "root");
+    outputUi.syncOutputCardPresentation(
+      card,
+      outputUi.getOutputCardPresentation(tree(), outputState("draft"), "root")
+    );
 
     expect(attributes.get("aria-label")).toContain("Excluded directly from output profile Draft");
+    expect(attributes.has("title")).toBe(false);
+  });
+
+  it("clears an output card when the extracted DOM writer receives no presentation", () => {
+    const classNames = new Set(["is-output-excluded-direct", "is-output-excluded-inherited"]);
+    const attributes = new Map<string, string>([
+      ["aria-label", "stale output label"],
+      ["title", "stale browser tooltip"]
+    ]);
+    let badgeRemoved = false;
+    const badge = { remove: () => { badgeRemoved = true; } };
+    const card = {
+      addClass: (...names: string[]) => names.forEach((name) => classNames.add(name)),
+      removeClass: (...names: string[]) => names.forEach((name) => classNames.delete(name)),
+      querySelector: () => badge,
+      setAttr: (name: string, value: string) => attributes.set(name, value),
+      removeAttribute: (name: string) => attributes.delete(name),
+      createSpan: () => badge
+    } as unknown as HTMLElement;
+
+    outputUi.syncOutputCardPresentation(card, null);
+
+    expect(classNames.size).toBe(0);
+    expect(badgeRemoved).toBe(true);
+    expect(attributes.has("aria-label")).toBe(false);
+    expect(attributes.has("title")).toBe(false);
+  });
+
+  it("clears a card through the facade when its state disappears", () => {
+    const classNames = new Set(["is-output-excluded-direct", "is-output-excluded-inherited"]);
+    const attributes = new Map<string, string>([
+      ["aria-label", "stale output label"],
+      ["title", "stale browser tooltip"]
+    ]);
+    let badgeRemoved = false;
+    const badge = { remove: () => { badgeRemoved = true; } };
+    const card = {
+      addClass: (...names: string[]) => names.forEach((name) => classNames.add(name)),
+      removeClass: (...names: string[]) => names.forEach((name) => classNames.delete(name)),
+      querySelector: () => badge,
+      setAttr: (name: string, value: string) => attributes.set(name, value),
+      removeAttribute: (name: string) => attributes.delete(name),
+      createSpan: () => badge
+    } as unknown as HTMLElement;
+    const view = Object.create(arborViewUi.ArborView.prototype) as {
+      state: null;
+      viewContext: null;
+      syncOutputCardPresentation(card: HTMLElement, blockId: string): void;
+    };
+    view.state = null;
+    view.viewContext = null;
+
+    expect(() => view.syncOutputCardPresentation(card, "root")).not.toThrow();
+    expect(classNames.size).toBe(0);
+    expect(badgeRemoved).toBe(true);
+    expect(attributes.has("aria-label")).toBe(false);
     expect(attributes.has("title")).toBe(false);
   });
 
@@ -458,7 +531,7 @@ describe("Output Profiles manager UI", () => {
       outputState("draft")
     );
 
-    expect(arborViewUi.getOutputCardPresentation(
+    expect(outputUi.getOutputCardPresentation(
       created.metadata,
       state,
       created.selectedBlockId

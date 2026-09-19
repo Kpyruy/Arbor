@@ -1,4 +1,6 @@
-import type { ArborOutputState, BranchTreeMetadata } from "../../src/types";
+import type { ArborOutputState, ArborSettings, BranchTreeMetadata } from "../../src/types";
+import type { LoadedFileState } from "../../src/view/state/viewTypes";
+import { linearizeTree } from "../../src/storage/serializer";
 
 export function fixtureTree(): BranchTreeMetadata {
   return {
@@ -22,6 +24,33 @@ export function fixtureOutput(active = "draft"): ArborOutputState {
       name: "Draft",
       rules: [{ blockId: "root", state: "exclude" }]
     }]
+  };
+}
+
+export function fixtureSettings(): ArborSettings {
+  return {
+    layoutDirection: "ltr", activeThemeId: "automatic", customThemes: [],
+    defaultPresentationMode: "editor", splitDirection: "vertical", cardWidth: 300,
+    cardMinHeight: 120, horizontalSpacing: 20, verticalSpacing: 12, zoomLevel: 1,
+    previewSnippetLength: 220, dragAndDrop: true, dimNonPathBlocks: false,
+    enableCtrlWheelZoom: true, autoOpenManagedNotes: true, showBreadcrumb: true,
+    showBreadcrumbFlow: true, breadcrumbLabelPreferredPrefix: "#",
+    breadcrumbLabelFallback: "firstLine", liveLinearPreview: false
+  };
+}
+
+export function fixtureLoaded(active = "full"): LoadedFileState {
+  const metadata = fixtureTree();
+  return {
+    metadata,
+    frontmatter: "",
+    outputState: fixtureOutput(active),
+    outputRaw: "",
+    outputError: null,
+    selectedBlockId: "first",
+    staleMetadata: null,
+    origin: "metadata",
+    linearized: linearizeTree(metadata)
   };
 }
 

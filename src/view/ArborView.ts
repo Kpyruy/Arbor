@@ -53,11 +53,8 @@ import {
   BranchHistoryEntry,
   BranchTreeMetadata,
   ImportedBranchDocument,
-  LinearizedBranchDocument,
   ArborPresentationMode,
   ArborOutputProfile,
-  ArborOutputResolution,
-  ArborOutputRuleState,
   ArborOutputState,
   BranchTreeMutationResult,
   ArborSettings
@@ -118,105 +115,28 @@ import {
   getOutputProfileButtonPresentation,
   OutputProfilesModal
 } from "./OutputProfilesModal";
-
-type EditingOrigin = "card" | "preview" | "overview";
-
-interface EditingSession {
-  blockId: BranchBlockId;
-  originalContent: string;
-  value: string;
-  autofocus: boolean;
-  origin: EditingOrigin;
-}
-
-interface LoadedFileState {
-  frontmatter: string;
-  metadata: BranchTreeMetadata;
-  outputState: ArborOutputState;
-  outputRaw: string;
-  outputError: string | null;
-  selectedBlockId: BranchBlockId | null;
-  staleMetadata: BranchTreeMetadata | null;
-  origin: ImportedBranchDocument["origin"];
-  linearized: LinearizedBranchDocument;
-}
-
-export type BlockOutputMenuActionId =
-  | "create-profile"
-  | "include-block"
-  | "exclude-block"
-  | "include-subtree"
-  | "exclude-subtree";
-
-export interface BlockOutputMenuAction {
-  id: BlockOutputMenuActionId;
-  label: string;
-  icon: string;
-  state?: ArborOutputRuleState;
-  scope?: "block" | "subtree";
-}
-
-export interface OutputCardPresentation {
-  className: "is-output-excluded-direct" | "is-output-excluded-inherited" | null;
-  badgeIcon: "eye-off" | null;
-  ariaLabel: string;
-}
-
-export function getBlockOutputMenuActions(state: ArborOutputState): BlockOutputMenuAction[] {
-  if (getActiveOutputProfile(state).id === FULL_OUTPUT_PROFILE_ID) {
-    return [{ id: "create-profile", label: "Create output profile", icon: "list-plus" }];
-  }
-
-  return [
-    { id: "include-block", label: "Include block only", icon: "eye", state: "include", scope: "block" },
-    { id: "exclude-block", label: "Exclude block only", icon: "eye-off", state: "exclude", scope: "block" },
-    { id: "include-subtree", label: "Include subtree", icon: "list-tree", state: "include", scope: "subtree" },
-    { id: "exclude-subtree", label: "Exclude subtree", icon: "list-x", state: "exclude", scope: "subtree" }
-  ];
-}
-
-export function getOutputCardPresentation(
-  metadata: BranchTreeMetadata,
-  state: ArborOutputState,
-  blockId: BranchBlockId,
-  profile: ArborOutputProfile = getActiveOutputProfile(state),
-  resolutions: ReadonlyMap<BranchBlockId, ArborOutputResolution> = resolveOutputStates(metadata, profile)
-): OutputCardPresentation {
-  const block = getBlock(metadata, blockId);
-  const blockLabel = block ? extractPathLabel(block.content) : "Block";
-  const resolution = resolutions.get(blockId);
-
-  if (!resolution || resolution.included) {
-    return {
-      className: null,
-      badgeIcon: null,
-      ariaLabel: `${blockLabel}. Included in output profile ${profile.name}.`
-    };
-  }
-
-  if (resolution.source === "direct") {
-    const reason = `Excluded directly from output profile ${profile.name}.`;
-    return {
-      className: "is-output-excluded-direct",
-      badgeIcon: "eye-off",
-      ariaLabel: `${blockLabel}. ${reason}`
-    };
-  }
-
-  const ancestor = resolution.ruleBlockId ? getBlock(metadata, resolution.ruleBlockId) : null;
-  const ancestorLabel = ancestor ? extractPathLabel(ancestor.content) : "an ancestor";
-  const reason = `Inherited exclusion from ancestor "${ancestorLabel}" in output profile ${profile.name}.`;
-  return {
-    className: "is-output-excluded-inherited",
-    badgeIcon: "eye-off",
-    ariaLabel: `${blockLabel}. ${reason}`
-  };
-}
-
-interface LoadingOverlayState {
-  title: string;
-  description: string;
-}
+import { buildPreviewPathLabels, buildViewContext } from "./state/viewModel";
+import type {
+  BranchViewContext,
+  EditingOrigin,
+  EditingSession,
+  LoadedFileState,
+  LoadingOverlayState
+} from "./state/viewTypes";
+import {
+  getBlockOutputMenuActions,
+  getOutputCardPresentation,
+  syncOutputCardPresentation
+} from "./output/outputPresentation";
+export {
+  getBlockOutputMenuActions,
+  getOutputCardPresentation
+} from "./output/outputPresentation";
+export type {
+  BlockOutputMenuActionId,
+  BlockOutputMenuAction,
+  OutputCardPresentation
+} from "./output/outputPresentation";
 
 interface DragState {
   draggedBlockId: BranchBlockId;
@@ -225,35 +145,9 @@ interface DragState {
   columnKey: string;
 }
 
-interface BranchOverviewNode {
-  id: BranchBlockId;
-  parentId: BranchBlockId | null;
-  depth: number;
-  label: string;
-  childCount: number;
-  collapsed: boolean;
-  isSelected: boolean;
-  isOnActivePath: boolean;
-  isSelectable: boolean;
-  isSearchMatch: boolean;
-  isSearchRelated: boolean;
-}
-
 interface TreeOverviewExportOptions {
   format: TreeOverviewExportFormat;
   quality: TreeOverviewExportQuality;
-}
-
-interface BranchViewContext {
-  activePathIds: Set<BranchBlockId>;
-  selectableChildIds: Set<BranchBlockId>;
-  searchQuery: string;
-  searchMatchedIds: Set<BranchBlockId>;
-  searchRelatedIds: Set<BranchBlockId>;
-  previewVisibleIds: Set<BranchBlockId> | null;
-  overviewNodes: BranchOverviewNode[];
-  outputProfile: ArborOutputProfile;
-  outputResolutions: Map<BranchBlockId, ArborOutputResolution>;
 }
 
 class ArborConfirmModal extends Modal {
@@ -1211,7 +1105,13 @@ export class ArborView extends FileView {
       this.pendingFocusBlockId = null;
       this.pendingScrollBlockId = null;
       this.syncBreadcrumbs();
-      this.viewContext = this.buildViewContext();
+      this.viewContext = buildViewContext(
+        this.state.metadata,
+        this.state.selectedBlockId,
+        this.state.outputState,
+        this.previewSearchQuery,
+        this.plugin.settings
+      );
       this.syncSearchOverlay(this.viewContext);
       this.syncOverviewSelection(selectionChanged && options?.reveal !== false);
       return;
@@ -1689,7 +1589,13 @@ export class ArborView extends FileView {
     this.syncTouchDock();
     this.syncViewportEdgeFades();
     this.syncBreadcrumbs();
-    this.viewContext = this.buildViewContext();
+    this.viewContext = buildViewContext(
+      this.state.metadata,
+      this.state.selectedBlockId,
+      this.state.outputState,
+      this.previewSearchQuery,
+      this.plugin.settings
+    );
     this.syncSearchOverlay(this.viewContext);
     this.syncBanner();
     this.syncLoadingOverlay();
@@ -2129,74 +2035,6 @@ export class ArborView extends FileView {
       cls: "arbor-loading-overlay-description",
       text: activeState.description
     });
-  }
-
-  private buildViewContext(): BranchViewContext {
-    const metadata = this.state!.metadata;
-    const selectedBlockId = this.state!.selectedBlockId;
-    const activePathIds = new Set(getActivePath(metadata, selectedBlockId).map((item) => item.id));
-    const selectableChildIds = new Set(
-      selectedBlockId
-        ? getChildren(metadata, selectedBlockId).map((item) => item.id)
-        : []
-    );
-    const searchQuery = this.previewSearchQuery.trim().toLocaleLowerCase();
-    const searchMatchedIds = new Set<BranchBlockId>();
-    const searchRelatedIds = new Set<BranchBlockId>();
-    const outputProfile = getActiveOutputProfile(this.state!.outputState);
-    const outputResolutions = resolveOutputStates(metadata, outputProfile);
-
-    if (searchQuery.length > 0) {
-      for (const block of metadata.blocks) {
-        const pathLabel = this.buildPreviewPathLabels(block.id).join(" ");
-        const haystack = `${block.content}\n${pathLabel}`.toLocaleLowerCase();
-        if (!haystack.includes(searchQuery)) {
-          continue;
-        }
-
-        searchMatchedIds.add(block.id);
-        getActivePath(metadata, block.id).forEach((pathBlock) => searchRelatedIds.add(pathBlock.id));
-      }
-    }
-
-    const previewVisibleIds = searchQuery.length > 0
-      ? new Set<BranchBlockId>([...searchMatchedIds, ...searchRelatedIds])
-      : null;
-
-    const overviewNodes: BranchOverviewNode[] = buildLinearOrder(metadata).map((block) => {
-      const depth = getActivePath(metadata, block.id).length - 1;
-      const childCount = getChildren(metadata, block.id).length;
-      return {
-        id: block.id,
-        parentId: block.parentId,
-        depth,
-        label: extractPathLabel(block.content, {
-          preferredPrefix: this.plugin.settings.breadcrumbLabelPreferredPrefix,
-          fallback: this.plugin.settings.breadcrumbLabelFallback,
-          maxWords: 5,
-          maxLength: 52
-        }),
-        childCount,
-        collapsed: Boolean(block.collapsed),
-        isSelected: selectedBlockId === block.id,
-        isOnActivePath: activePathIds.has(block.id),
-        isSelectable: selectableChildIds.has(block.id),
-        isSearchMatch: searchMatchedIds.has(block.id),
-        isSearchRelated: searchRelatedIds.has(block.id)
-      };
-    });
-
-    return {
-      activePathIds,
-      selectableChildIds,
-      searchQuery,
-      searchMatchedIds,
-      searchRelatedIds,
-      previewVisibleIds,
-      overviewNodes,
-      outputProfile,
-      outputResolutions
-    };
   }
 
   private syncSearchOverlay(context: BranchViewContext): void {
@@ -3548,7 +3386,11 @@ export class ArborView extends FileView {
         cls: "arbor-preview-index",
         text: `Block ${String(linearIndex).padStart(2, "0")}`
       });
-      const pathLabels = this.buildPreviewPathLabels(block.id);
+      const pathLabels = buildPreviewPathLabels(
+        this.state.metadata,
+        block.id,
+        this.plugin.settings
+      );
 
       const actionsEl = headerEl.createDiv({ cls: "arbor-preview-actions" });
       const selectButton = actionsEl.createEl("button", {
@@ -3667,7 +3509,7 @@ export class ArborView extends FileView {
     });
 
     const pathEl = container.createDiv({ cls: "arbor-preview-minimap-path" });
-    this.buildPreviewPathLabels(this.state.selectedBlockId ?? "").forEach((label, index, labels) => {
+    buildPreviewPathLabels(this.state.metadata, this.state.selectedBlockId ?? "", this.plugin.settings).forEach((label, index, labels) => {
       pathEl.createSpan({
         cls: `arbor-preview-chip${index === labels.length - 1 ? " is-current" : ""}`,
         text: label
@@ -3712,21 +3554,6 @@ export class ArborView extends FileView {
         countEl.setText(`${node.childCount}`);
       }
     });
-  }
-
-  private buildPreviewPathLabels(blockId: BranchBlockId): string[] {
-    if (!this.state) {
-      return [];
-    }
-
-    return getActivePath(this.state.metadata, blockId).map((block) =>
-      extractPathLabel(block.content, {
-        preferredPrefix: this.plugin.settings.breadcrumbLabelPreferredPrefix,
-        fallback: this.plugin.settings.breadcrumbLabelFallback,
-        maxWords: 4,
-        maxLength: 36
-      })
-    );
   }
 
   private setHoveredBlock(blockId: BranchBlockId | null): void {
@@ -4425,254 +4252,6 @@ export class ArborView extends FileView {
     this.render();
   }
 
-  private renderBreadcrumb(container: HTMLElement): void {
-    if (!this.state) {
-      return;
-    }
-
-    const strip = container.createDiv({ cls: "arbor-breadcrumbs" });
-    const path = getActivePath(this.state.metadata, this.state.selectedBlockId);
-    if (path.length === 0) {
-      strip.createSpan({ cls: "arbor-breadcrumb-empty", text: this.file?.basename ?? "Arbor" });
-      return;
-    }
-
-    this.renderBreadcrumbItems(strip, path);
-  }
-
-  private async renderColumn(container: HTMLElement, column: BranchColumnModel): Promise<void> {
-    const columnEl = container.createDiv({ cls: "arbor-column" });
-    columnEl.dataset.columnKey = column.key;
-    columnEl.dataset.parentId = column.parentId ?? "";
-
-    const cardsEl = columnEl.createDiv({ cls: "arbor-card-list" });
-
-    if (this.plugin.settings.dragAndDrop) {
-      cardsEl.addEventListener("dragover", (event) => this.handleColumnDragOver(event));
-      cardsEl.addEventListener("drop", (event) => {
-        event.preventDefault();
-        void this.applyDrop(column);
-      });
-    }
-
-    if (column.blocks.length === 0) {
-      const empty = cardsEl.createDiv({ cls: "arbor-column-empty" });
-      empty.setText(column.parentId ? "No child blocks yet." : "No root blocks yet.");
-      empty.toggleClass("is-selectable-context", column.parentId === this.state?.selectedBlockId);
-      if (column.parentId) {
-        empty.addEventListener("contextmenu", (event) => {
-          event.preventDefault();
-          this.state!.selectedBlockId = column.parentId;
-          const menu = new Menu();
-          menu.addItem((item) =>
-            item.setTitle("Create child block").setIcon(getChildArrowIcon(this.plugin.settings.layoutDirection)).onClick(() => void this.createChild())
-          );
-          menu.showAtMouseEvent(event);
-        });
-      }
-      return;
-    }
-
-    column.blocks.forEach((_block, index) => {
-      if (this.dragState && this.dragState.columnKey === column.key && this.dragState.targetIndex === index) {
-        cardsEl.createDiv({ cls: "arbor-drop-indicator" });
-      }
-    });
-
-    for (let index = 0; index < column.blocks.length; index += 1) {
-      await this.renderCard(cardsEl, column.blocks[index], column, index);
-      if (this.dragState && this.dragState.columnKey === column.key && this.dragState.targetIndex === index + 1) {
-        cardsEl.createDiv({ cls: "arbor-drop-indicator" });
-      }
-    }
-  }
-
-  private async renderCard(container: HTMLElement, block: BranchBlock, column: BranchColumnModel, index: number): Promise<void> {
-    const card = container.createDiv({ cls: "arbor-card" });
-    card.tabIndex = 0;
-    card.dataset.blockId = block.id;
-    card.dataset.columnKey = column.key;
-    card.dataset.blockIndex = String(index);
-    card.dataset.parentId = block.parentId ?? "";
-    const activePathIds = new Set(getActivePath(this.state!.metadata, this.state!.selectedBlockId).map((item) => item.id));
-    const selectableChildIds = new Set(
-      this.state?.selectedBlockId
-        ? getChildren(this.state.metadata, this.state.selectedBlockId).map((item) => item.id)
-        : []
-    );
-
-    if (this.state?.selectedBlockId === block.id) {
-      card.addClass("is-active");
-    } else if (activePathIds.has(block.id)) {
-      card.addClass("is-on-path");
-    } else if (selectableChildIds.has(block.id)) {
-      card.addClass("is-selectable");
-    } else if (activePathIds.size > 0) {
-      card.addClass("is-muted");
-    }
-
-    if (this.dragState?.draggedBlockId === block.id) {
-      card.addClass("is-drag-source");
-    }
-
-    card.addEventListener("click", () => {
-      const isActive = this.state?.selectedBlockId === block.id;
-      if (isActive && this.editingSession?.blockId !== block.id) {
-        this.beginEditingBlock(block.id);
-        return;
-      }
-      this.selectBlock(block.id, { focus: true });
-    });
-    card.addEventListener("dblclick", () => {
-      this.beginEditingBlock(block.id);
-    });
-    card.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      if (this.state) {
-        this.state.selectedBlockId = block.id;
-      }
-      this.buildBlockMenu(block.id).showAtMouseEvent(event);
-    });
-    card.addEventListener("keydown", (event) => {
-      if (this.handleHistoryShortcut(event)) {
-        return;
-      }
-      if (event.altKey) {
-        return;
-      }
-
-      if (this.state?.selectedBlockId !== block.id) {
-        this.state!.selectedBlockId = block.id;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && this.handleDirectionalCreateShortcut(event)) {
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        this.selectPreviousSiblingBlock();
-        return;
-      }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        this.selectNextSiblingBlock();
-        return;
-      }
-
-      if (event.key === getParentArrowKey(this.plugin.settings.layoutDirection)) {
-        event.preventDefault();
-        this.selectParentBlock();
-        return;
-      }
-
-      if (event.key === getChildArrowKey(this.plugin.settings.layoutDirection)) {
-        event.preventDefault();
-        this.selectPreferredChildBlock();
-        return;
-      }
-
-      if (event.key === "Home") {
-        event.preventDefault();
-        this.selectFirstSiblingBlock();
-        return;
-      }
-
-      if (event.key === "End") {
-        event.preventDefault();
-        this.selectLastSiblingBlock();
-        return;
-      }
-
-      if ((event.key === "Backspace" || event.key === "Delete") && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
-        event.preventDefault();
-        void this.deleteSelectedBlock();
-        return;
-      }
-
-      if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
-        event.preventDefault();
-        this.beginEditingBlock(block.id);
-      }
-    });
-
-    if (this.plugin.settings.dragAndDrop) {
-      card.draggable = true;
-      card.addEventListener("dragstart", (event) => this.handleCardDragStart(event));
-      card.addEventListener("dragend", () => this.handleCardDragEnd());
-      card.addEventListener("dragover", (event) => this.handleCardDragOver(event));
-      card.addEventListener("drop", (event) => this.handleCardDrop(event));
-    }
-
-    const isEditing = this.editingSession?.blockId === block.id;
-    if (isEditing && this.editingSession) {
-      card.addClass("is-editing");
-      const editor = card.createEl("textarea", { cls: "arbor-editor" });
-      editor.value = this.editingSession.value;
-      this.resizeEditor(editor);
-      ["pointerdown", "mousedown", "mouseup", "click", "dblclick", "contextmenu"].forEach((eventName) => {
-        editor.addEventListener(eventName, (event) => {
-          event.stopPropagation();
-        });
-      });
-      editor.addEventListener("input", () => {
-        if (this.editingSession?.blockId === block.id) {
-          this.editingSession.value = editor.value;
-          this.resizeEditor(editor);
-        }
-      });
-      editor.addEventListener("keydown", (event) => {
-        event.stopPropagation();
-        if (event.key === "Escape") {
-          event.preventDefault();
-          this.cancelEditingSession();
-        } else if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-          event.preventDefault();
-          void this.commitEditingSession();
-        }
-      });
-      editor.addEventListener("paste", (event) => {
-        event.stopPropagation();
-        void this.handleEditorPaste(event, editor);
-      });
-      editor.addEventListener("drop", (event) => {
-        event.stopPropagation();
-        void this.handleEditorDrop(event, editor);
-      });
-      editor.addEventListener("dragover", (event) => {
-        event.stopPropagation();
-        if (Array.from(event.dataTransfer?.items ?? []).some((item) => item.type.startsWith("image/"))) {
-          event.preventDefault();
-        }
-      });
-      editor.addEventListener("focus", (event) => {
-        event.stopPropagation();
-      });
-
-      if (this.editingSession.autofocus) {
-        window.setTimeout(() => {
-          editor.focus();
-          editor.setSelectionRange(editor.value.length, editor.value.length);
-          this.resizeEditor(editor);
-          if (this.editingSession) {
-            this.editingSession.autofocus = false;
-          }
-        }, 0);
-      }
-      return;
-    }
-
-    const content = card.createDiv({ cls: "arbor-card-content markdown-rendered" });
-    await MarkdownRenderer.render(this.app, block.content, content, this.file?.path ?? "", this);
-    if (content.innerText.trim().length === 0) {
-      content.setText(extractSnippet(block.content, this.plugin.settings.previewSnippetLength));
-    }
-    content.querySelectorAll("img").forEach((image) => {
-      image.addEventListener("load", () => this.scheduleColumnAlignment(), { once: true });
-    });
-  }
-
   private async applyDrop(_column: BranchColumnModel): Promise<void> {
     if (!this.dragState || !this.state) {
       return;
@@ -5246,42 +4825,18 @@ export class ArborView extends FileView {
     blockId: BranchBlockId,
     context: BranchViewContext | null = this.viewContext
   ): void {
-    card.removeClass("is-output-excluded-direct", "is-output-excluded-inherited");
-    const existingBadge = card.querySelector<HTMLElement>(".arbor-output-state-badge");
-
     if (!this.state) {
-      existingBadge?.remove();
-      card.removeAttribute("aria-label");
-      card.removeAttribute("title");
+      syncOutputCardPresentation(card, null);
       return;
     }
 
-    const presentation = getOutputCardPresentation(
+    syncOutputCardPresentation(card, getOutputCardPresentation(
       this.state.metadata,
       this.state.outputState,
       blockId,
       context?.outputProfile,
       context?.outputResolutions
-    );
-    if (presentation.className) {
-      card.addClass(presentation.className);
-    }
-    card.setAttr("aria-label", presentation.ariaLabel);
-    card.removeAttribute("title");
-
-    if (!presentation.badgeIcon) {
-      existingBadge?.remove();
-      return;
-    }
-
-    const badge = existingBadge ?? card.createSpan({
-        cls: "arbor-output-state-badge",
-        attr: { "aria-hidden": "true" }
-      });
-    if (badge.dataset.icon !== presentation.badgeIcon) {
-      setIcon(badge, presentation.badgeIcon);
-      badge.dataset.icon = presentation.badgeIcon;
-    }
+    ));
   }
 
   private syncVisibleOutputCardPresentations(): void {
