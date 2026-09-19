@@ -31,7 +31,6 @@ import {
   getBlock,
   getChildren,
   getDescendantIds,
-  getFirstChildBlock,
   getPreferredChildBlock,
   getNextSibling,
   getParentBlock,
@@ -77,13 +76,10 @@ import { deepClone, extractPathLabel, extractSnippet, hashString } from "../util
 import { buildArborBlockLink } from "../blockLinks";
 import { projectOutput } from "../outputProjection";
 import { getEnteringBreadcrumbIds } from "../breadcrumbAnimation";
-import { resolveBranchCardInteraction } from "../cardInteraction";
-import { resolveNumericChildTarget } from "../numericNavigation";
 import { MOBILE_TREE_OVERVIEW_EXPORT_LIMITS, resolveTreeOverviewExportSize, type TreeOverviewExportQuality } from "../treeOverviewExport";
-import { getBreadcrumbScrollInsets, getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey, getVisualBreadcrumbOrder } from "../layoutDirection";
+import { getBreadcrumbScrollInsets, getChildArrowIcon, getHorizontalWheelDelta, getParentArrowIcon, getVisualBreadcrumbOrder } from "../layoutDirection";
 import { buildOverviewLayout } from "../model/overviewLayout";
 import {
-  resolveOverviewArrowTarget,
   resolveOverviewCardSelectionState,
   startOverviewSelectionAnimation
 } from "../overviewNavigation";
@@ -126,6 +122,7 @@ import { ExportController, type OverviewSnapshot } from "./export/ExportControll
 import { createOverviewSnapshot } from "./export/overviewSnapshot";
 import { BlockEditorController } from "./editor/BlockEditorController";
 import { EditorAttachments } from "./editor/EditorAttachments";
+import { NavigationController } from "./navigation/NavigationController";
 export {
   getBlockOutputMenuActions,
   getOutputCardPresentation
@@ -161,11 +158,10 @@ export class ArborView extends FileView {
   private state: LoadedFileState | null = null;
   private readonly editor: BlockEditorController;
   private readonly attachments: EditorAttachments;
+  private readonly navigationController: NavigationController;
   private dragState: DragState | null = null;
   private renderFrame: number | null = null;
   private layoutFrame: number | null = null;
-  private numericNavigationTimer: number | null = null;
-  private numericNavigationBuffer = "";
   private isPersisting = false;
   private pendingFocusBlockId: BranchBlockId | null = null;
   private pendingScrollBlockId: BranchBlockId | null = null;
@@ -298,6 +294,27 @@ export class ArborView extends FileView {
       paste: (event, textarea) => this.attachments.handleEditorPaste(event, textarea),
       drop: (event, textarea) => this.attachments.handleEditorDrop(event, textarea)
     });
+    this.navigationController = new NavigationController({
+      getState: () => this.state,
+      getSettings: () => this.plugin.settings,
+      getMode: () => this.presentationMode,
+      getFilePath: () => this.file?.path ?? ""
+    }, { selectBlock: (id, options) => this.selectBlock(id, options) }, {
+      beginEditingBlock: (id, origin) => this.beginEditingBlock(id, origin),
+      createChild: () => this.createChild(),
+      createSiblingAbove: () => this.createSiblingAbove(),
+      createSiblingBelow: () => this.createSiblingBelow(),
+      createParentLevelBlock: () => this.createParentLevelBlock(),
+      createRootBlock: () => this.createRootBlock(),
+      deleteSelectedBlock: () => this.deleteSelectedBlock(),
+      undo: () => this.undo(),
+      redo: () => this.redo(),
+      openSearchOverlay: () => this.openSearchOverlay(),
+      closeSearchOverlay: () => this.closeSearchOverlay(),
+      isSearchOpen: () => this.isSearchOpen,
+      setKeyboardSelection: (id) => { if (this.state) this.state.selectedBlockId = id; },
+      openBlockMenu: (id, event) => this.buildBlockMenu(id).showAtMouseEvent(event)
+    });
     this.allowNoFile = false;
     const doc = this.contentEl.ownerDocument;
     this.registerDomEvent(doc, "visibilitychange", () => {
@@ -424,6 +441,7 @@ export class ArborView extends FileView {
   }
 
   async onClose(): Promise<void> {
+    this.navigationController.clearNumericNavigation();
     if (this.layoutFrame !== null) {
       window.cancelAnimationFrame(this.layoutFrame);
       this.layoutFrame = null;
@@ -936,86 +954,31 @@ export class ArborView extends FileView {
   }
 
   selectParentBlock(): void {
-    if (!this.state) {
-      return;
-    }
-    const parent = getParentBlock(this.state.metadata, this.state.selectedBlockId);
-    if (parent) {
-      this.selectBlock(parent.id, { focus: true });
-    }
+    this.navigationController.selectParentBlock();
   }
 
   selectPreviousSiblingBlock(): void {
-    if (!this.state) {
-      return;
-    }
-    const sibling = getPreviousSibling(this.state.metadata, this.state.selectedBlockId);
-    if (sibling) {
-      this.selectBlock(sibling.id, { focus: true });
-    }
+    this.navigationController.selectPreviousSiblingBlock();
   }
 
   selectNextSiblingBlock(): void {
-    if (!this.state) {
-      return;
-    }
-    const sibling = getNextSibling(this.state.metadata, this.state.selectedBlockId);
-    if (sibling) {
-      this.selectBlock(sibling.id, { focus: true });
-    }
+    this.navigationController.selectNextSiblingBlock();
   }
 
   selectFirstChildBlock(): void {
-    if (!this.state) {
-      return;
-    }
-    const child = getFirstChildBlock(this.state.metadata, this.state.selectedBlockId);
-    if (child) {
-      this.selectBlock(child.id, { focus: true });
-    }
+    this.navigationController.selectFirstChildBlock();
   }
 
   selectPreferredChildBlock(): void {
-    if (!this.state) {
-      return;
-    }
-    const child = getPreferredChildBlock(this.state.metadata, this.state.selectedBlockId);
-    if (child) {
-      this.selectBlock(child.id, { focus: true });
-    }
+    this.navigationController.selectPreferredChildBlock();
   }
 
   selectFirstSiblingBlock(): void {
-    if (!this.state?.selectedBlockId) {
-      return;
-    }
-
-    const current = getBlock(this.state.metadata, this.state.selectedBlockId);
-    if (!current) {
-      return;
-    }
-
-    const firstSibling = getChildren(this.state.metadata, current.parentId)[0];
-    if (firstSibling) {
-      this.selectBlock(firstSibling.id, { focus: true });
-    }
+    this.navigationController.selectFirstSiblingBlock();
   }
 
   selectLastSiblingBlock(): void {
-    if (!this.state?.selectedBlockId) {
-      return;
-    }
-
-    const current = getBlock(this.state.metadata, this.state.selectedBlockId);
-    if (!current) {
-      return;
-    }
-
-    const siblings = getChildren(this.state.metadata, current.parentId);
-    const lastSibling = siblings[siblings.length - 1];
-    if (lastSibling) {
-      this.selectBlock(lastSibling.id, { focus: true });
-    }
+    this.navigationController.selectLastSiblingBlock();
   }
 
   openActiveBlockMenu(): void {
@@ -2427,45 +2390,7 @@ export class ArborView extends FileView {
   }
 
   private handleOverviewKeyDown(event: KeyboardEvent): void {
-    if (!this.state || !this.state.selectedBlockId) {
-      return;
-    }
-
-    if ((event.target as HTMLElement | null)?.closest("textarea, input, [contenteditable='true']")) {
-      return;
-    }
-
-    if ((event.ctrlKey || event.metaKey) && this.handleDirectionalCreateShortcut(event)) {
-      return;
-    }
-
-    if (this.tryHandleNumericChildNavigation(event, this.state.selectedBlockId)) {
-      return;
-    }
-
-    if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
-      event.preventDefault();
-      this.beginEditingBlock(this.state.selectedBlockId, "overview");
-      return;
-    }
-
-    if ((event.key === "Backspace" || event.key === "Delete") && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
-      event.preventDefault();
-      void this.deleteSelectedBlock();
-      return;
-    }
-
-    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
-      return;
-    }
-
-    event.preventDefault();
-    const targetId = resolveOverviewArrowTarget(this.state.metadata, this.state.selectedBlockId, event.key, this.plugin.settings.layoutDirection);
-    if (!targetId) {
-      return;
-    }
-
-    this.selectBlock(targetId);
+    this.navigationController.handleOverviewKeyDown(event);
   }
 
   private syncOverviewZoom(): void {
@@ -3066,35 +2991,11 @@ export class ArborView extends FileView {
   }
 
   private handleSearchShortcut(event: KeyboardEvent): boolean {
-    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
-      return false;
-    }
-
-    if (event.code !== "KeyF") {
-      return false;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    this.openSearchOverlay();
-    return true;
+    return this.navigationController.handleSearchShortcut(event);
   }
 
   private handleHistoryShortcut(event: KeyboardEvent): boolean {
-    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.code !== "KeyZ") {
-      return false;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (event.shiftKey) {
-      void this.redo();
-    } else {
-      void this.undo();
-    }
-
-    return true;
+    return this.navigationController.handleHistoryShortcut(event);
   }
 
   private openViewMenu(event?: MouseEvent): void {
@@ -3460,203 +3361,23 @@ export class ArborView extends FileView {
   }
 
   private handleCardClick(event: MouseEvent): void {
-    const card = event.currentTarget as HTMLElement;
-    const blockId = card.dataset.blockId;
-    if (!blockId) {
-      return;
-    }
-
-    const interaction = resolveBranchCardInteraction({
-      target: event.target,
-      isActive: this.state?.selectedBlockId === blockId,
-      clickCount: 1
-    });
-    if (interaction.preserveDefault) {
-      return;
-    }
-
-    event.preventDefault();
-    if (interaction.edit) {
-      this.beginEditingBlock(blockId);
-      return;
-    }
-    if (interaction.select) {
-      this.selectBlock(blockId, { focus: true });
-    }
+    this.navigationController.handleCardClick(event);
   }
 
   private handleCardDoubleClick(event: MouseEvent): void {
-    const blockId = (event.currentTarget as HTMLElement).dataset.blockId;
-    const interaction = resolveBranchCardInteraction({
-      target: event.target,
-      isActive: this.state?.selectedBlockId === blockId,
-      clickCount: 2
-    });
-    if (blockId && interaction.edit) {
-      this.beginEditingBlock(blockId);
-    }
+    this.navigationController.handleCardDoubleClick(event);
   }
 
   private handleCardContextMenu(event: MouseEvent): void {
-    event.preventDefault();
-    const blockId = (event.currentTarget as HTMLElement).dataset.blockId;
-    if (!blockId) {
-      return;
-    }
-
-    this.selectBlock(blockId);
-    this.buildBlockMenu(blockId).showAtMouseEvent(event);
+    this.navigationController.handleCardContextMenu(event);
   }
 
   private handleCardKeyDown(event: KeyboardEvent): void {
-    event.stopPropagation();
-    if (this.handleSearchShortcut(event)) {
-      return;
-    }
-    if (this.handleHistoryShortcut(event)) {
-      return;
-    }
-    if (event.altKey) {
-      return;
-    }
-
-    const blockId = (event.currentTarget as HTMLElement).dataset.blockId;
-    if (!blockId) {
-      return;
-    }
-
-    if (this.state?.selectedBlockId !== blockId) {
-      this.state!.selectedBlockId = blockId;
-    }
-
-    if ((event.ctrlKey || event.metaKey) && this.handleDirectionalCreateShortcut(event)) {
-      return;
-    }
-    if (this.tryHandleNumericChildNavigation(event, blockId)) {
-      return;
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      this.selectPreviousSiblingBlock();
-      return;
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      this.selectNextSiblingBlock();
-      return;
-    }
-
-    if (event.key === getParentArrowKey(this.plugin.settings.layoutDirection)) {
-      event.preventDefault();
-      this.selectParentBlock();
-      return;
-    }
-
-    if (event.key === getChildArrowKey(this.plugin.settings.layoutDirection)) {
-      event.preventDefault();
-      this.selectPreferredChildBlock();
-      return;
-    }
-
-    if (event.key === "Home") {
-      event.preventDefault();
-      this.selectFirstSiblingBlock();
-      return;
-    }
-
-    if (event.key === "End") {
-      event.preventDefault();
-      this.selectLastSiblingBlock();
-      return;
-    }
-
-    if ((event.key === "Backspace" || event.key === "Delete") && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
-      event.preventDefault();
-      void this.deleteSelectedBlock();
-      return;
-    }
-
-    if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
-      event.preventDefault();
-      this.beginEditingBlock(blockId);
-    }
+    this.navigationController.handleCardKeyDown(event);
   }
 
   private handleViewportKeyDown(event: KeyboardEvent): void {
-    if (this.handleSearchShortcut(event)) {
-      return;
-    }
-    if (this.handleHistoryShortcut(event)) {
-      return;
-    }
-    if (event.altKey) {
-      return;
-    }
-
-    const target = event.target as HTMLElement | null;
-    if (target?.closest("input, textarea")) {
-      return;
-    }
-
-    if (!this.state?.selectedBlockId) {
-      return;
-    }
-
-    if ((event.ctrlKey || event.metaKey) && this.handleDirectionalCreateShortcut(event)) {
-      return;
-    }
-    if (this.tryHandleNumericChildNavigation(event, this.state.selectedBlockId)) {
-      return;
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      this.selectPreviousSiblingBlock();
-      return;
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      this.selectNextSiblingBlock();
-      return;
-    }
-
-    if (event.key === getParentArrowKey(this.plugin.settings.layoutDirection)) {
-      event.preventDefault();
-      this.selectParentBlock();
-      return;
-    }
-
-    if (event.key === getChildArrowKey(this.plugin.settings.layoutDirection)) {
-      event.preventDefault();
-      this.selectPreferredChildBlock();
-      return;
-    }
-
-    if (event.key === "Home") {
-      event.preventDefault();
-      this.selectFirstSiblingBlock();
-      return;
-    }
-
-    if (event.key === "End") {
-      event.preventDefault();
-      this.selectLastSiblingBlock();
-      return;
-    }
-
-    if ((event.key === "Backspace" || event.key === "Delete") && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
-      event.preventDefault();
-      void this.deleteSelectedBlock();
-      return;
-    }
-
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      this.beginEditingBlock(this.state.selectedBlockId);
-    }
+    this.navigationController.handleViewportKeyDown(event);
   }
 
   private handleCardDragStart(event: DragEvent): void {
@@ -3999,7 +3720,7 @@ export class ArborView extends FileView {
   }
 
   private resetViewState(): void {
-    this.clearNumericNavigation();
+    this.navigationController.clearNumericNavigation();
     this.clearBlurCommitTimer();
     this.clearZoomPersistTimer();
     this.clearZoomIndicatorTimer();
@@ -4025,43 +3746,6 @@ export class ArborView extends FileView {
     this.viewContext = null;
     this.loadingState = null;
     this.teardownShell();
-  }
-
-  private tryHandleNumericChildNavigation(event: KeyboardEvent, blockId: BranchBlockId): boolean {
-    if (event.ctrlKey || event.metaKey || event.altKey || !/^\d$/.test(event.key) || !this.state) {
-      return false;
-    }
-    event.preventDefault();
-    this.numericNavigationBuffer += event.key;
-    if (this.numericNavigationTimer !== null) {
-      window.clearTimeout(this.numericNavigationTimer);
-    }
-    this.numericNavigationTimer = window.setTimeout(() => {
-      const value = Number(this.numericNavigationBuffer);
-      this.clearNumericNavigation();
-      const block = getBlock(this.state?.metadata ?? createEmptyTree(), blockId);
-      if (!this.state || !block) {
-        return;
-      }
-      const target = resolveNumericChildTarget(
-        blockId,
-        block.parentId,
-        getChildren(this.state.metadata, blockId),
-        value
-      );
-      if (target) {
-        this.selectBlock(target, { focus: true });
-      }
-    }, 250);
-    return true;
-  }
-
-  private clearNumericNavigation(): void {
-    if (this.numericNavigationTimer !== null) {
-      window.clearTimeout(this.numericNavigationTimer);
-      this.numericNavigationTimer = null;
-    }
-    this.numericNavigationBuffer = "";
   }
 
   private async persistState(reason: string): Promise<void> {
@@ -4589,43 +4273,6 @@ export class ArborView extends FileView {
       dragging: false
     };
     viewport.setPointerCapture(event.pointerId);
-  }
-
-  private handleDirectionalCreateShortcut(event: KeyboardEvent): boolean {
-    if (!this.state?.selectedBlockId) {
-      return false;
-    }
-
-    if (event.key === getChildArrowKey(this.plugin.settings.layoutDirection)) {
-      event.preventDefault();
-      void this.createChild();
-      return true;
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      void this.createSiblingAbove();
-      return true;
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      void this.createSiblingBelow();
-      return true;
-    }
-
-    if (event.key === getParentArrowKey(this.plugin.settings.layoutDirection)) {
-      const parent = getParentBlock(this.state.metadata, this.state.selectedBlockId);
-      if (!parent) {
-        return false;
-      }
-
-      event.preventDefault();
-      void this.createParentLevelBlock();
-      return true;
-    }
-
-    return false;
   }
 
   private handleViewportPointerMove(event: PointerEvent, viewport: HTMLElement): void {

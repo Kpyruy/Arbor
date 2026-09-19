@@ -114,20 +114,20 @@ describe("overview arrow navigation", () => {
   });
 
   it("reuses numeric child navigation inside the overview keyboard handler", () => {
-    const handler = sourceMethod("src/view/ArborView.ts", "ArborView", "handleOverviewKeyDown");
+    const handler = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleOverviewKeyDown");
 
-    expect(handler).toContain("this.tryHandleNumericChildNavigation(event, this.state.selectedBlockId)");
+    expect(handler).toContain("this.tryHandleNumericChildNavigation(event, state.selectedBlockId)");
   });
 
   it("reuses Ctrl/Cmd arrow creation inside the overview keyboard handler", () => {
-    const handler = sourceMethod("src/view/ArborView.ts", "ArborView", "handleOverviewKeyDown");
+    const handler = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleOverviewKeyDown");
 
     expect(handler).toContain("(event.ctrlKey || event.metaKey) && this.handleDirectionalCreateShortcut(event)");
   });
 
   it("keeps the overview camera in place during keyboard navigation", () => {
-    const handler = sourceMethod("src/view/ArborView.ts", "ArborView", "handleOverviewKeyDown");
-    const numericNavigation = sourceMethod("src/view/ArborView.ts", "ArborView", "tryHandleNumericChildNavigation");
+    const handler = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleOverviewKeyDown");
+    const numericNavigation = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "tryHandleNumericChildNavigation");
 
     expect(handler).not.toContain("this.shouldCenterOverviewOnNextRender = true;");
     expect(numericNavigation).not.toContain("this.presentationMode === \"overview\"");
@@ -153,7 +153,7 @@ describe("overview arrow navigation", () => {
   it("opens overview editing from Enter and double-click without moving the camera", () => {
     const source = readSource("src/view/ArborView.ts");
     const overview = sourceMethod("src/view/ArborView.ts", "ArborView", "syncTreeOverview");
-    const handler = sourceMethod("src/view/ArborView.ts", "ArborView", "handleOverviewKeyDown");
+    const handler = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleOverviewKeyDown");
     const beginEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "onEditorBegin");
     const commitEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "onEditorUnchanged");
     const cancelEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "onEditorCancel");
@@ -163,7 +163,7 @@ describe("overview arrow navigation", () => {
     expect(overview).toContain('this.beginEditingBlock(node.id, "overview")');
     expect(overview).not.toContain('card.addEventListener("keydown"');
     expect(handler).toContain('event.key === "Enter"');
-    expect(handler).toContain('this.beginEditingBlock(this.state.selectedBlockId, "overview")');
+    expect(handler).toContain('this.actions.beginEditingBlock(state.selectedBlockId, "overview")');
     expect(beginEditing).toContain('session.origin === "overview"');
     expect(beginEditing).toContain("this.preserveOverviewViewportPosition()");
     expect(beginEditing).toContain("this.openOverviewEditorInPlace(block)");
@@ -175,10 +175,10 @@ describe("overview arrow navigation", () => {
 
   it("restores overview keyboard focus after deleting a block", () => {
     const source = readSource("src/view/ArborView.ts");
-    const handler = sourceMethod("src/view/ArborView.ts", "ArborView", "handleOverviewKeyDown");
+    const handler = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleOverviewKeyDown");
     const mutation = sourceMethod("src/view/ArborView.ts", "ArborView", "applyMutation");
 
-    expect(handler).toContain("void this.deleteSelectedBlock()");
+    expect(handler).toContain("this.handleDeleteShortcut(event)");
     expect(mutation).toContain("this.shouldRestoreOverviewKeyboardFocusAfterMutation =");
     expect(source).toContain("private restoreOverviewKeyboardFocusAfterMutation");
     expect(source).toContain("this.overviewViewportEl?.focus({ preventScroll: true })");

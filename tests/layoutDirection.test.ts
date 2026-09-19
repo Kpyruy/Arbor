@@ -8,7 +8,7 @@ import {
   getVisualColumnOrder,
   resolveInitialLayoutDirection
 } from "../src/layoutDirection";
-import { readSource } from "./helpers/viewSource";
+import { readSource, sourceMethod } from "./helpers/viewSource";
 
 describe("Arbor layout direction", () => {
   it("uses Obsidian UI direction only for a genuinely fresh install", () => {
@@ -89,11 +89,15 @@ describe("Arbor layout direction", () => {
 
   it("renders RTL as a CSS mirror while keeping semantic depth and card text in place", () => {
     const view = readSource("src/view/ArborView.ts");
+    const directionalCreate = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleDirectionalCreateShortcut");
+    const editorArrow = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleEditorArrow");
     const styles = readSource("styles.css");
 
     expect(view).toContain("columnEl.dataset.columnDepth");
-    expect(view).toContain("getParentArrowKey(this.plugin.settings.layoutDirection)");
-    expect(view).toContain("getChildArrowKey(this.plugin.settings.layoutDirection)");
+    expect(directionalCreate).toContain("getParentArrowKey(direction)");
+    expect(directionalCreate).toContain("getChildArrowKey(direction)");
+    expect(editorArrow).toContain("getParentArrowKey(direction)");
+    expect(editorArrow).toContain("getChildArrowKey(direction)");
     expect(view).toContain("getHorizontalWheelDelta(event.deltaY, this.plugin.settings.layoutDirection)");
     expect(view).toContain('root.classList.toggle("is-rtl", this.plugin.settings.layoutDirection === "rtl")');
     expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumbs");
