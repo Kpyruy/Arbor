@@ -70,7 +70,6 @@ import {
   setActiveOutputProfile
 } from "../outputProfiles";
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
-import { buildCleanExportDocument } from "../storage/cleanExport";
 import { loadImportedBranchDocument } from "../storage/reconcile";
 import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
@@ -80,12 +79,7 @@ import { projectOutput } from "../outputProjection";
 import { getEnteringBreadcrumbIds } from "../breadcrumbAnimation";
 import { resolveBranchCardInteraction } from "../cardInteraction";
 import { resolveNumericChildTarget } from "../numericNavigation";
-import {
-  resolveTreeOverviewExportSize,
-  resolveTreeOverviewExportLinkStyle,
-  MOBILE_TREE_OVERVIEW_EXPORT_LIMITS
-} from "../treeOverviewExport";
-import { buildSinglePageTreeOverviewPdf } from "../treeOverviewPdf";
+import { MOBILE_TREE_OVERVIEW_EXPORT_LIMITS, resolveTreeOverviewExportSize, type TreeOverviewExportQuality } from "../treeOverviewExport";
 import { getBreadcrumbScrollInsets, getChildArrowIcon, getChildArrowKey, getHorizontalWheelDelta, getParentArrowIcon, getParentArrowKey, getVisualBreadcrumbOrder } from "../layoutDirection";
 import { buildOverviewLayout } from "../model/overviewLayout";
 import {
@@ -129,6 +123,8 @@ import { ArborConfirmModal } from "./modals/ArborConfirmModal";
 import { CleanExportModal } from "./modals/CleanExportModal";
 import { TreeOverviewExportModal } from "./modals/TreeOverviewExportModal";
 import { applyOverviewLayout } from "./overview/overviewDom";
+import { ExportController, type OverviewSnapshot } from "./export/ExportController";
+import { createOverviewSnapshot } from "./export/overviewSnapshot";
 export {
   getBlockOutputMenuActions,
   getOutputCardPresentation
@@ -221,7 +217,25 @@ export class ArborView extends FileView {
   private overviewRenderVersion = 0;
   private overviewSelectionAnimation: Animation | null = null;
   private outputRenderVersion = 0;
-  private isExportingTreeOverview = false;
+  private readonly exportController = new ExportController({
+    getFile: () => this.file,
+    getState: () => this.state,
+    getSession: () => this.editingSession,
+    clearBlurCommitTimer: () => this.clearBlurCommitTimer(),
+    commitEditIfNeeded: () => this.commitEditIfNeeded(),
+    chooseClean: () => new CleanExportModal(this.app).waitForChoice(),
+    chooseTree: () => new TreeOverviewExportModal(this.app).waitForChoice(),
+    createCleanCopy: (source, contents) => this.plugin.createCleanExportCopy(source, contents),
+    openMarkdown: (file) => this.plugin.openFileInMarkdownView(this.app.workspace.getLeaf("tab"), file),
+    createTreeExport: (source, format, contents) => this.plugin.createTreeOverviewExport(source, format, contents),
+    snapshot: () => this.createOverviewExportSnapshot(),
+    encodePng: (snapshot, quality) => this.encodeOverviewExportPng(snapshot, quality),
+    notify: (message) => new Notice(message),
+    reportError: (message, error) => {
+      console.error(`[Arbor] ${message}`, error);
+      new Notice(message);
+    }
+  });
   private overviewPanState: {
     pointerId: number;
     startClientX: number;
@@ -589,220 +603,62 @@ export class ArborView extends FileView {
   }
 
   async exportCleanCopy(): Promise<void> {
-    if (!this.file || !this.state) {
-      return;
-    }
-
-    const file = this.file;
-    const { frontmatter, metadata, outputState } = this.state;
-    const pendingEdit = this.editingSession
-      ? { blockId: this.editingSession.blockId, content: this.editingSession.value }
-      : undefined;
-    this.clearBlurCommitTimer();
-
-    const options = await new CleanExportModal(this.app).waitForChoice();
-    if (!options) {
-      return;
-    }
-    if (this.file !== file || !this.state) {
-      return;
-    }
-
-    try {
-      const contents = buildCleanExportDocument(frontmatter, metadata, outputState, options, pendingEdit);
-      const exported = await this.plugin.createCleanExportCopy(file, contents);
-      await this.plugin.openFileInMarkdownView(this.app.workspace.getLeaf("tab"), exported);
-    } catch (error) {
-      console.error("[Arbor] Failed to create clean export", error);
-      new Notice("Arbor could not create the clean export copy.");
-    }
+    await this.exportController.exportCleanCopy();
   }
 
   async exportTreeOverview(): Promise<void> {
-    if (!this.file || !this.state || this.isExportingTreeOverview) {
-      return;
-    }
-
-    const choice = await new TreeOverviewExportModal(this.app).waitForChoice();
-    if (!choice || this.isExportingTreeOverview) {
-      return;
-    }
-
-    this.isExportingTreeOverview = true;
-    let exportFrame: HTMLElement | null = null;
-    try {
-      await this.commitEditIfNeeded();
-      const source = this.file;
-      const state = this.state;
-      if (!source || !state) {
-        return;
-      }
-
-      const snapshot = await this.createTreeOverviewExportSnapshot();
-      exportFrame = snapshot.frame;
-      const size = resolveTreeOverviewExportSize(snapshot.width, snapshot.height, choice.quality, Platform.isMobile ? MOBILE_TREE_OVERVIEW_EXPORT_LIMITS : undefined);
-      if (!size) {
-        new Notice("This tree overview is too large for the selected quality. Choose a lower quality and try again.");
-        return;
-      }
-
-      const backgroundColor = window.getComputedStyle(this.contentEl).backgroundColor;
-      const png = await toBlob(snapshot.frame, {
-        backgroundColor: backgroundColor === "rgba(0, 0, 0, 0)" ? "#1e1e1e" : backgroundColor,
-        cacheBust: true,
-        height: snapshot.height,
-        pixelRatio: size.scale,
-        width: snapshot.width
-      });
-      if (!png) {
-        throw new Error("Tree Overview image renderer returned no output.");
-      }
-
-      const pngBytes = new Uint8Array(await png.arrayBuffer());
-      const contents = choice.format === "pdf"
-        ? await buildSinglePageTreeOverviewPdf(pngBytes, snapshot.width, snapshot.height)
-        : pngBytes;
-      const exported = await this.plugin.createTreeOverviewExport(source, choice.format, contents);
-      new Notice(`Exported tree overview: ${exported.name}`);
-    } catch (error) {
-      console.error("[Arbor] Failed to export Tree Overview", error);
-      new Notice("Arbor could not export the tree overview.");
-    } finally {
-      exportFrame?.parentElement?.remove();
-      this.isExportingTreeOverview = false;
-    }
+    await this.exportController.exportTreeOverview();
   }
 
-  private async createTreeOverviewExportSnapshot(): Promise<{
-    frame: HTMLElement;
-    width: number;
-    height: number;
-  }> {
-    if (!this.state) {
+  private createOverviewExportSnapshot(): Promise<OverviewSnapshot> {
+    const state = this.state;
+    const file = this.file;
+    if (!state || !file) {
       throw new Error("Tree Overview export requires a loaded note.");
     }
-
     const document = this.contentEl.ownerDocument;
-    const padding = 48;
-    const selectedBlockId = this.state.selectedBlockId;
-    const activePathIds = new Set(getActivePath(this.state.metadata, selectedBlockId).map((block) => block.id));
-    const initialLayout = buildOverviewLayout(this.state.metadata, {
+    const theme = this.plugin.getEffectiveThemeState();
+    const themeValues = resolveArborThemeVariables(theme.activeThemeId, theme.customThemes);
+    const themeVariables = Object.fromEntries(
+      ARBOR_THEME_VARIABLES.map((name) => [name, themeValues[name] ?? ""])
+    );
+    const textMuted = document.defaultView?.getComputedStyle(this.contentEl).getPropertyValue("--text-muted").trim() ?? "";
+    return createOverviewSnapshot({
+      document,
+      metadata: state.metadata,
+      selectedBlockId: state.selectedBlockId,
+      sourcePath: file.path,
       cardWidth: this.plugin.settings.cardWidth,
-      direction: this.plugin.settings.layoutDirection
-    });
-    const root = document.body.createDiv({ cls: "arbor-tree-overview-export arbor-view" });
-    root.toggleClass("is-rtl", this.plugin.settings.layoutDirection === "rtl");
-    this.applyThemeVariables(root);
-    try {
-      const frame = root.createDiv({ cls: "arbor-tree-overview-export-frame" });
-      const scene = frame.createDiv({ cls: "arbor-overview-scene" });
-      const surface = scene.createDiv({ cls: "arbor-overview-surface arbor-tree-overview-export-surface" });
-      const cardsById = new Map<BranchBlockId, HTMLElement>();
-
-      this.prepareTreeOverviewExportFrame(frame, scene, surface, initialLayout.width, initialLayout.height, padding);
-      for (const node of initialLayout.nodes) {
-        const block = getBlock(this.state.metadata, node.id);
-        if (!block) {
-          continue;
-        }
-
-        const card = surface.createDiv({ cls: "arbor-overview-card arbor-tree-overview-export-card" });
-        card.dataset.blockId = node.id;
-        card.toggleClass("is-active", node.id === selectedBlockId);
-        card.toggleClass("is-on-path", node.id !== selectedBlockId && activePathIds.has(node.id));
-        card.setCssProps({
-          "--arbor-overview-card-width": `${node.width}px`,
-          "--arbor-overview-x": `${node.x}px`,
-          "--arbor-overview-y": `${node.y}px`
-        });
-        const content = card.createDiv({ cls: "arbor-overview-card-content markdown-rendered" });
-        await MarkdownRenderer.render(this.app, block.content, content, this.file?.path ?? "", this);
-        if (content.innerText.trim().length === 0) {
-          content.setText(extractSnippet(block.content, this.plugin.settings.previewSnippetLength));
-        }
-        cardsById.set(node.id, card);
-      }
-
-      await this.waitForTreeOverviewExportAssets(surface);
-      const cardHeights = new Map<BranchBlockId, number>();
-      cardsById.forEach((card, blockId) => {
-        cardHeights.set(blockId, Math.max(card.offsetHeight, card.scrollHeight));
-      });
-      const layout = buildOverviewLayout(this.state.metadata, {
-        cardWidth: this.plugin.settings.cardWidth,
-        cardHeights,
-        direction: this.plugin.settings.layoutDirection
-      });
-      this.prepareTreeOverviewExportFrame(frame, scene, surface, layout.width, layout.height, padding);
-      applyOverviewLayout(scene, surface, cardsById, layout, 1, this.plugin.settings.layoutDirection);
-      this.applyTreeOverviewExportLinkStyle(surface);
-      await this.waitForTreeOverviewExportAssets(surface);
-
-      return {
-        frame,
-        width: layout.width + padding * 2,
-        height: layout.height + padding * 2
-      };
-    } catch (error) {
-      root.remove();
-      throw error;
-    }
-  }
-
-  private prepareTreeOverviewExportFrame(
-    frame: HTMLElement,
-    scene: HTMLElement,
-    surface: HTMLElement,
-    width: number,
-    height: number,
-    padding: number
-  ): void {
-    frame.setCssStyles({
-      boxSizing: "border-box",
-      height: `${height + padding * 2}px`,
-      padding: `${padding}px`,
-      width: `${width + padding * 2}px`
-    });
-    scene.setCssStyles({
-      height: `${height}px`,
-      margin: "0",
-      width: `${width}px`
-    });
-    surface.setCssProps({ "--arbor-overview-zoom": "1" });
-  }
-
-  private applyTreeOverviewExportLinkStyle(surface: HTMLElement): void {
-    const textMuted = window.getComputedStyle(this.contentEl).getPropertyValue("--text-muted").trim();
-    if (!textMuted) {
-      return;
-    }
-
-    const style = resolveTreeOverviewExportLinkStyle(textMuted);
-    surface.setCssProps({
-      "--arbor-tree-export-link-stroke": style.stroke,
-      "--arbor-tree-export-link-opacity": style.opacity
+      direction: this.plugin.settings.layoutDirection,
+      snippetLength: this.plugin.settings.previewSnippetLength,
+      themeVariables,
+      textMuted,
+      markdown: { render: (markdown, target, sourcePath) => MarkdownRenderer.render(this.app, markdown, target, sourcePath, this) },
+      waitForNextPaint: () => this.waitForNextPaint()
     });
   }
 
-  private async waitForTreeOverviewExportAssets(container: HTMLElement): Promise<void> {
-    await Promise.race([container.ownerDocument.fonts.ready, this.wait(4_000)]);
-
-    const images = Array.from(container.querySelectorAll<HTMLImageElement>("img"));
-    await Promise.all(images.map(async (image) => {
-      if (image.complete) {
-        await image.decode?.().catch(() => undefined);
-        return;
-      }
-
-      await new Promise<void>((resolve) => {
-        const finish = () => resolve();
-        image.addEventListener("load", finish, { once: true });
-        image.addEventListener("error", finish, { once: true });
-        window.setTimeout(finish, 4_000);
-      });
-    }));
-    await this.waitForNextPaint();
-    await this.waitForNextPaint();
+  private async encodeOverviewExportPng(
+    snapshot: OverviewSnapshot,
+    quality: TreeOverviewExportQuality
+  ): Promise<Uint8Array | null> {
+    const size = resolveTreeOverviewExportSize(
+      snapshot.width,
+      snapshot.height,
+      quality,
+      Platform.isMobile ? MOBILE_TREE_OVERVIEW_EXPORT_LIMITS : undefined
+    );
+    if (!size) return null;
+    const backgroundColor = this.contentEl.ownerDocument.defaultView?.getComputedStyle(this.contentEl).backgroundColor ?? "";
+    const png = await toBlob(snapshot.frame, {
+      backgroundColor: backgroundColor === "rgba(0, 0, 0, 0)" ? "#1e1e1e" : backgroundColor,
+      cacheBust: true,
+      height: snapshot.height,
+      pixelRatio: size.scale,
+      width: snapshot.width
+    });
+    if (!png) throw new Error("Tree Overview image renderer returned no output.");
+    return new Uint8Array(await png.arrayBuffer());
   }
 
   openTreeOverview(): void {

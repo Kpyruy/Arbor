@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { readSource, sourceMethod } from "./helpers/viewSource";
+import { readSource, sourceFunction } from "./helpers/viewSource";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 
@@ -73,7 +73,7 @@ describe("Obsidian plugin review compatibility", () => {
 
   it("uses CSS variables instead of inline SVG export-link styles", () => {
     const styles = readSource("styles.css");
-    const exportStyle = sourceMethod("src/view/ArborView.ts", "ArborView", "applyTreeOverviewExportLinkStyle");
+    const exportStyle = sourceFunction("src/view/export/overviewSnapshot.ts", "applyTreeOverviewExportLinkStyle");
 
     expect(exportStyle).not.toContain("link.setCssProps");
     expect(exportStyle).toContain('"--arbor-tree-export-link-stroke"');
