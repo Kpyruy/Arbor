@@ -128,7 +128,7 @@ describe("ExportController", () => {
     state.frontmatter = "--- changed: true ---\n";
     state.metadata = fixtureTree();
     state.metadata.blocks[0].content = "Changed root";
-    state.outputState = fixtureOutput("changed");
+    state.outputState = fixtureOutput("draft");
     choice.resolve(cleanOptions);
     await exportPromise;
 

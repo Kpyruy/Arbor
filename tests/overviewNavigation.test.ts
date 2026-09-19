@@ -154,9 +154,9 @@ describe("overview arrow navigation", () => {
     const source = readSource("src/view/ArborView.ts");
     const overview = sourceMethod("src/view/ArborView.ts", "ArborView", "syncTreeOverview");
     const handler = sourceMethod("src/view/ArborView.ts", "ArborView", "handleOverviewKeyDown");
-    const beginEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "beginEditingBlock");
-    const commitEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "commitEditingSession");
-    const cancelEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "cancelEditingSession");
+    const beginEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "onEditorBegin");
+    const commitEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "onEditorUnchanged");
+    const cancelEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "onEditorCancel");
     const inPlaceEditor = sourceMethod("src/view/ArborView.ts", "ArborView", "openOverviewEditorInPlace");
 
     expect(overview).toContain('this.selectBlock(node.id, { focus: false, reveal: false })');
@@ -164,7 +164,7 @@ describe("overview arrow navigation", () => {
     expect(overview).not.toContain('card.addEventListener("keydown"');
     expect(handler).toContain('event.key === "Enter"');
     expect(handler).toContain('this.beginEditingBlock(this.state.selectedBlockId, "overview")');
-    expect(beginEditing).toContain('origin === "overview"');
+    expect(beginEditing).toContain('session.origin === "overview"');
     expect(beginEditing).toContain("this.preserveOverviewViewportPosition()");
     expect(beginEditing).toContain("this.openOverviewEditorInPlace(block)");
     expect(inPlaceEditor).toContain("this.revealOverviewSelectedCard(card)");

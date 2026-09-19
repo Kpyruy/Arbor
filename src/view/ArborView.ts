@@ -96,11 +96,10 @@ import {
   clampCardCenter,
   hasVerticalOverflow,
   reserveSceneWidthForColumns,
-  resolveColumnWheelNavigation,
-  resolveEditorHeight
+  resolveColumnWheelNavigation
 } from "../cardViewport";
 import { toBlob } from "html-to-image";
-import { clampZoomLevel, compactColumns, pinchViewport, resolvePinchZoom, shouldSaveOnEnter, useCompactLayout, TouchPoint } from "../mobile";
+import { clampZoomLevel, compactColumns, pinchViewport, resolvePinchZoom, useCompactLayout, TouchPoint } from "../mobile";
 import {
   createOutputProfileButton,
   getOutputProfileButtonPresentation,
@@ -125,6 +124,8 @@ import { TreeOverviewExportModal } from "./modals/TreeOverviewExportModal";
 import { applyOverviewLayout } from "./overview/overviewDom";
 import { ExportController, type OverviewSnapshot } from "./export/ExportController";
 import { createOverviewSnapshot } from "./export/overviewSnapshot";
+import { BlockEditorController } from "./editor/BlockEditorController";
+import { EditorAttachments } from "./editor/EditorAttachments";
 export {
   getBlockOutputMenuActions,
   getOutputCardPresentation
@@ -158,11 +159,11 @@ export class ArborView extends FileView {
 
   private readonly history = new BranchHistory();
   private state: LoadedFileState | null = null;
-  private editingSession: EditingSession | null = null;
+  private readonly editor: BlockEditorController;
+  private readonly attachments: EditorAttachments;
   private dragState: DragState | null = null;
   private renderFrame: number | null = null;
   private layoutFrame: number | null = null;
-  private blurCommitTimer: number | null = null;
   private numericNavigationTimer: number | null = null;
   private numericNavigationBuffer = "";
   private isPersisting = false;
@@ -217,10 +218,14 @@ export class ArborView extends FileView {
   private overviewRenderVersion = 0;
   private overviewSelectionAnimation: Animation | null = null;
   private outputRenderVersion = 0;
+
+  private get editingSession(): EditingSession | null {
+    return this.editor.getSession();
+  }
   private readonly exportController = new ExportController({
     getFile: () => this.file,
     getState: () => this.state,
-    getSession: () => this.editingSession,
+    getSession: () => this.editor.getSession(),
     clearBlurCommitTimer: () => this.clearBlurCommitTimer(),
     commitEditIfNeeded: () => this.commitEditIfNeeded(),
     chooseClean: () => new CleanExportModal(this.app).waitForChoice(),
@@ -270,6 +275,29 @@ export class ArborView extends FileView {
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: ArborPlugin) {
     super(leaf);
+    this.attachments = new EditorAttachments({
+      getFilePath: () => this.file?.path ?? "",
+      hasSession: () => this.editor.getSession() !== null,
+      getAvailablePath: (name, sourcePath) => this.app.fileManager.getAvailablePathForAttachment(name, sourcePath),
+      createBinary: (path, data) => this.app.vault.createBinary(path, data),
+      generateLink: (file, sourcePath) => this.app.fileManager.generateMarkdownLink(file, sourcePath),
+      onInserted: () => this.scheduleColumnAlignment(),
+      notify: (message) => new Notice(message),
+      reportError: (message, error) => console.error(message, error)
+    });
+    this.editor = new BlockEditorController({
+      getState: () => this.state,
+      usesTouchControls: () => this.usesTouchControls,
+      getViewportHeight: () => (this.presentationMode === "overview" ? this.overviewViewportEl : this.columnsViewportEl)?.clientHeight ?? window.innerHeight,
+      onBegin: (session) => this.onEditorBegin(session),
+      onCancel: (session) => this.onEditorCancel(session),
+      onUnchanged: (session) => this.onEditorUnchanged(session),
+      saveEdit: (session) => this.saveEditorSession(session),
+      onInput: () => this.scheduleColumnAlignment(),
+      handleSearchShortcut: (event) => this.handleSearchShortcut(event),
+      paste: (event, textarea) => this.attachments.handleEditorPaste(event, textarea),
+      drop: (event, textarea) => this.attachments.handleEditorDrop(event, textarea)
+    });
     this.allowNoFile = false;
     const doc = this.contentEl.ownerDocument;
     this.registerDomEvent(doc, "visibilitychange", () => {
@@ -381,7 +409,7 @@ export class ArborView extends FileView {
     this.cleanupViewportPan();
     this.state = null;
     this.history.clear();
-    this.editingSession = null;
+    this.editor.reset();
     this.dragState = null;
     this.isSearchOpen = false;
     this.showFullMiniMap = false;
@@ -503,7 +531,7 @@ export class ArborView extends FileView {
 
   private resetLoadedUiState(selectedBlockId: BranchBlockId | null): void {
     this.history.clear();
-    this.editingSession = null;
+    this.editor.reset();
     this.dragState = null;
     this.previewSearchQuery = "";
     this.isSearchOpen = false;
@@ -876,7 +904,7 @@ export class ArborView extends FileView {
     }
 
     if (this.editingSession?.blockId === this.state.selectedBlockId) {
-      void this.commitEditingSession();
+      void this.editor.commitEditingSession();
       return;
     }
 
@@ -885,13 +913,7 @@ export class ArborView extends FileView {
       return;
     }
 
-    this.editingSession = {
-      blockId: block.id,
-      originalContent: block.content,
-      value: block.content,
-      autofocus: true,
-      origin: "card"
-    };
+    this.editor.prepareCreatedBlock(block, "card");
     this.render();
   }
 
@@ -910,48 +932,7 @@ export class ArborView extends FileView {
   }
 
   private beginEditingBlock(blockId: BranchBlockId, origin: EditingOrigin = "card"): void {
-    if (!this.state) {
-      return;
-    }
-
-    const nextSelectedBlockId = ensureSelectedBlock(this.state.metadata, blockId);
-    if (this.editingSession && this.editingSession.blockId !== nextSelectedBlockId) {
-      const pendingSession = this.editingSession;
-      void this.commitEditingSession(pendingSession).then(() => {
-        if (this.state && nextSelectedBlockId) {
-          this.beginEditingBlock(nextSelectedBlockId, origin);
-        }
-      });
-      return;
-    }
-
-    const block = getBlock(this.state.metadata, nextSelectedBlockId);
-    if (!block) {
-      return;
-    }
-
-    if (this.state.selectedBlockId !== nextSelectedBlockId) {
-      this.pendingScrollBlockId = nextSelectedBlockId;
-    }
-
-    this.stopHorizontalScrollMotion();
-    this.state.selectedBlockId = nextSelectedBlockId;
-    this.pendingFocusBlockId = nextSelectedBlockId;
-    this.editingSession = {
-      blockId: block.id,
-      originalContent: block.content,
-      value: block.content,
-      autofocus: true,
-      origin
-    };
-    this.syncTouchDock();
-    if (origin === "overview" && this.openOverviewEditorInPlace(block)) {
-      return;
-    }
-    if (origin === "overview") {
-      this.preserveOverviewViewportPosition();
-    }
-    this.render();
+    this.editor.beginEditingBlock(blockId, origin);
   }
 
   selectParentBlock(): void {
@@ -1117,7 +1098,7 @@ export class ArborView extends FileView {
     this.state.linearized = linearizeTree(restored);
     this.state.origin = "metadata";
     this.state.staleMetadata = null;
-    this.editingSession = null;
+    this.editor.reset();
     this.pendingFocusBlockId = this.state.selectedBlockId;
     this.pendingScrollBlockId = this.state.selectedBlockId;
     await this.persistState("Rebuild tree from metadata");
@@ -1140,7 +1121,7 @@ export class ArborView extends FileView {
     this.state.outputState = previous.outputState;
     this.state.selectedBlockId = ensureSelectedBlock(previous.metadata, previous.selectedBlockId);
     this.state.linearized = linearizeTree(this.state.metadata);
-    this.editingSession = null;
+    this.editor.reset();
     this.pendingFocusBlockId = this.state.selectedBlockId;
     this.pendingScrollBlockId = this.state.selectedBlockId;
     await this.persistState("Undo");
@@ -1163,7 +1144,7 @@ export class ArborView extends FileView {
     this.state.outputState = next.outputState;
     this.state.selectedBlockId = ensureSelectedBlock(next.metadata, next.selectedBlockId);
     this.state.linearized = linearizeTree(this.state.metadata);
-    this.editingSession = null;
+    this.editor.reset();
     this.pendingFocusBlockId = this.state.selectedBlockId;
     this.pendingScrollBlockId = this.state.selectedBlockId;
     await this.persistState("Redo");
@@ -2015,66 +1996,7 @@ export class ArborView extends FileView {
   }
 
   private wireEditorElement(editor: HTMLTextAreaElement, block: BranchBlock, origin: EditingOrigin): void {
-    if (editor.dataset.arborBound === "true") {
-      editor.dataset.editorOrigin = origin;
-      return;
-    }
-
-    editor.dataset.arborBound = "true";
-    editor.dataset.editorOrigin = origin;
-    ["pointerdown", "mousedown", "mouseup", "click", "dblclick", "contextmenu"].forEach((eventName) => {
-      editor.addEventListener(eventName, (event) => {
-        event.stopPropagation();
-      });
-    });
-    editor.addEventListener("input", () => {
-      if (this.editingSession?.blockId === block.id) {
-        this.clearBlurCommitTimer();
-        this.editingSession.value = editor.value;
-        this.resizeEditor(editor);
-        this.scheduleColumnAlignment();
-      }
-    });
-    editor.addEventListener("keydown", (event) => {
-      event.stopPropagation();
-      if (this.handleSearchShortcut(event)) {
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        this.cancelEditingSession();
-      } else if (shouldSaveOnEnter(event, this.usesTouchControls)) {
-        event.preventDefault();
-        void this.commitEditingSession();
-      }
-    });
-    editor.addEventListener("paste", (event) => {
-      event.stopPropagation();
-      void this.handleEditorPaste(event, editor);
-    });
-    editor.addEventListener("drop", (event) => {
-      event.stopPropagation();
-      void this.handleEditorDrop(event, editor);
-    });
-    editor.addEventListener("dragover", (event) => {
-      event.stopPropagation();
-      if (Array.from(event.dataTransfer?.items ?? []).some((item) => item.type.startsWith("image/"))) {
-        event.preventDefault();
-      }
-    });
-    editor.addEventListener("focus", (event) => {
-      event.stopPropagation();
-      this.clearBlurCommitTimer();
-    });
-    editor.addEventListener("blur", (event) => {
-      event.stopPropagation();
-      if (this.usesTouchControls) return;
-      const session = this.editingSession;
-      if (!session || session.blockId !== block.id || session.origin !== editor.dataset.editorOrigin) {
-        return;
-      }
-      this.scheduleEditingSessionCommit(session);
-    });
+    this.editor.wireEditorElement(editor, block, origin);
   }
 
   private syncEditorNode(card: HTMLElement, block: BranchBlock): void {
@@ -2099,7 +2021,7 @@ export class ArborView extends FileView {
         editorEl.setSelectionRange(editorEl.value.length, editorEl.value.length);
         this.resizeEditor(editorEl);
         if (this.editingSession) {
-          this.editingSession.autofocus = false;
+          this.editor.consumeAutofocus(this.editingSession);
         }
       });
     }
@@ -2195,7 +2117,7 @@ export class ArborView extends FileView {
         card.addClass("is-editing");
         const editor = card.createEl("textarea", { cls: "arbor-editor arbor-overview-editor-input" });
         this.wireEditorElement(editor, block, "overview");
-        editor.value = this.editingSession!.value;
+        editor.value = this.editingSession.value;
         this.resizeEditor(editor);
         if (this.editingSession?.autofocus) {
           window.requestAnimationFrame(() => {
@@ -2203,7 +2125,7 @@ export class ArborView extends FileView {
             editor.setSelectionRange(editor.value.length, editor.value.length);
             this.resizeEditor(editor);
             if (this.editingSession) {
-              this.editingSession.autofocus = false;
+              this.editor.consumeAutofocus(this.editingSession);
             }
           });
         }
@@ -2293,7 +2215,7 @@ export class ArborView extends FileView {
       editor.setSelectionRange(editor.value.length, editor.value.length);
       this.resizeEditor(editor);
       this.revealOverviewSelectedCard(card);
-      session.autofocus = false;
+      this.editor.consumeAutofocus(session);
     });
     return true;
   }
@@ -3002,7 +2924,7 @@ export class ArborView extends FileView {
             editor.setSelectionRange(editor.value.length, editor.value.length);
             this.resizeEditor(editor);
             if (this.editingSession) {
-              this.editingSession.autofocus = false;
+              this.editor.consumeAutofocus(this.editingSession);
             }
           }, 0);
         }
@@ -3466,7 +3388,7 @@ export class ArborView extends FileView {
             previewEditor.focus({ preventScroll: true });
             if (this.editingSession.autofocus) {
               previewEditor.setSelectionRange(previewEditor.value.length, previewEditor.value.length);
-              this.editingSession.autofocus = false;
+              this.editor.consumeAutofocus(this.editingSession);
             }
             focusHandled = true;
           }
@@ -3480,7 +3402,7 @@ export class ArborView extends FileView {
             editor.focus({ preventScroll: true });
             if (this.editingSession.autofocus) {
               editor.setSelectionRange(editor.value.length, editor.value.length);
-              this.editingSession.autofocus = false;
+              this.editor.consumeAutofocus(this.editingSession);
             }
           } else {
             focusCard.focus({ preventScroll: true });
@@ -3992,13 +3914,7 @@ export class ArborView extends FileView {
     if (autofocusSelection && this.state.selectedBlockId) {
       const block = getBlock(this.state.metadata, this.state.selectedBlockId);
       if (block) {
-        this.editingSession = {
-          blockId: block.id,
-          originalContent: block.content,
-          value: block.content,
-          autofocus: true,
-          origin: this.presentationMode === "overview" ? "overview" : "card"
-        };
+        this.editor.prepareCreatedBlock(block, this.presentationMode === "overview" ? "overview" : "card");
       }
     }
 
@@ -4016,16 +3932,40 @@ export class ArborView extends FileView {
   }
 
   private async commitEditIfNeeded(): Promise<void> {
-    if (this.editingSession) {
-      await this.commitEditingSession();
-    }
+    await this.editor.commitEditIfNeeded();
   }
 
   private cancelEditingSession(): void {
-    this.clearBlurCommitTimer();
-    const session = this.editingSession;
+    this.editor.cancelEditingSession();
+  }
+
+  private async commitEditingSession(session: EditingSession | null = this.editingSession): Promise<void> {
+    await this.editor.commitEditingSession(session);
+  }
+
+  private scheduleEditingSessionCommit(session: EditingSession): void {
+    this.editor.scheduleEditingSessionCommit(session);
+  }
+
+  private clearBlurCommitTimer(): void {
+    this.editor.clearBlurCommitTimer();
+  }
+
+  private onEditorBegin(session: EditingSession): void {
+    if (!this.state) return;
+    if (this.state.selectedBlockId !== session.blockId) this.pendingScrollBlockId = session.blockId;
+    this.stopHorizontalScrollMotion();
+    this.state.selectedBlockId = session.blockId;
+    this.pendingFocusBlockId = session.blockId;
+    this.syncTouchDock();
+    const block = getBlock(this.state.metadata, session.blockId);
+    if (session.origin === "overview" && block && this.openOverviewEditorInPlace(block)) return;
+    if (session.origin === "overview") this.preserveOverviewViewportPosition();
+    this.render();
+  }
+
+  private onEditorCancel(session: EditingSession | null): void {
     this.pendingFocusBlockId = this.state?.selectedBlockId ?? null;
-    this.editingSession = null;
     this.syncTouchDock();
     if (session?.origin === "overview") {
       void this.restoreOverviewCardContentInPlace(session.blockId);
@@ -4034,57 +3974,28 @@ export class ArborView extends FileView {
     this.render();
   }
 
-  private async commitEditingSession(session: EditingSession | null = this.editingSession): Promise<void> {
-    if (!this.state || !session || this.editingSession !== session) {
-      return;
-    }
-
-    this.clearBlurCommitTimer();
-
-    const { blockId, value } = session;
-    if (value === session.originalContent) {
-      this.pendingFocusBlockId = blockId;
-      this.editingSession = null;
-      this.syncTouchDock();
-      if (session.origin === "overview") {
-        await this.restoreOverviewCardContentInPlace(session.blockId);
-        return;
-      }
-      this.render();
-      return;
-    }
-
+  private async onEditorUnchanged(session: EditingSession): Promise<void> {
+    this.pendingFocusBlockId = session.blockId;
+    this.syncTouchDock();
     if (session.origin === "overview") {
-      this.preserveOverviewViewportPosition();
+      await this.restoreOverviewCardContentInPlace(session.blockId);
+      return;
     }
-
-    this.history.push("Edit block", this.state.metadata, this.state.outputState, this.state.selectedBlockId);
-    this.state.metadata = normalizeMetadata(updateBlockContent(this.state.metadata, blockId, value));
-    this.state.selectedBlockId = blockId;
-    this.state.linearized = linearizeTree(this.state.metadata);
-    this.state.origin = "metadata";
-    this.state.staleMetadata = null;
-    this.pendingFocusBlockId = blockId;
-    this.editingSession = null;
-    await this.persistState("Edit block");
     this.render();
   }
 
-  private scheduleEditingSessionCommit(session: EditingSession): void {
-    this.clearBlurCommitTimer();
-    this.blurCommitTimer = window.setTimeout(() => {
-      if (this.editingSession !== session) {
-        return;
-      }
-      void this.commitEditingSession(session);
-    }, 80);
-  }
-
-  private clearBlurCommitTimer(): void {
-    if (this.blurCommitTimer !== null) {
-      window.clearTimeout(this.blurCommitTimer);
-      this.blurCommitTimer = null;
-    }
+  private async saveEditorSession(session: EditingSession): Promise<void> {
+    if (!this.state) return;
+    if (session.origin === "overview") this.preserveOverviewViewportPosition();
+    this.history.push("Edit block", this.state.metadata, this.state.outputState, this.state.selectedBlockId);
+    this.state.metadata = normalizeMetadata(updateBlockContent(this.state.metadata, session.blockId, session.value));
+    this.state.selectedBlockId = session.blockId;
+    this.state.linearized = linearizeTree(this.state.metadata);
+    this.state.origin = "metadata";
+    this.state.staleMetadata = null;
+    this.pendingFocusBlockId = session.blockId;
+    await this.persistState("Edit block");
+    this.render();
   }
 
   private resetViewState(): void {
@@ -4105,7 +4016,7 @@ export class ArborView extends FileView {
     this.cleanupViewportPan();
     this.state = null;
     this.history.clear();
-    this.editingSession = null;
+    this.editor.reset();
     this.dragState = null;
     this.isSearchOpen = false;
     this.showFullMiniMap = false;
@@ -4497,13 +4408,7 @@ export class ArborView extends FileView {
   }
 
   private resizeEditor(textarea: HTMLTextAreaElement): void {
-    textarea.setCssProps({ "--arbor-editor-height": "0px" });
-    const card = textarea.closest<HTMLElement>(".arbor-card");
-    const viewportHeight = (this.presentationMode === "overview" ? this.overviewViewportEl : this.columnsViewportEl)?.clientHeight ?? window.innerHeight;
-    const cardChromeHeight = card ? Math.max(0, card.offsetHeight - textarea.offsetHeight) : 0;
-    textarea.setCssProps({
-      "--arbor-editor-height": `${this.usesTouchControls ? Math.max(80, Math.min(textarea.scrollHeight, viewportHeight - cardChromeHeight - 32)) : resolveEditorHeight(textarea.scrollHeight, viewportHeight, cardChromeHeight)}px`
-    });
+    this.editor.resizeEditor(textarea);
   }
 
   private handleViewportWheel(event: WheelEvent, viewport: HTMLElement): void {
@@ -5022,70 +4927,10 @@ export class ArborView extends FileView {
   }
 
   private async handleEditorPaste(event: ClipboardEvent, textarea: HTMLTextAreaElement): Promise<void> {
-    const items = Array.from(event.clipboardData?.items ?? []).filter((item) => item.kind === "file" && item.type.startsWith("image/"));
-    if (items.length === 0) {
-      return;
-    }
-
-    event.preventDefault();
-    for (const item of items) {
-      const file = item.getAsFile();
-      if (file) {
-        await this.insertImageFileIntoEditor(file, textarea);
-      }
-    }
+    await this.attachments.handleEditorPaste(event, textarea);
   }
 
   private async handleEditorDrop(event: DragEvent, textarea: HTMLTextAreaElement): Promise<void> {
-    const files = Array.from(event.dataTransfer?.files ?? []).filter((file) => file.type.startsWith("image/"));
-    if (files.length === 0) {
-      return;
-    }
-
-    event.preventDefault();
-    for (const file of files) {
-      await this.insertImageFileIntoEditor(file, textarea);
-    }
-  }
-
-  private async insertImageFileIntoEditor(file: File, textarea: HTMLTextAreaElement): Promise<void> {
-    if (!this.file || !this.editingSession) {
-      return;
-    }
-
-    try {
-      const attachmentPath = await this.app.fileManager.getAvailablePathForAttachment(this.buildAttachmentName(file), this.file.path);
-      const created = await this.app.vault.createBinary(attachmentPath, await file.arrayBuffer());
-      const baseLink = this.app.fileManager.generateMarkdownLink(created, this.file.path);
-      const embedLink = baseLink.startsWith("!") ? baseLink : `!${baseLink}`;
-      this.insertTextAtCursor(textarea, `${textarea.value.trim().length > 0 ? "\n\n" : ""}${embedLink}`);
-      this.scheduleColumnAlignment();
-    } catch (error) {
-      console.error("[Arbor] Failed to save pasted image", error);
-      new Notice("Arbor could not save the image into the vault.");
-    }
-  }
-
-  private insertTextAtCursor(textarea: HTMLTextAreaElement, insertText: string): void {
-    const start = textarea.selectionStart ?? textarea.value.length;
-    const end = textarea.selectionEnd ?? textarea.value.length;
-    const nextValue = `${textarea.value.slice(0, start)}${insertText}${textarea.value.slice(end)}`;
-    textarea.value = nextValue;
-    const nextCursor = start + insertText.length;
-    textarea.setSelectionRange(nextCursor, nextCursor);
-    textarea.dispatchEvent(new Event("input"));
-  }
-
-  private buildAttachmentName(file: File): string {
-    if (file.name && file.name.trim().length > 0 && file.name !== "image.png") {
-      return file.name;
-    }
-
-    const stamp = new Date()
-      .toISOString()
-      .replace(/[-:TZ.]/g, "")
-      .slice(0, 14);
-    const extension = file.type.split("/")[1] || "png";
-    return `Pasted image ${stamp}.${extension}`;
+    await this.attachments.handleEditorDrop(event, textarea);
   }
 }
