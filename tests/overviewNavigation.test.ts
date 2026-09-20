@@ -51,7 +51,7 @@ describe("overview arrow navigation", () => {
   });
 
   it("keeps overview selection animation local without flashing every border", () => {
-    const source = readSource("src/view/ArborView.ts");
+    const source = readSource("src/view/overview/TreeOverviewController.ts");
     const styles = readSource("styles.css");
     const cardStart = styles.indexOf(".arbor-overview-card {\n  position: absolute;");
     const cardStyles = styles.slice(cardStart, styles.indexOf("}", cardStart) + 1);
@@ -135,41 +135,43 @@ describe("overview arrow navigation", () => {
 
   it("updates selection without rebuilding the overview and smoothly reveals an off-screen card", () => {
     const selectBlock = sourceMethod("src/view/ArborView.ts", "ArborView", "selectBlock");
+    const selection = sourceMethod("src/view/overview/TreeOverviewController.ts", "TreeOverviewController", "syncOverviewSelection");
     const revealSelectedCard = sourceMethod("src/view/overview/OverviewViewportController.ts", "OverviewViewportController", "revealOverviewSelectedCard");
 
     expect(selectBlock).toContain('this.presentationMode === "overview"');
-    expect(selectBlock).toContain("this.syncOverviewSelection(selectionChanged && options?.reveal !== false)");
+    expect(selectBlock).toContain("this.overview.syncOverviewSelection(selectionChanged && options?.reveal !== false)");
+    expect(selection).not.toContain("markdown.render");
     expect(revealSelectedCard).toContain('behavior: "smooth"');
     expect(revealSelectedCard).toContain("viewport.scrollTo");
   });
 
   it("uses the regular block menu when right-clicking an overview card", () => {
-    const overview = sourceMethod("src/view/ArborView.ts", "ArborView", "syncTreeOverview");
+    const overview = sourceMethod("src/view/overview/TreeOverviewController.ts", "TreeOverviewController", "syncTreeOverview");
 
     expect(overview).toContain('card.addEventListener("contextmenu"');
-    expect(overview).toContain("this.buildBlockMenu(node.id).showAtMouseEvent(event)");
+    expect(overview).toContain("this.port.openBlockMenu(node.id, event)");
   });
 
   it("opens overview editing from Enter and double-click without moving the camera", () => {
     const source = readSource("src/view/ArborView.ts");
-    const overview = sourceMethod("src/view/ArborView.ts", "ArborView", "syncTreeOverview");
+    const overview = sourceMethod("src/view/overview/TreeOverviewController.ts", "TreeOverviewController", "syncTreeOverview");
     const handler = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleOverviewKeyDown");
     const beginEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "onEditorBegin");
     const commitEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "onEditorUnchanged");
     const cancelEditing = sourceMethod("src/view/ArborView.ts", "ArborView", "onEditorCancel");
-    const inPlaceEditor = sourceMethod("src/view/ArborView.ts", "ArborView", "openOverviewEditorInPlace");
+    const inPlaceEditor = sourceMethod("src/view/overview/TreeOverviewController.ts", "TreeOverviewController", "openOverviewEditorInPlace");
 
-    expect(overview).toContain('this.selectBlock(node.id, { focus: false, reveal: false })');
-    expect(overview).toContain('this.beginEditingBlock(node.id, "overview")');
+    expect(overview).toContain('this.port.selection.selectBlock(node.id, { focus: false, reveal: false })');
+    expect(overview).toContain('this.port.editor.beginEditingBlock(node.id, "overview")');
     expect(overview).not.toContain('card.addEventListener("keydown"');
     expect(handler).toContain('event.key === "Enter"');
     expect(handler).toContain('this.actions.beginEditingBlock(state.selectedBlockId, "overview")');
     expect(beginEditing).toContain('session.origin === "overview"');
     expect(beginEditing).toContain("this.preserveOverviewViewportPosition()");
-    expect(beginEditing).toContain("this.openOverviewEditorInPlace(block)");
-    expect(inPlaceEditor).toContain("this.revealOverviewSelectedCard(card)");
-    expect(commitEditing).toContain("this.restoreOverviewCardContentInPlace(session.blockId)");
-    expect(cancelEditing).toContain("this.restoreOverviewCardContentInPlace(session.blockId)");
+    expect(beginEditing).toContain("this.overview.openOverviewEditorInPlace(block)");
+    expect(inPlaceEditor).toContain("this.port.revealSelected(card)");
+    expect(commitEditing).toContain("this.overview.restoreOverviewCardContentInPlace(session.blockId)");
+    expect(cancelEditing).toContain("this.overview.restoreOverviewCardContentInPlace(session.blockId)");
     expect(source).toContain("private restoreOverviewViewportPosition");
   });
 
@@ -179,14 +181,15 @@ describe("overview arrow navigation", () => {
     const mutation = sourceMethod("src/view/ArborView.ts", "ArborView", "applyMutation");
 
     expect(handler).toContain("this.handleDeleteShortcut(event)");
-    expect(mutation).toContain("this.shouldRestoreOverviewKeyboardFocusAfterMutation =");
-    expect(source).toContain("private restoreOverviewKeyboardFocusAfterMutation");
-    expect(source).toContain("this.overviewViewportEl?.focus({ preventScroll: true })");
+    expect(mutation).toContain("this.overview.requestKeyboardFocusAfterMutation(");
+    expect(mutation).toContain("this.presentationMode === \"overview\"");
+    expect(source).toContain("clearPendingFocus: () => { this.pendingFocusBlockId = null; }");
+    expect(readSource("src/view/overview/TreeOverviewController.ts")).toContain("this.overviewViewportEl?.focus({ preventScroll: true })");
   });
 
   it("keeps the current overview visible while a structural update is rendered", () => {
     const styles = readSource("styles.css");
-    const overview = sourceMethod("src/view/ArborView.ts", "ArborView", "syncTreeOverview");
+    const overview = sourceMethod("src/view/overview/TreeOverviewController.ts", "TreeOverviewController", "syncTreeOverview");
 
     expect(overview).toContain("const previousSurface = this.overviewSurfaceEl;");
     expect(overview).toContain('cls: "arbor-overview-surface is-staging"');

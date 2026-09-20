@@ -113,9 +113,11 @@ describe("default presentation mode", () => {
   it("centres the selected block only when opening the overview", () => {
     const source = readSource("src/view/ArborView.ts");
 
-    expect(source).toContain("private shouldCenterOverviewOnNextRender = false;");
-    expect(source).toContain("this.shouldCenterOverviewOnNextRender = true;\n      this.presentationMode = \"overview\";");
-    expect(source).toContain("if (this.shouldCenterOverviewOnNextRender) {");
+    const overview = readSource("src/view/overview/TreeOverviewController.ts");
+
+    expect(overview).toContain("private shouldCenterOverviewOnNextRender = false;");
+    expect(source).toContain("this.overview.requestCenterOnNextRender();\n      this.presentationMode = \"overview\";");
+    expect(overview).toContain("if (this.shouldCenterOverviewOnNextRender) {");
   });
 
   it("places floating controls opposite the reading direction", () => {

@@ -76,11 +76,6 @@ import { projectOutput } from "../outputProjection";
 import { getEnteringBreadcrumbIds } from "../breadcrumbAnimation";
 import { MOBILE_TREE_OVERVIEW_EXPORT_LIMITS, resolveTreeOverviewExportSize, type TreeOverviewExportQuality } from "../treeOverviewExport";
 import { getBreadcrumbScrollInsets, getChildArrowIcon, getParentArrowIcon, getVisualBreadcrumbOrder } from "../layoutDirection";
-import { buildOverviewLayout } from "../model/overviewLayout";
-import {
-  resolveOverviewCardSelectionState,
-  startOverviewSelectionAnimation
-} from "../overviewNavigation";
 import { ARBOR_THEME_VARIABLES, resolveArborThemeVariables } from "../theme";
 import { CARD_PREVIEW_MAX_HEIGHT_PX } from "../cardViewport";
 import { toBlob } from "html-to-image";
@@ -106,7 +101,7 @@ import {
 import { ArborConfirmModal } from "./modals/ArborConfirmModal";
 import { CleanExportModal } from "./modals/CleanExportModal";
 import { TreeOverviewExportModal } from "./modals/TreeOverviewExportModal";
-import { applyOverviewLayout } from "./overview/overviewDom";
+import { TreeOverviewController } from "./overview/TreeOverviewController";
 import { ExportController, type OverviewSnapshot } from "./export/ExportController";
 import { createOverviewSnapshot } from "./export/overviewSnapshot";
 import { BlockEditorController } from "./editor/BlockEditorController";
@@ -140,6 +135,7 @@ export class ArborView extends FileView {
   private readonly navigationController: NavigationController;
   private readonly branchViewport: BranchViewportController;
   private readonly overviewViewport: OverviewViewportController;
+  private readonly overview: TreeOverviewController;
   private readonly zoomController: ZoomController;
   private readonly touchController: TouchController;
   private readonly branchRenderer: BranchRenderer;
@@ -173,10 +169,6 @@ export class ArborView extends FileView {
   private previewPaneEl: HTMLElement | null = null;
   private previewMiniMapEl: HTMLElement | null = null;
   private previewContentEl: HTMLElement | null = null;
-  private overviewStageEl: HTMLElement | null = null;
-  private overviewViewportEl: HTMLElement | null = null;
-  private overviewSceneEl: HTMLElement | null = null;
-  private overviewSurfaceEl: HTMLElement | null = null;
   private outputStageEl: HTMLElement | null = null;
   private outputSurfaceEl: HTMLElement | null = null;
   private renderedPreviewSignature = "";
@@ -190,10 +182,6 @@ export class ArborView extends FileView {
   private presentationMode: ArborPresentationMode = "editor";
   private renderedLayoutDirection: ArborSettings["layoutDirection"] = "ltr";
   private shouldSnapViewportAfterDirectionChange = false;
-  private shouldCenterOverviewOnNextRender = false;
-  private shouldRestoreOverviewKeyboardFocusAfterMutation = false;
-  private overviewRenderVersion = 0;
-  private overviewSelectionAnimation: Animation | null = null;
   private outputRenderVersion = 0;
 
   private get editingSession(): EditingSession | null {
@@ -235,7 +223,7 @@ export class ArborView extends FileView {
     this.editor = new BlockEditorController({
       getState: () => this.state,
       usesTouchControls: () => this.usesTouchControls,
-      getViewportHeight: () => (this.presentationMode === "overview" ? this.overviewViewportEl : this.columnsViewportEl)?.clientHeight ?? window.innerHeight,
+      getViewportHeight: () => (this.presentationMode === "overview" ? this.overview.getElements().viewport : this.columnsViewportEl)?.clientHeight ?? window.innerHeight,
       onBegin: (session) => this.onEditorBegin(session),
       onCancel: (session) => this.onEditorCancel(session),
       onUnchanged: (session) => this.onEditorUnchanged(session),
@@ -279,7 +267,10 @@ export class ArborView extends FileView {
       consumeAutofocus: (session) => this.editor.consumeAutofocus(session)
     });
     this.overviewViewport = new OverviewViewportController({
-      getElements: () => ({ viewport: this.overviewViewportEl, scene: this.overviewSceneEl, surface: this.overviewSurfaceEl }),
+      getElements: () => {
+        const { viewport, scene, surface } = this.overview.getElements();
+        return { viewport, scene, surface };
+      },
       getZoom: () => this.plugin.settings.zoomLevel
     });
     this.zoomController = new ZoomController({
@@ -299,8 +290,8 @@ export class ArborView extends FileView {
       hasEditingSession: () => this.editor.getSession() !== null,
       usesTouchControls: () => this.usesTouchControls,
       getOverviewSceneOffset: () => ({
-        left: this.overviewSceneEl?.offsetLeft ?? 0,
-        top: this.overviewSceneEl?.offsetTop ?? 0
+        left: this.overview.getElements().scene?.offsetLeft ?? 0,
+        top: this.overview.getElements().scene?.offsetTop ?? 0
       }),
       revealCompactSelection: () => this.revealCompactSelection()
     });
@@ -355,6 +346,31 @@ export class ArborView extends FileView {
       createChild: () => this.createChild(),
       setCollapsedState: (id, collapsed) => this.setCollapsedState(id, collapsed)
     });
+    this.overview = new TreeOverviewController({
+      read: {
+        getState: () => this.state,
+        getSettings: () => this.plugin.settings,
+        getMode: () => this.presentationMode,
+        getFilePath: () => this.file?.path ?? ""
+      },
+      editor: this.editor,
+      markdown: { render: (markdown, target, sourcePath) => MarkdownRenderer.render(this.app, markdown, target, sourcePath, this) },
+      selection: { selectBlock: (id, options) => this.selectBlock(id, options) },
+      getBody: () => this.bodyEl,
+      getContext: () => this.viewContext,
+      bindViewport: (viewport) => this.bindOverviewViewport(viewport),
+      openBlockMenu: (id, event) => this.buildBlockMenu(id).showAtMouseEvent(event),
+      setHoveredBlock: (id) => this.setHoveredBlock(id),
+      restoreViewport: () => this.restoreOverviewViewportPosition(),
+      centerSelected: () => this.centerOverviewOnSelectedBlock(),
+      revealSelected: (card) => this.revealOverviewSelectedCard(card),
+      syncTouchDock: () => this.syncTouchDock(),
+      requestRender: () => this.render(),
+      waitForNextPaint: () => this.waitForNextPaint(),
+      syncOutputCardPresentation: (card, id, context) => this.syncOutputCardPresentation(card, id, context),
+      consumeAutofocus: (session) => this.editor.consumeAutofocus(session),
+      clearPendingFocus: () => { this.pendingFocusBlockId = null; }
+    });
     this.allowNoFile = false;
     const doc = this.contentEl.ownerDocument;
     this.registerDomEvent(doc, "visibilitychange", () => {
@@ -398,7 +414,7 @@ export class ArborView extends FileView {
     this.contentEl.setCssProps({ "--arbor-mobile-height": `${Math.max(120, bottom - rect.top - 8)}px` });
     if (this.editingSession) {
       if (this.presentationMode === "overview") {
-        const card = this.overviewSurfaceEl?.querySelector<HTMLElement>(".arbor-overview-card.is-active");
+        const card = this.overview.getElements().surface?.querySelector<HTMLElement>(".arbor-overview-card.is-active");
         if (card) this.revealOverviewSelectedCard(card);
       }
       else this.revealCompactSelection();
@@ -443,6 +459,7 @@ export class ArborView extends FileView {
     this.clearBreadcrumbScrollFrame();
     this.branchViewport.reset();
     this.overviewViewport.reset();
+    this.overview.reset();
     this.dragDropController.reset();
     this.cleanupViewportPan();
     this.state = null;
@@ -467,8 +484,7 @@ export class ArborView extends FileView {
     this.overviewViewport.reset();
     this.dragDropController.reset();
     this.cleanupOverviewPan();
-    this.overviewSelectionAnimation?.cancel();
-    this.overviewSelectionAnimation = null;
+    this.overview.reset();
     await this.commitEditIfNeeded();
     return super.onClose();
   }
@@ -504,7 +520,7 @@ export class ArborView extends FileView {
     this.state = prepared;
     this.shouldSnapViewportAfterDirectionChange = directionChanged;
     if (directionChanged && this.presentationMode === "overview") {
-      this.shouldCenterOverviewOnNextRender = true;
+      this.overview.requestCenterOnNextRender();
     }
     this.pendingFocusBlockId = this.state.selectedBlockId;
     this.pendingScrollBlockId = this.state.selectedBlockId;
@@ -520,7 +536,7 @@ export class ArborView extends FileView {
     this.applyViewClasses(this.contentEl);
 
     if (this.presentationMode === "overview") {
-      this.shouldCenterOverviewOnNextRender = true;
+      this.overview.requestCenterOnNextRender();
       this.render();
       return;
     }
@@ -564,7 +580,7 @@ export class ArborView extends FileView {
     this.isSearchOpen = false;
     this.showFullMiniMap = false;
     this.presentationMode = this.plugin.settings.defaultPresentationMode;
-    this.shouldCenterOverviewOnNextRender = this.presentationMode === "overview";
+    this.overview.requestCenterOnNextRender(this.presentationMode === "overview");
     this.shouldFocusSearchInput = false;
     this.hoveredBlockId = null;
     this.viewContext = null;
@@ -718,7 +734,7 @@ export class ArborView extends FileView {
 
   openTreeOverview(): void {
     void this.commitEditIfNeeded().then(() => {
-      this.shouldCenterOverviewOnNextRender = true;
+      this.overview.requestCenterOnNextRender();
       this.presentationMode = "overview";
       this.render();
     });
@@ -781,7 +797,7 @@ export class ArborView extends FileView {
         this.plugin.settings
       );
       this.syncSearchOverlay(this.viewContext);
-      this.syncOverviewSelection(selectionChanged && options?.reveal !== false);
+      this.overview.syncOverviewSelection(selectionChanged && options?.reveal !== false);
       return;
     }
 
@@ -1124,7 +1140,7 @@ export class ArborView extends FileView {
   }
 
   render(): void {
-    this.overviewRenderVersion += 1;
+    this.overview.invalidate();
     this.outputRenderVersion += 1;
     if (this.renderFrame !== null) {
       window.cancelAnimationFrame(this.renderFrame);
@@ -1166,7 +1182,7 @@ export class ArborView extends FileView {
     this.syncBanner();
     this.syncLoadingOverlay();
     if (this.presentationMode === "output") {
-      this.overviewStageEl?.setCssStyles({ display: "none" });
+      this.overview.hide();
       this.columnsStageEl?.setCssStyles({ display: "none" });
       this.previewPaneEl?.setCssStyles({ display: "none" });
       this.outputStageEl?.setCssStyles({ display: "" });
@@ -1178,11 +1194,11 @@ export class ArborView extends FileView {
     if (this.presentationMode === "overview") {
       this.columnsStageEl?.setCssStyles({ display: "none" });
       this.previewPaneEl?.setCssStyles({ display: "none" });
-      await this.syncTreeOverview();
+      await this.overview.syncTreeOverview();
       return;
     }
 
-    this.overviewStageEl?.setCssStyles({ display: "none" });
+    this.overview.hide();
     this.columnsStageEl?.setCssStyles({ display: "" });
     this.previewPaneEl?.setCssStyles({ display: "" });
     const allColumns = buildColumnModels(this.state.metadata, this.state.selectedBlockId, this.plugin.settings.previewSnippetLength);
@@ -1389,8 +1405,7 @@ export class ArborView extends FileView {
     this.dragDropController.reset();
     this.cleanupViewportPan();
     this.cleanupOverviewPan();
-    this.overviewSelectionAnimation?.cancel();
-    this.overviewSelectionAnimation = null;
+    this.overview.reset();
     this.touchController.reset();
     this.contentEl.empty();
     this.frameEl = null;
@@ -1418,10 +1433,6 @@ export class ArborView extends FileView {
     this.previewPaneEl = null;
     this.previewMiniMapEl = null;
     this.previewContentEl = null;
-    this.overviewStageEl = null;
-    this.overviewViewportEl = null;
-    this.overviewSceneEl = null;
-    this.overviewSurfaceEl = null;
     this.outputStageEl = null;
     this.outputSurfaceEl = null;
     this.renderedPreviewSignature = "";
@@ -1719,190 +1730,32 @@ export class ArborView extends FileView {
     }
   }
 
-  private async syncTreeOverview(): Promise<void> {
-    if (!this.bodyEl || !this.state) {
-      return;
-    }
-
-    if (!this.overviewStageEl || !this.overviewViewportEl || !this.overviewSceneEl || !this.overviewSurfaceEl) {
-      this.overviewStageEl = this.bodyEl.createDiv({ cls: "arbor-overview-stage" });
-      this.overviewViewportEl = this.overviewStageEl.createDiv({ cls: "arbor-overview-viewport" });
-      this.overviewViewportEl.tabIndex = 0;
-      this.overviewSceneEl = this.overviewViewportEl.createDiv({ cls: "arbor-overview-scene" });
-      this.overviewSurfaceEl = this.overviewSceneEl.createDiv({ cls: "arbor-overview-surface" });
-      this.overviewViewportEl.addEventListener("pointerdown", (event) => this.handleOverviewPointerDown(event));
-      this.overviewViewportEl.addEventListener("pointermove", (event) => this.handleOverviewPointerMove(event));
-      this.overviewViewportEl.addEventListener("pointerup", (event) => this.handleOverviewPointerUp(event));
-      this.overviewViewportEl.addEventListener("pointercancel", (event) => this.handleOverviewPointerUp(event));
-      this.overviewViewportEl.addEventListener("lostpointercapture", () => this.cleanupOverviewPan());
-      this.overviewViewportEl.addEventListener("wheel", (event) => this.handleOverviewWheel(event), { passive: false });
-      this.overviewViewportEl.addEventListener("keydown", (event) => this.handleOverviewKeyDown(event));
-      this.touchController.bindOverviewTouch(this.overviewViewportEl);
-    }
-
-    const stage = this.overviewStageEl;
-    const viewport = this.overviewViewportEl;
-    const scene = this.overviewSceneEl;
-    // Markdown rendering yields before layout measurement. If a newer render starts
-    // while that work is pending, discard its hidden staging surface immediately so
-    // repeated settings changes cannot leave duplicate card trees in the scene.
-    scene.querySelectorAll<HTMLElement>(".arbor-overview-surface.is-staging").forEach((staleSurface) => staleSurface.remove());
-    const previousSurface = this.overviewSurfaceEl;
-    const surface = scene.createDiv({ cls: "arbor-overview-surface is-staging" });
-    const overviewRenderVersion = this.overviewRenderVersion;
-    stage.setCssStyles({ display: "" });
-    const zoom = this.plugin.settings.zoomLevel;
-
-    const initialLayout = buildOverviewLayout(this.state.metadata, {
-      cardWidth: this.plugin.settings.cardWidth,
-      direction: this.plugin.settings.layoutDirection
-    });
-    const selectedBlockId = this.state.selectedBlockId;
-    const activePathIds = new Set(getActivePath(this.state.metadata, selectedBlockId).map((block) => block.id));
-    const cardsById = new Map<BranchBlockId, HTMLElement>();
-    const measuredHeights = new Map<BranchBlockId, number>();
-
-    for (const node of initialLayout.nodes) {
-      const block = getBlock(this.state.metadata, node.id);
-      if (!block) {
-        continue;
-      }
-      const card = surface.createDiv({ cls: "arbor-overview-card" });
-      card.dataset.blockId = node.id;
-      card.tabIndex = 0;
-      card.setAttribute("role", "button");
-      card.addClass("is-measuring");
-      card.setCssProps({ "--arbor-overview-card-width": `${node.width}px` });
-      card.toggleClass("is-active", node.id === selectedBlockId);
-      card.toggleClass("is-on-path", node.id !== selectedBlockId && activePathIds.has(node.id));
-      card.toggleClass("is-zoomed-out", zoom < 0.78);
-      const isEditingCard = this.editingSession?.blockId === block.id && this.editingSession.origin === "overview";
-      if (isEditingCard) {
-        card.addClass("is-editing");
-        const editor = card.createEl("textarea", { cls: "arbor-editor arbor-overview-editor-input" });
-        this.wireEditorElement(editor, block, "overview");
-        editor.value = this.editingSession.value;
-        this.resizeEditor(editor);
-        if (this.editingSession?.autofocus) {
-          window.requestAnimationFrame(() => {
-            editor.focus({ preventScroll: true });
-            editor.setSelectionRange(editor.value.length, editor.value.length);
-            this.resizeEditor(editor);
-            if (this.editingSession) {
-              this.editor.consumeAutofocus(this.editingSession);
-            }
-          });
-        }
-      } else {
-        const content = card.createDiv({ cls: "arbor-overview-card-content markdown-rendered" });
-        await MarkdownRenderer.render(this.app, block.content, content, this.file?.path ?? "", this);
-        if (content.innerText.trim().length === 0) {
-          content.setText(extractSnippet(block.content, this.plugin.settings.previewSnippetLength));
-        }
-        content.querySelectorAll("img").forEach((image) => {
-          image.addEventListener("load", () => this.render(), { once: true });
-        });
-      }
-      this.syncOutputCardPresentation(card, block.id, this.viewContext);
-      card.addEventListener("pointerdown", (event) => event.stopPropagation());
-      card.addEventListener("click", (event) => {
-        event.stopPropagation();
-        if ((event.target as HTMLElement).closest("a, button, input, textarea")) {
-          return;
-        }
-        this.selectBlock(node.id, { focus: false, reveal: false });
-      });
-      card.addEventListener("dblclick", (event) => {
-        event.stopPropagation();
-        this.beginEditingBlock(node.id, "overview");
-      });
-      card.addEventListener("contextmenu", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.selectBlock(node.id, { focus: false });
-        this.buildBlockMenu(node.id).showAtMouseEvent(event);
-      });
-      card.addEventListener("mouseenter", () => this.setHoveredBlock(node.id));
-      card.addEventListener("mouseleave", () => this.setHoveredBlock(null));
-      cardsById.set(node.id, card);
-    }
-
-    await this.waitForNextPaint();
-    if (overviewRenderVersion !== this.overviewRenderVersion) {
-      surface.remove();
-      return;
-    }
-    cardsById.forEach((card, blockId) => {
-      measuredHeights.set(blockId, card.scrollHeight);
-      card.removeClass("is-measuring");
-    });
-
-    const layout = buildOverviewLayout(this.state.metadata, {
-      cardWidth: this.plugin.settings.cardWidth,
-      cardHeights: measuredHeights,
-      direction: this.plugin.settings.layoutDirection
-    });
-    applyOverviewLayout(scene, surface, cardsById, layout, zoom, this.plugin.settings.layoutDirection);
-    previousSurface.remove();
-    surface.removeClass("is-staging");
-    this.overviewSurfaceEl = surface;
-
-    viewport.toggleClass("is-zoomed-out", zoom < 0.78);
-    this.restoreOverviewViewportPosition();
-    if (this.shouldCenterOverviewOnNextRender) {
-      this.shouldCenterOverviewOnNextRender = false;
-      window.requestAnimationFrame(() => this.centerOverviewOnSelectedBlock());
-    }
-    this.restoreOverviewKeyboardFocusAfterMutation();
-    this.syncTouchDock();
-  }
-
-  private openOverviewEditorInPlace(block: BranchBlock): boolean {
-    const card = this.overviewSurfaceEl?.querySelector<HTMLElement>(`.arbor-overview-card[data-block-id="${block.id}"]`);
-    const session = this.editingSession;
-    if (!card || !session || session.blockId !== block.id || session.origin !== "overview") {
-      return false;
-    }
-
-    card.empty();
-    card.addClass("is-editing");
-    const editor = card.createEl("textarea", { cls: "arbor-editor arbor-overview-editor-input" });
-    this.wireEditorElement(editor, block, "overview");
-    editor.value = session.value;
-    this.resizeEditor(editor);
-    this.syncOutputCardPresentation(card, block.id, this.viewContext);
-    window.requestAnimationFrame(() => {
-      if (this.editingSession !== session) {
-        return;
-      }
-      editor.focus({ preventScroll: true });
-      editor.setSelectionRange(editor.value.length, editor.value.length);
-      this.resizeEditor(editor);
-      this.revealOverviewSelectedCard(card);
-      this.editor.consumeAutofocus(session);
-    });
-    return true;
-  }
-
-  private async restoreOverviewCardContentInPlace(blockId: BranchBlockId): Promise<void> {
-    const card = this.overviewSurfaceEl?.querySelector<HTMLElement>(`.arbor-overview-card[data-block-id="${blockId}"]`);
-    const block = this.state ? getBlock(this.state.metadata, blockId) : null;
-    if (!card || !block) {
-      return;
-    }
-
-    card.empty();
-    card.removeClass("is-editing");
-    const content = card.createDiv({ cls: "arbor-overview-card-content markdown-rendered" });
-    await MarkdownRenderer.render(this.app, block.content, content, this.file?.path ?? "", this);
-    if (content.innerText.trim().length === 0) {
-      content.setText(extractSnippet(block.content, this.plugin.settings.previewSnippetLength));
-    }
-    content.querySelectorAll("img").forEach((image) => {
-      image.addEventListener("load", () => this.render(), { once: true });
-    });
-    this.syncOutputCardPresentation(card, block.id, this.viewContext);
-    card.focus({ preventScroll: true });
+  private bindOverviewViewport(viewport: HTMLElement): () => void {
+    const pointerDown = (event: PointerEvent) => this.handleOverviewPointerDown(event);
+    const pointerMove = (event: PointerEvent) => this.handleOverviewPointerMove(event);
+    const pointerUp = (event: PointerEvent) => this.handleOverviewPointerUp(event);
+    const lostPointerCapture = () => this.cleanupOverviewPan();
+    const wheel = (event: WheelEvent) => this.handleOverviewWheel(event);
+    const keyDown = (event: KeyboardEvent) => this.handleOverviewKeyDown(event);
+    viewport.addEventListener("pointerdown", pointerDown);
+    viewport.addEventListener("pointermove", pointerMove);
+    viewport.addEventListener("pointerup", pointerUp);
+    viewport.addEventListener("pointercancel", pointerUp);
+    viewport.addEventListener("lostpointercapture", lostPointerCapture);
+    viewport.addEventListener("wheel", wheel, { passive: false });
+    viewport.addEventListener("keydown", keyDown);
+    const disposeTouch = this.touchController.bindOverviewTouch(viewport);
+    return () => {
+      viewport.removeEventListener("pointerdown", pointerDown);
+      viewport.removeEventListener("pointermove", pointerMove);
+      viewport.removeEventListener("pointerup", pointerUp);
+      viewport.removeEventListener("pointercancel", pointerUp);
+      viewport.removeEventListener("lostpointercapture", lostPointerCapture);
+      viewport.removeEventListener("wheel", wheel);
+      viewport.removeEventListener("keydown", keyDown);
+      disposeTouch();
+      this.cleanupOverviewPan();
+    };
   }
 
   private handleOverviewPointerDown(event: PointerEvent): void {
@@ -1946,64 +1799,8 @@ export class ArborView extends FileView {
     this.overviewViewport.centerOverviewOnSelectedBlock();
   }
 
-  private syncOverviewSelection(selectionChanged: boolean): void {
-    if (!this.state || !this.overviewSurfaceEl) {
-      return;
-    }
-
-    const selectedBlockId = this.state.selectedBlockId;
-    const activePathIds = new Set(getActivePath(this.state.metadata, selectedBlockId).map((block) => block.id));
-    const cards = this.overviewSurfaceEl.querySelectorAll<HTMLElement>(".arbor-overview-card");
-    let selectedCard: HTMLElement | null = null;
-    let shouldAnimateSelectedCard = false;
-    cards.forEach((card) => {
-      const blockId = card.dataset.blockId;
-      if (!blockId) {
-        return;
-      }
-      const presentation = resolveOverviewCardSelectionState(
-        blockId,
-        selectedBlockId,
-        activePathIds,
-        selectionChanged
-      );
-      card.toggleClass("is-active", presentation.active);
-      card.toggleClass("is-on-path", presentation.onPath);
-      if (presentation.active) {
-        selectedCard = card;
-        shouldAnimateSelectedCard = presentation.animate;
-      }
-    });
-
-    if (shouldAnimateSelectedCard && selectedCard) {
-      this.animateOverviewSelectedCard(selectedCard);
-    }
-    if (selectionChanged && selectedCard) {
-      this.revealOverviewSelectedCard(selectedCard);
-    }
-  }
-
-  private animateOverviewSelectedCard(selectedCard: HTMLElement): void {
-    this.overviewSelectionAnimation = startOverviewSelectionAnimation(
-      selectedCard,
-      this.overviewSelectionAnimation,
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    );
-  }
-
   private revealOverviewSelectedCard(selectedCard: HTMLElement): void {
     this.overviewViewport.revealOverviewSelectedCard(selectedCard);
-  }
-
-  private restoreOverviewKeyboardFocusAfterMutation(): void {
-    if (!this.shouldRestoreOverviewKeyboardFocusAfterMutation) {
-      return;
-    }
-    this.shouldRestoreOverviewKeyboardFocusAfterMutation = false;
-    this.pendingFocusBlockId = null;
-    window.requestAnimationFrame(() => {
-      this.overviewViewportEl?.focus({ preventScroll: true });
-    });
   }
 
   private preserveOverviewViewportPosition(): void {
@@ -2575,9 +2372,10 @@ export class ArborView extends FileView {
     this.state.outputState = deepClone(next);
     this.pendingFocusBlockId = this.state.selectedBlockId;
     this.pendingScrollBlockId = this.state.selectedBlockId;
-    this.shouldRestoreOverviewKeyboardFocusAfterMutation =
+    this.overview.requestKeyboardFocusAfterMutation(
       this.presentationMode === "overview" &&
-      this.overviewViewportEl?.contains(this.contentEl.ownerDocument.activeElement) === true;
+      this.overview.getElements().viewport?.contains(this.contentEl.ownerDocument.activeElement) === true
+    );
     await this.persistState(label);
     this.render();
     return deepClone(this.state.outputState);
@@ -2717,9 +2515,10 @@ export class ArborView extends FileView {
     this.state.staleMetadata = null;
     this.pendingFocusBlockId = this.state.selectedBlockId;
     this.pendingScrollBlockId = this.state.selectedBlockId;
-    this.shouldRestoreOverviewKeyboardFocusAfterMutation =
+    this.overview.requestKeyboardFocusAfterMutation(
       this.presentationMode === "overview" &&
-      this.overviewViewportEl?.contains(this.contentEl.ownerDocument.activeElement) === true;
+      this.overview.getElements().viewport?.contains(this.contentEl.ownerDocument.activeElement) === true
+    );
 
     if (autofocusSelection && this.state.selectedBlockId) {
       const block = getBlock(this.state.metadata, this.state.selectedBlockId);
@@ -2769,7 +2568,7 @@ export class ArborView extends FileView {
     this.pendingFocusBlockId = session.blockId;
     this.syncTouchDock();
     const block = getBlock(this.state.metadata, session.blockId);
-    if (session.origin === "overview" && block && this.openOverviewEditorInPlace(block)) return;
+    if (session.origin === "overview" && block && this.overview.openOverviewEditorInPlace(block)) return;
     if (session.origin === "overview") this.preserveOverviewViewportPosition();
     this.render();
   }
@@ -2778,7 +2577,7 @@ export class ArborView extends FileView {
     this.pendingFocusBlockId = this.state?.selectedBlockId ?? null;
     this.syncTouchDock();
     if (session?.origin === "overview") {
-      void this.restoreOverviewCardContentInPlace(session.blockId);
+      void this.overview.restoreOverviewCardContentInPlace(session.blockId);
       return;
     }
     this.render();
@@ -2788,7 +2587,7 @@ export class ArborView extends FileView {
     this.pendingFocusBlockId = session.blockId;
     this.syncTouchDock();
     if (session.origin === "overview") {
-      await this.restoreOverviewCardContentInPlace(session.blockId);
+      await this.overview.restoreOverviewCardContentInPlace(session.blockId);
       return;
     }
     this.render();
@@ -2824,6 +2623,7 @@ export class ArborView extends FileView {
     this.viewContext = null;
     this.loadingState = null;
     this.overviewViewport.reset();
+    this.overview.reset();
     this.teardownShell();
   }
 
@@ -3046,9 +2846,10 @@ export class ArborView extends FileView {
     });
     this.pendingFocusBlockId = selectedBlockId;
     this.pendingScrollBlockId = selectedBlockId;
-    this.shouldRestoreOverviewKeyboardFocusAfterMutation =
+    this.overview.requestKeyboardFocusAfterMutation(
       this.presentationMode === "overview" &&
-      this.overviewViewportEl?.contains(this.contentEl.ownerDocument.activeElement) === true;
+      this.overview.getElements().viewport?.contains(this.contentEl.ownerDocument.activeElement) === true
+    );
     await this.persistState(label);
     this.render();
   }
@@ -3093,10 +2894,8 @@ export class ArborView extends FileView {
         this.syncOutputCardPresentation(card, blockId, context);
       }
     };
-    this.columnsEl?.querySelectorAll<HTMLElement>(".arbor-card[data-block-id]").forEach(syncCard);
-    this.overviewSurfaceEl
-      ?.querySelectorAll<HTMLElement>(".arbor-overview-card[data-block-id]")
-      .forEach(syncCard);
+    this.branchRenderer.forEachCard(syncCard);
+    this.overview.forEachCard(syncCard);
   }
 
   private async copyBlockLink(blockId: BranchBlockId): Promise<void> {

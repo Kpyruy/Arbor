@@ -6,6 +6,6 @@ it("keeps layout writer independent of live camera and document state", () => {
   expect(source).toContain("export function applyOverviewLayout(");
   expect(source).not.toContain("this.");
   expect(source).toContain("buildOverviewLinkPath");
-  expect(sourceMethod("src/view/ArborView.ts", "ArborView", "syncTreeOverview"))
+  expect(sourceMethod("src/view/overview/TreeOverviewController.ts", "TreeOverviewController", "syncTreeOverview"))
     .toContain("applyOverviewLayout(");
 });
