@@ -225,11 +225,12 @@ describe("default presentation mode", () => {
   });
 
   it("gives the newly selected card an explicit focus-entry animation", () => {
-    const view = readSource("src/view/ArborView.ts");
+    const pendingFocus = sourceMethod("src/view/branch/BranchViewportController.ts", "BranchViewportController", "applyPendingFocusAndScroll");
+    const viewport = sourceMethod("src/view/branch/BranchViewportController.ts", "BranchViewportController", "animateSelectedCard");
     const styles = readSource("styles.css");
 
-    expect(view).toContain("this.animateSelectedCard(pendingScrollBlockId)");
-    expect(view).toContain('card.addClass("is-selection-entering")');
+    expect(pendingFocus).toContain("this.animateSelectedCard(request.scrollBlockId)");
+    expect(viewport).toContain('card.classList.add("is-selection-entering")');
     expect(styles).toContain(".arbor-card.is-selection-entering");
     expect(styles).toContain("animation: arbor-card-focus-enter");
     expect(styles).toContain("@keyframes arbor-card-focus-enter");
@@ -241,7 +242,7 @@ describe("default presentation mode", () => {
   });
 
   it("keeps an already visible child card still during arrow navigation", () => {
-    const scrollIntoView = sourceMethod("src/view/ArborView.ts", "ArborView", "scrollCardIntoHorizontalView");
+    const scrollIntoView = sourceMethod("src/view/branch/BranchViewportController.ts", "BranchViewportController", "scrollCardIntoHorizontalView");
 
     expect(scrollIntoView).toContain("if (!shouldScrollLeft && !shouldScrollRight)");
     expect(scrollIntoView).not.toContain("shouldCenterSelectedBlock");

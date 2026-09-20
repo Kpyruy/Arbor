@@ -135,12 +135,12 @@ describe("overview arrow navigation", () => {
 
   it("updates selection without rebuilding the overview and smoothly reveals an off-screen card", () => {
     const selectBlock = sourceMethod("src/view/ArborView.ts", "ArborView", "selectBlock");
-    const revealSelectedCard = sourceMethod("src/view/ArborView.ts", "ArborView", "revealOverviewSelectedCard");
+    const revealSelectedCard = sourceMethod("src/view/overview/OverviewViewportController.ts", "OverviewViewportController", "revealOverviewSelectedCard");
 
     expect(selectBlock).toContain('this.presentationMode === "overview"');
     expect(selectBlock).toContain("this.syncOverviewSelection(selectionChanged && options?.reveal !== false)");
     expect(revealSelectedCard).toContain('behavior: "smooth"');
-    expect(revealSelectedCard).toContain("const isOutsideViewport");
+    expect(revealSelectedCard).toContain("viewport.scrollTo");
   });
 
   it("uses the regular block menu when right-clicking an overview card", () => {

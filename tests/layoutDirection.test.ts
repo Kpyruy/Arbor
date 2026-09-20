@@ -125,9 +125,10 @@ describe("Arbor layout direction", () => {
 
   it("snaps the selected card after changing direction instead of animating from stale scroll coordinates", () => {
     const view = readSource("src/view/ArborView.ts");
+    const viewport = sourceMethod("src/view/branch/BranchViewportController.ts", "BranchViewportController", "applyPendingFocusAndScroll");
 
     expect(view).toContain("shouldSnapViewportAfterDirectionChange");
-    expect(view).toContain("this.scrollCardIntoHorizontalView(scrollCard, columnsViewportEl, preservedSceneWidth, snapViewport);");
+    expect(viewport).toContain("this.scrollCardIntoHorizontalView(scrollCard, viewport, request.preservedSceneWidth, request.snap)");
   });
 
   it("uses a layout-only refresh rather than rebuilding editor cards for a direction toggle", () => {

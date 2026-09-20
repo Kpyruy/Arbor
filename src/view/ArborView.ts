@@ -89,9 +89,7 @@ import {
   canDragCard,
   canStartCardDrag,
   CARD_PREVIEW_MAX_HEIGHT_PX,
-  clampCardCenter,
   hasVerticalOverflow,
-  reserveSceneWidthForColumns,
   resolveColumnWheelNavigation
 } from "../cardViewport";
 import { toBlob } from "html-to-image";
@@ -123,6 +121,8 @@ import { createOverviewSnapshot } from "./export/overviewSnapshot";
 import { BlockEditorController } from "./editor/BlockEditorController";
 import { EditorAttachments } from "./editor/EditorAttachments";
 import { NavigationController } from "./navigation/NavigationController";
+import { BranchViewportController } from "./branch/BranchViewportController";
+import { OverviewViewportController } from "./overview/OverviewViewportController";
 export {
   getBlockOutputMenuActions,
   getOutputCardPresentation
@@ -159,9 +159,10 @@ export class ArborView extends FileView {
   private readonly editor: BlockEditorController;
   private readonly attachments: EditorAttachments;
   private readonly navigationController: NavigationController;
+  private readonly branchViewport: BranchViewportController;
+  private readonly overviewViewport: OverviewViewportController;
   private dragState: DragState | null = null;
   private renderFrame: number | null = null;
-  private layoutFrame: number | null = null;
   private isPersisting = false;
   private pendingFocusBlockId: BranchBlockId | null = null;
   private pendingScrollBlockId: BranchBlockId | null = null;
@@ -210,7 +211,6 @@ export class ArborView extends FileView {
   private shouldSnapViewportAfterDirectionChange = false;
   private shouldCenterOverviewOnNextRender = false;
   private shouldRestoreOverviewKeyboardFocusAfterMutation = false;
-  private pendingOverviewViewportPosition: { left: number; top: number } | null = null;
   private overviewRenderVersion = 0;
   private overviewSelectionAnimation: Animation | null = null;
   private outputRenderVersion = 0;
@@ -237,17 +237,8 @@ export class ArborView extends FileView {
       new Notice(message);
     }
   });
-  private overviewPanState: {
-    pointerId: number;
-    startClientX: number;
-    startClientY: number;
-    startScrollLeft: number;
-    startScrollTop: number;
-  } | null = null;
   private readonly columnElementMap = new Map<string, HTMLElement>();
   private readonly currentColumnMap = new Map<string, BranchColumnModel>();
-  private pendingFocusFrame: number | null = null;
-  private horizontalScrollFrame: number | null = null;
   private breadcrumbScrollFrame: number | null = null;
   private zoomPersistTimer: number | null = null;
   private zoomIndicatorTimer: number | null = null;
@@ -259,14 +250,6 @@ export class ArborView extends FileView {
   private dragPreviewFrame: number | null = null;
   private transparentDragImageEl: HTMLCanvasElement | null = null;
   private lastCardPointerPosition: { blockId: BranchBlockId; clientX: number; clientY: number } | null = null;
-  private viewportPanState:
-    | {
-        pointerId: number;
-        startClientX: number;
-        startScrollLeft: number;
-        dragging: boolean;
-      }
-    | null = null;
   private readonly documentDragOverHandler = (event: DragEvent) => this.handleDocumentDragOver(event);
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: ArborPlugin) {
@@ -314,6 +297,17 @@ export class ArborView extends FileView {
       isSearchOpen: () => this.isSearchOpen,
       setKeyboardSelection: (id) => { if (this.state) this.state.selectedBlockId = id; },
       openBlockMenu: (id, event) => this.buildBlockMenu(id).showAtMouseEvent(event)
+    });
+    this.branchViewport = new BranchViewportController({
+      read: { getState: () => this.state, getSettings: () => this.plugin.settings, getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
+      getElements: () => ({ root: this.contentEl, stage: this.columnsStageEl, viewport: this.columnsViewportEl, columns: this.columnsEl, previewContent: this.previewContentEl }),
+      getSession: () => this.editor.getSession(),
+      isCompact: () => this.compactLayout,
+      consumeAutofocus: (session) => this.editor.consumeAutofocus(session)
+    });
+    this.overviewViewport = new OverviewViewportController({
+      getElements: () => ({ viewport: this.overviewViewportEl, scene: this.overviewSceneEl, surface: this.overviewSurfaceEl }),
+      getZoom: () => this.plugin.settings.zoomLevel
     });
     this.allowNoFile = false;
     const doc = this.contentEl.ownerDocument;
@@ -365,19 +359,6 @@ export class ArborView extends FileView {
     }
   }
 
-  private revealCompactSelection(): void {
-    if (!this.compactLayout) return;
-    const viewport = this.columnsViewportEl;
-    const card = this.columnsEl?.querySelector<HTMLElement>(".arbor-card.is-active");
-    if (!viewport || !card) return;
-    const bounds = viewport.getBoundingClientRect();
-    const target = card.getBoundingClientRect();
-    const offset = target.top < bounds.top + 12 || target.height > bounds.height - 24
-      ? target.top - bounds.top - 12
-      : Math.max(0, target.bottom - bounds.bottom + 12);
-    if (Math.abs(offset) > 1) viewport.scrollTop += offset;
-  }
-
   getViewType(): string {
     return VIEW_TYPE_ARBOR;
   }
@@ -417,11 +398,8 @@ export class ArborView extends FileView {
     this.clearOverviewZoomFrame();
     this.clearTouchZoomFrame();
     this.clearBreadcrumbScrollFrame();
-    if (this.pendingFocusFrame !== null) {
-      window.cancelAnimationFrame(this.pendingFocusFrame);
-      this.pendingFocusFrame = null;
-    }
-    this.stopHorizontalScrollMotion();
+    this.branchViewport.reset();
+    this.overviewViewport.reset();
     this.cleanupDragPreview();
     this.cleanupViewportPan();
     this.state = null;
@@ -435,27 +413,18 @@ export class ArborView extends FileView {
     this.viewContext = null;
     this.loadingState = null;
     this.presentationMode = "editor";
-    this.cleanupOverviewPan();
-    this.pendingOverviewViewportPosition = null;
     this.teardownShell();
   }
 
   async onClose(): Promise<void> {
     this.navigationController.clearNumericNavigation();
-    if (this.layoutFrame !== null) {
-      window.cancelAnimationFrame(this.layoutFrame);
-      this.layoutFrame = null;
-    }
     this.clearZoomPersistTimer();
     this.clearZoomIndicatorTimer();
     this.clearOverviewZoomFrame();
     this.clearTouchZoomFrame();
     this.clearBreadcrumbScrollFrame();
-    if (this.pendingFocusFrame !== null) {
-      window.cancelAnimationFrame(this.pendingFocusFrame);
-      this.pendingFocusFrame = null;
-    }
-    this.stopHorizontalScrollMotion();
+    this.branchViewport.reset();
+    this.overviewViewport.reset();
     this.cleanupDragPreview();
     this.cleanupOverviewPan();
     this.overviewSelectionAnimation?.cancel();
@@ -2205,38 +2174,15 @@ export class ArborView extends FileView {
   }
 
   private handleOverviewPointerDown(event: PointerEvent): void {
-    if (event.pointerType === "touch") return;
-    const viewport = this.overviewViewportEl;
-    if (!viewport || event.button !== 0 || event.target instanceof HTMLButtonElement) {
-      return;
-    }
-    this.overviewPanState = {
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      startScrollLeft: viewport.scrollLeft,
-      startScrollTop: viewport.scrollTop
-    };
-    viewport.setPointerCapture(event.pointerId);
-    viewport.addClass("is-panning");
+    this.overviewViewport.handleOverviewPointerDown(event);
   }
 
   private handleOverviewPointerMove(event: PointerEvent): void {
-    if (event.pointerType === "touch") return;
-    const viewport = this.overviewViewportEl;
-    const panState = this.overviewPanState;
-    if (!viewport || !panState || panState.pointerId !== event.pointerId) {
-      return;
-    }
-    viewport.scrollLeft = panState.startScrollLeft - (event.clientX - panState.startClientX);
-    viewport.scrollTop = panState.startScrollTop - (event.clientY - panState.startClientY);
+    this.overviewViewport.handleOverviewPointerMove(event);
   }
 
   private handleOverviewPointerUp(event: PointerEvent): void {
-    if (event.pointerType === "touch") return;
-    if (this.overviewPanState?.pointerId === event.pointerId) {
-      this.cleanupOverviewPan();
-    }
+    this.overviewViewport.handleOverviewPointerUp(event);
   }
 
   private handleOverviewWheel(event: WheelEvent): void {
@@ -2394,22 +2340,7 @@ export class ArborView extends FileView {
   }
 
   private syncOverviewZoom(): void {
-    const scene = this.overviewSceneEl;
-    if (!scene) {
-      return;
-    }
-    const width = Number(scene.dataset.overviewWidth);
-    const height = Number(scene.dataset.overviewHeight);
-    if (!Number.isFinite(width) || !Number.isFinite(height)) {
-      return;
-    }
-    const zoom = this.plugin.settings.zoomLevel;
-    scene.setCssProps({
-      "--arbor-overview-zoom": String(zoom),
-      "--arbor-overview-width": `${width * zoom}px`,
-      "--arbor-overview-height": `${height * zoom}px`
-    });
-    this.overviewViewportEl?.toggleClass("is-zoomed-out", zoom < 0.78);
+    this.overviewViewport.syncOverviewZoom();
   }
 
   private resetViewFromZoomIndicator(): void {
@@ -2423,20 +2354,7 @@ export class ArborView extends FileView {
   }
 
   private centerOverviewOnSelectedBlock(): void {
-    const viewport = this.overviewViewportEl;
-    const scene = this.overviewSceneEl;
-    const selectedCard = this.overviewSurfaceEl?.querySelector<HTMLElement>(".arbor-overview-card.is-active");
-    if (!viewport || !scene || !selectedCard) {
-      return;
-    }
-    const zoom = this.plugin.settings.zoomLevel;
-    const centerX = scene.offsetLeft + (selectedCard.offsetLeft + selectedCard.offsetWidth / 2) * zoom;
-    const centerY = scene.offsetTop + (selectedCard.offsetTop + selectedCard.offsetHeight / 2) * zoom;
-    viewport.scrollTo({
-      left: Math.max(0, centerX - viewport.clientWidth / 2),
-      top: Math.max(0, centerY - viewport.clientHeight / 2),
-      behavior: "smooth"
-    });
+    this.overviewViewport.centerOverviewOnSelectedBlock();
   }
 
   private syncOverviewSelection(selectionChanged: boolean): void {
@@ -2485,48 +2403,7 @@ export class ArborView extends FileView {
   }
 
   private revealOverviewSelectedCard(selectedCard: HTMLElement): void {
-    const viewport = this.overviewViewportEl;
-    const scene = this.overviewSceneEl;
-    if (!viewport || !scene) {
-      return;
-    }
-
-    const zoom = this.plugin.settings.zoomLevel;
-    const padding = 36;
-    const cardLeft = scene.offsetLeft + selectedCard.offsetLeft * zoom;
-    const cardTop = scene.offsetTop + selectedCard.offsetTop * zoom;
-    const cardRight = cardLeft + selectedCard.offsetWidth * zoom;
-    const cardBottom = cardTop + selectedCard.offsetHeight * zoom;
-    const viewportRight = viewport.scrollLeft + viewport.clientWidth;
-    const viewportBottom = viewport.scrollTop + viewport.clientHeight;
-    const isOutsideViewport =
-      cardLeft < viewport.scrollLeft + padding ||
-      cardRight > viewportRight - padding ||
-      cardTop < viewport.scrollTop + padding ||
-      cardBottom > viewportBottom - padding;
-
-    if (!isOutsideViewport) {
-      return;
-    }
-
-    let targetLeft = viewport.scrollLeft;
-    let targetTop = viewport.scrollTop;
-    if (cardLeft < viewport.scrollLeft + padding) {
-      targetLeft = cardLeft - padding;
-    } else if (cardRight > viewportRight - padding) {
-      targetLeft = cardRight - viewport.clientWidth + padding;
-    }
-    if (cardTop < viewport.scrollTop + padding) {
-      targetTop = cardTop - padding;
-    } else if (cardBottom > viewportBottom - padding) {
-      targetTop = cardBottom - viewport.clientHeight + padding;
-    }
-
-    viewport.scrollTo({
-      left: Math.max(0, Math.min(targetLeft, viewport.scrollWidth - viewport.clientWidth)),
-      top: Math.max(0, Math.min(targetTop, viewport.scrollHeight - viewport.clientHeight)),
-      behavior: "smooth"
-    });
+    this.overviewViewport.revealOverviewSelectedCard(selectedCard);
   }
 
   private restoreOverviewKeyboardFocusAfterMutation(): void {
@@ -2541,26 +2418,11 @@ export class ArborView extends FileView {
   }
 
   private preserveOverviewViewportPosition(): void {
-    const viewport = this.overviewViewportEl;
-    if (!viewport) {
-      return;
-    }
-    viewport.scrollTo({ left: viewport.scrollLeft, top: viewport.scrollTop, behavior: "auto" });
-    this.pendingOverviewViewportPosition = { left: viewport.scrollLeft, top: viewport.scrollTop };
+    this.overviewViewport.preserve();
   }
 
   private restoreOverviewViewportPosition(): void {
-    const viewport = this.overviewViewportEl;
-    const position = this.pendingOverviewViewportPosition;
-    if (!viewport || !position) {
-      return;
-    }
-    this.pendingOverviewViewportPosition = null;
-    viewport.scrollTo({
-      left: Math.max(0, Math.min(position.left, viewport.scrollWidth - viewport.clientWidth)),
-      top: Math.max(0, Math.min(position.top, viewport.scrollHeight - viewport.clientHeight)),
-      behavior: "auto"
-    });
+    this.overviewViewport.restore();
   }
 
   private clearOverviewZoomFrame(): void {
@@ -2599,13 +2461,7 @@ export class ArborView extends FileView {
   }
 
   private cleanupOverviewPan(): void {
-    const viewport = this.overviewViewportEl;
-    const pointerId = this.overviewPanState?.pointerId;
-    if (viewport && pointerId !== undefined && viewport.hasPointerCapture(pointerId)) {
-      viewport.releasePointerCapture(pointerId);
-    }
-    viewport?.removeClass("is-panning");
-    this.overviewPanState = null;
+    this.overviewViewport.cleanupOverviewPan();
   }
 
   private async syncOutputPreview(): Promise<void> {
@@ -3255,75 +3111,6 @@ export class ArborView extends FileView {
     });
   }
 
-  private applyPendingFocusAndScroll(preservedSceneWidth = 0): void {
-    const pendingFocusBlockId = this.pendingFocusBlockId;
-    const pendingScrollBlockId = this.pendingScrollBlockId;
-    const snapViewport = this.shouldSnapViewportAfterDirectionChange;
-    this.pendingFocusBlockId = null;
-    this.pendingScrollBlockId = null;
-    this.shouldSnapViewportAfterDirectionChange = false;
-
-    if (this.pendingFocusFrame !== null) {
-      window.cancelAnimationFrame(this.pendingFocusFrame);
-    }
-
-    this.pendingFocusFrame = window.requestAnimationFrame(() => {
-      this.pendingFocusFrame = null;
-      const columnsEl = this.columnsEl;
-      const columnsViewportEl = this.columnsViewportEl;
-      if (!columnsEl || !columnsViewportEl) {
-        return;
-      }
-
-      this.alignColumnsToActivePath();
-      this.syncViewportEdgeFades();
-
-      const activeCard = columnsEl.querySelector<HTMLElement>(".arbor-card.is-active");
-      if (pendingFocusBlockId) {
-        let focusHandled = false;
-        if (this.editingSession?.blockId === pendingFocusBlockId && this.editingSession.origin === "preview") {
-          const previewEditor = this.previewContentEl?.querySelector<HTMLTextAreaElement>(
-            `.arbor-preview-block[data-block-id="${pendingFocusBlockId}"] textarea.arbor-editor`
-          );
-          if (previewEditor) {
-            previewEditor.focus({ preventScroll: true });
-            if (this.editingSession.autofocus) {
-              previewEditor.setSelectionRange(previewEditor.value.length, previewEditor.value.length);
-              this.editor.consumeAutofocus(this.editingSession);
-            }
-            focusHandled = true;
-          }
-        }
-        const focusCard = !focusHandled
-          ? columnsEl.querySelector<HTMLElement>(`.arbor-card[data-block-id="${pendingFocusBlockId}"]`)
-          : null;
-        if (focusCard) {
-          const editor = focusCard.querySelector<HTMLTextAreaElement>("textarea.arbor-editor");
-          if (editor && this.editingSession?.blockId === pendingFocusBlockId && this.editingSession.origin === "card") {
-            editor.focus({ preventScroll: true });
-            if (this.editingSession.autofocus) {
-              editor.setSelectionRange(editor.value.length, editor.value.length);
-              this.editor.consumeAutofocus(this.editingSession);
-            }
-          } else {
-            focusCard.focus({ preventScroll: true });
-          }
-        } else if (!focusHandled) {
-          columnsViewportEl.focus({ preventScroll: true });
-        }
-      }
-      if (pendingScrollBlockId) {
-        const scrollCard = columnsEl.querySelector<HTMLElement>(`.arbor-card[data-block-id="${pendingScrollBlockId}"]`) ?? activeCard;
-        if (scrollCard) {
-          this.animateSelectedCard(pendingScrollBlockId);
-          this.scrollCardIntoHorizontalView(scrollCard, columnsViewportEl, preservedSceneWidth, snapViewport);
-        }
-      } else {
-        this.releasePreservedSceneWidth();
-      }
-    });
-  }
-
   private handleColumnDragOver(event: DragEvent): void {
     if (!this.plugin.settings.dragAndDrop) {
       return;
@@ -3724,17 +3511,8 @@ export class ArborView extends FileView {
     this.clearBlurCommitTimer();
     this.clearZoomPersistTimer();
     this.clearZoomIndicatorTimer();
-    if (this.layoutFrame !== null) {
-      window.cancelAnimationFrame(this.layoutFrame);
-      this.layoutFrame = null;
-    }
-    if (this.pendingFocusFrame !== null) {
-      window.cancelAnimationFrame(this.pendingFocusFrame);
-      this.pendingFocusFrame = null;
-    }
-    this.stopHorizontalScrollMotion();
+    this.branchViewport.reset();
     this.cleanupDragPreview();
-    this.cleanupViewportPan();
     this.state = null;
     this.history.clear();
     this.editor.reset();
@@ -3745,6 +3523,7 @@ export class ArborView extends FileView {
     this.hoveredBlockId = null;
     this.viewContext = null;
     this.loadingState = null;
+    this.overviewViewport.reset();
     this.teardownShell();
   }
 
@@ -4080,17 +3859,6 @@ export class ArborView extends FileView {
     this.render();
   }
 
-  private scheduleColumnAlignment(): void {
-    if (this.layoutFrame !== null) {
-      window.cancelAnimationFrame(this.layoutFrame);
-    }
-
-    this.layoutFrame = window.requestAnimationFrame(() => {
-      this.layoutFrame = null;
-      this.alignColumnsToActivePath();
-    });
-  }
-
   private resizeEditor(textarea: HTMLTextAreaElement): void {
     this.editor.resizeEditor(textarea);
   }
@@ -4152,21 +3920,6 @@ export class ArborView extends FileView {
       }
     }
     return null;
-  }
-
-  private syncViewportEdgeFades(): void {
-    const stage = this.columnsStageEl;
-    const viewport = this.columnsViewportEl;
-    if (!stage || !viewport) {
-      return;
-    }
-
-    const canScrollHorizontally = viewport.scrollWidth - viewport.clientWidth > 1;
-    const hasHiddenLeft = canScrollHorizontally && viewport.scrollLeft > 2;
-    const hasHiddenRight = canScrollHorizontally && viewport.scrollLeft + viewport.clientWidth < viewport.scrollWidth - 2;
-
-    stage.classList.toggle("has-hidden-left", hasHiddenLeft);
-    stage.classList.toggle("has-hidden-right", hasHiddenRight);
   }
 
   private updateZoomLevel(nextZoomLevel: number): void {
@@ -4251,138 +4004,6 @@ export class ArborView extends FileView {
     }
   }
 
-  private handleViewportPointerDown(event: PointerEvent, viewport: HTMLElement): void {
-    if (event.pointerType === "touch" || this.compactLayout) return;
-    if (event.button !== 0 || viewport.scrollWidth <= viewport.clientWidth) {
-      return;
-    }
-
-    const target = event.target as HTMLElement | null;
-    if (
-      target?.closest(
-        ".arbor-card, textarea, button, a, input, select"
-      )
-    ) {
-      return;
-    }
-
-    this.viewportPanState = {
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startScrollLeft: viewport.scrollLeft,
-      dragging: false
-    };
-    viewport.setPointerCapture(event.pointerId);
-  }
-
-  private handleViewportPointerMove(event: PointerEvent, viewport: HTMLElement): void {
-    if (!this.viewportPanState || this.viewportPanState.pointerId !== event.pointerId) {
-      return;
-    }
-
-    const deltaX = event.clientX - this.viewportPanState.startClientX;
-    if (!this.viewportPanState.dragging) {
-      if (Math.abs(deltaX) < 4) {
-        return;
-      }
-
-      this.viewportPanState.dragging = true;
-      viewport.classList.add("is-panning");
-    }
-
-    viewport.scrollLeft = this.viewportPanState.startScrollLeft - deltaX;
-    event.preventDefault();
-  }
-
-  private handleViewportPointerUp(event: PointerEvent, viewport: HTMLElement): void {
-    if (!this.viewportPanState || this.viewportPanState.pointerId !== event.pointerId) {
-      return;
-    }
-
-    this.cleanupViewportPan(viewport, event.pointerId);
-  }
-
-  private handleViewportPointerCaptureLost(event: PointerEvent, viewport: HTMLElement): void {
-    if (!this.viewportPanState || this.viewportPanState.pointerId !== event.pointerId) {
-      return;
-    }
-
-    this.cleanupViewportPan(viewport, event.pointerId, false);
-  }
-
-  private cleanupViewportPan(
-    viewport = this.columnsViewportEl,
-    pointerId?: number,
-    releaseCapture = true
-  ): void {
-    const activePointerId = pointerId ?? this.viewportPanState?.pointerId;
-    this.viewportPanState = null;
-    viewport?.classList.remove("is-panning");
-
-    if (!releaseCapture || !viewport || activePointerId === undefined) {
-      return;
-    }
-
-    if (viewport.hasPointerCapture(activePointerId)) {
-      viewport.releasePointerCapture(activePointerId);
-    }
-  }
-
-  private armSceneWidthForPendingScroll(nextColumnCount: number): number {
-    if (this.compactLayout) return 0;
-    if (!this.pendingScrollBlockId || !this.columnsEl || !this.columnsViewportEl) {
-      return 0;
-    }
-
-    const existingColumnCount = this.columnsEl.querySelectorAll(".arbor-column").length;
-    const preservedSceneWidth = reserveSceneWidthForColumns(
-      this.columnsEl.scrollWidth,
-      this.columnsViewportEl.clientWidth,
-      existingColumnCount,
-      nextColumnCount,
-      this.plugin.settings.cardWidth,
-      this.plugin.settings.horizontalSpacing,
-      this.plugin.settings.zoomLevel
-    );
-    this.columnsEl.setCssProps({ "--arbor-columns-min-width": `${preservedSceneWidth}px` });
-    return preservedSceneWidth;
-  }
-
-  private releasePreservedSceneWidth(): void {
-    if (this.columnsEl) {
-      this.columnsEl.setCssProps({ "--arbor-columns-min-width": "max-content" });
-    }
-  }
-
-  private stopHorizontalScrollMotion(releasePreservedWidth = true): void {
-    if (this.horizontalScrollFrame !== null) {
-      window.cancelAnimationFrame(this.horizontalScrollFrame);
-      this.horizontalScrollFrame = null;
-    }
-
-    if (releasePreservedWidth) {
-      this.releasePreservedSceneWidth();
-    }
-  }
-
-  private animateSelectedCard(blockId: BranchBlockId): void {
-    this.contentEl.querySelectorAll<HTMLElement>(".arbor-card.is-selection-entering").forEach((card) => {
-      card.removeClass("is-selection-entering");
-    });
-
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return;
-    }
-
-    const card = this.columnsEl?.querySelector<HTMLElement>(`.arbor-card[data-block-id="${blockId}"]`);
-    if (!card) {
-      return;
-    }
-
-    card.addClass("is-selection-entering");
-    card.addEventListener("animationend", () => card.removeClass("is-selection-entering"), { once: true });
-  }
-
   private clearBreadcrumbScrollFrame(): void {
     if (this.breadcrumbScrollFrame !== null) {
       window.cancelAnimationFrame(this.breadcrumbScrollFrame);
@@ -4390,188 +4011,33 @@ export class ArborView extends FileView {
     }
   }
 
-  private animateViewportScrollTo(viewport: HTMLElement, targetLeft: number): void {
-    this.stopHorizontalScrollMotion(false);
+  private revealCompactSelection(): void { this.branchViewport.revealCompactSelection(); }
 
-    const startLeft = viewport.scrollLeft;
-    const distance = targetLeft - startLeft;
-    if (Math.abs(distance) < 1) {
-      viewport.scrollLeft = targetLeft;
-      this.syncViewportEdgeFades();
-      this.releasePreservedSceneWidth();
-      return;
-    }
+  private scheduleColumnAlignment(): void { this.branchViewport.scheduleColumnAlignment(); }
 
-    const duration = Math.max(180, Math.min(320, 170 + Math.abs(distance) * 0.18));
-    const startedAt = performance.now();
-
-    const tick = (now: number) => {
-      const progress = Math.min(1, (now - startedAt) / duration);
-      const eased = progress < 0.5
-        ? 4 * progress * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-
-      viewport.scrollLeft = startLeft + distance * eased;
-
-      if (progress < 1) {
-        this.horizontalScrollFrame = window.requestAnimationFrame(tick);
-        return;
-      }
-
-      this.horizontalScrollFrame = null;
-      viewport.scrollLeft = targetLeft;
-      this.syncViewportEdgeFades();
-      this.releasePreservedSceneWidth();
+  private applyPendingFocusAndScroll(preservedSceneWidth = 0): void {
+    const request = {
+      focusBlockId: this.pendingFocusBlockId,
+      scrollBlockId: this.pendingScrollBlockId,
+      snap: this.shouldSnapViewportAfterDirectionChange,
+      preservedSceneWidth
     };
-
-    this.horizontalScrollFrame = window.requestAnimationFrame(tick);
+    this.pendingFocusBlockId = null;
+    this.pendingScrollBlockId = null;
+    this.shouldSnapViewportAfterDirectionChange = false;
+    this.branchViewport.applyPendingFocusAndScroll(request);
   }
 
-  private scrollCardIntoHorizontalView(card: HTMLElement, viewport: HTMLElement, preservedSceneWidth = 0, snap = false): void {
-    if (this.compactLayout) {
-      this.revealCompactSelection();
-      return;
-    }
-    const viewportRect = viewport.getBoundingClientRect();
-    const cardRect = card.getBoundingClientRect();
-    const safePadding = Math.min(96, viewport.clientWidth * 0.18);
-    const shouldScrollLeft = cardRect.left < viewportRect.left + safePadding;
-    const shouldScrollRight = cardRect.right > viewportRect.right - safePadding;
-
-    if (!shouldScrollLeft && !shouldScrollRight) {
-      this.syncViewportEdgeFades();
-      this.releasePreservedSceneWidth();
-      return;
-    }
-
-    if (preservedSceneWidth > 0 && this.columnsEl) {
-      this.columnsEl.setCssProps({
-        "--arbor-columns-min-width": `${Math.max(preservedSceneWidth, viewport.clientWidth)}px`
-      });
-    }
-
-    const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-    const targetLeft = shouldScrollLeft
-      ? Math.max(
-          0,
-          Math.min(
-            viewport.scrollLeft - ((viewportRect.left + safePadding) - cardRect.left),
-            maxScrollLeft
-          )
-        )
-      : Math.max(
-          0,
-          Math.min(
-            viewport.scrollLeft + (cardRect.right - (viewportRect.right - safePadding)),
-            maxScrollLeft
-          )
-        );
-    if (snap) {
-      this.stopHorizontalScrollMotion(false);
-      viewport.scrollLeft = targetLeft;
-      this.syncViewportEdgeFades();
-      this.releasePreservedSceneWidth();
-      return;
-    }
-
-    this.animateViewportScrollTo(viewport, targetLeft);
-  }
-
-  private alignColumnsToActivePath(): void {
-    if (this.compactLayout) {
-      this.columnsEl?.querySelectorAll<HTMLElement>(".arbor-card-list").forEach((list) => {
-        list.setCssProps({ "--arbor-card-list-offset-y": "0px" });
-        list.removeClass("is-rebinding");
-      });
-      return;
-    }
-    if (!this.state) {
-      return;
-    }
-
-    const viewport = this.columnsViewportEl ?? this.contentEl.querySelector<HTMLElement>(".arbor-columns-viewport");
-    const columnsRoot = this.columnsEl ?? this.contentEl.querySelector<HTMLElement>(".arbor-columns");
-    if (!viewport || !columnsRoot) {
-      return;
-    }
-
-    const columns = Array.from(columnsRoot.querySelectorAll<HTMLElement>(".arbor-column"));
-    const path = getActivePath(this.state.metadata, this.state.selectedBlockId);
-    if (columns.length === 0) {
-      return;
-    }
-
-    const viewportRect = viewport.getBoundingClientRect();
-    const columnsRootRect = columnsRoot.getBoundingClientRect();
-    const rootAnchorCenterY = viewportRect.top - columnsRootRect.top + viewport.clientHeight * 0.44;
-    const resolvedCenterYByColumn = new Map<number, number>();
-
-    columns.forEach((columnEl) => {
-      const listEl = columnEl.querySelector<HTMLElement>(".arbor-card-list");
-      if (!listEl) {
-        return;
-      }
-
-      const fallbackCards = Array.from(columnEl.querySelectorAll<HTMLElement>(".arbor-card"));
-      const preferredFallbackCard =
-        fallbackCards[Math.floor((Math.max(fallbackCards.length, 1) - 1) / 2)] ?? null;
-
-      const depth = Number(columnEl.dataset.columnDepth);
-      const pathBlock = path[depth];
-      const alignmentTarget =
-        (pathBlock
-          ? columnEl.querySelector<HTMLElement>(`.arbor-card[data-block-id="${pathBlock.id}"]`)
-          : null) ??
-        columnEl.querySelector<HTMLElement>(".arbor-column-empty") ??
-        preferredFallbackCard;
-
-      if (!alignmentTarget) {
-        return;
-      }
-
-      const naturalCenterY =
-        this.getElementOffsetTopWithin(alignmentTarget, columnsRoot) +
-        alignmentTarget.offsetHeight / 2;
-      const preferredCenterY = depth === 0
-        ? rootAnchorCenterY
-        : (resolvedCenterYByColumn.get(depth - 1) ?? naturalCenterY);
-      const anchorCenterY = alignmentTarget.hasClass("is-active")
-        ? clampCardCenter(
-            preferredCenterY,
-            alignmentTarget.offsetHeight,
-            viewportRect.top - columnsRootRect.top,
-            viewport.clientHeight
-          )
-        : preferredCenterY;
-      const shift = anchorCenterY - naturalCenterY;
-
-      if (Math.abs(shift) < 0.25) {
-        listEl.setCssProps({ "--arbor-card-list-offset-y": "0px" });
-      } else {
-        listEl.setCssProps({ "--arbor-card-list-offset-y": `${shift}px` });
-      }
-
-      if (listEl.hasClass("is-rebinding")) {
-        window.requestAnimationFrame(() => {
-          listEl.removeClass("is-rebinding");
-        });
-      }
-
-      resolvedCenterYByColumn.set(depth, naturalCenterY + shift);
-    });
-  }
-
-  private getElementOffsetTopWithin(element: HTMLElement, ancestor: HTMLElement): number {
-    let offset = 0;
-    let current: HTMLElement | null = element;
-
-    while (current && current !== ancestor) {
-      offset += current.offsetTop;
-      current = current.offsetParent instanceof HTMLElement ? current.offsetParent : null;
-    }
-
-    return offset;
-  }
+  private syncViewportEdgeFades(): void { this.branchViewport.syncViewportEdgeFades(); }
+  private handleViewportPointerDown(event: PointerEvent, viewport: HTMLElement): void { this.branchViewport.handleViewportPointerDown(event, viewport); }
+  private handleViewportPointerMove(event: PointerEvent, viewport: HTMLElement): void { this.branchViewport.handleViewportPointerMove(event, viewport); }
+  private handleViewportPointerUp(event: PointerEvent, viewport: HTMLElement): void { this.branchViewport.handleViewportPointerUp(event, viewport); }
+  private handleViewportPointerCaptureLost(event: PointerEvent, viewport: HTMLElement): void { this.branchViewport.handleViewportPointerCaptureLost(event, viewport); }
+  private cleanupViewportPan(viewport = this.columnsViewportEl, pointerId?: number, releaseCapture = true): void { this.branchViewport.cleanupViewportPan(viewport, pointerId, releaseCapture); }
+  private armSceneWidthForPendingScroll(nextColumnCount: number): number { return this.branchViewport.armSceneWidthForPendingScroll(nextColumnCount, this.pendingScrollBlockId); }
+  private stopHorizontalScrollMotion(releasePreservedWidth = true): void { this.branchViewport.stopHorizontalScrollMotion(releasePreservedWidth); }
+  private scrollCardIntoHorizontalView(card: HTMLElement, viewport: HTMLElement, preservedSceneWidth = 0, snap = false): void { this.branchViewport.scrollCardIntoHorizontalView(card, viewport, preservedSceneWidth, snap); }
+  private alignColumnsToActivePath(): void { this.branchViewport.alignColumnsToActivePath(); }
 
   private async handleEditorPaste(event: ClipboardEvent, textarea: HTMLTextAreaElement): Promise<void> {
     await this.attachments.handleEditorPaste(event, textarea);
