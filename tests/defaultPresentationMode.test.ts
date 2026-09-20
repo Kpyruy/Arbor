@@ -220,7 +220,7 @@ describe("default presentation mode", () => {
 
     expect(view).toContain("this.armSceneWidthForPendingScroll(columns.length)");
     expect(view.indexOf("this.armSceneWidthForPendingScroll(columns.length)")).toBeLessThan(
-      view.indexOf("await this.syncColumns(columns, this.viewContext);")
+      view.indexOf("await this.branchRenderer.syncColumns(columns, this.viewContext);")
     );
   });
 

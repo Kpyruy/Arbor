@@ -38,7 +38,6 @@ import {
   moveBlockDown,
   moveBlockLeft,
   moveBlockRight,
-  moveBlockToParentAtIndex,
   moveBlockUp,
   setBlockCollapsed,
   toggleBlockCollapsed,
@@ -48,7 +47,6 @@ import { VIEW_TYPE_ARBOR } from "../constants";
 import {
   BranchBlock,
   BranchBlockId,
-  BranchColumnModel,
   BranchHistoryEntry,
   BranchTreeMetadata,
   ImportedBranchDocument,
@@ -72,26 +70,19 @@ import { buildBranchDocument, parseBranchDocument } from "../storage/document";
 import { loadImportedBranchDocument } from "../storage/reconcile";
 import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
-import { deepClone, extractPathLabel, extractSnippet, hashString } from "../utils";
+import { deepClone, extractPathLabel, extractSnippet } from "../utils";
 import { buildArborBlockLink } from "../blockLinks";
 import { projectOutput } from "../outputProjection";
 import { getEnteringBreadcrumbIds } from "../breadcrumbAnimation";
 import { MOBILE_TREE_OVERVIEW_EXPORT_LIMITS, resolveTreeOverviewExportSize, type TreeOverviewExportQuality } from "../treeOverviewExport";
-import { getBreadcrumbScrollInsets, getChildArrowIcon, getHorizontalWheelDelta, getParentArrowIcon, getVisualBreadcrumbOrder } from "../layoutDirection";
+import { getBreadcrumbScrollInsets, getChildArrowIcon, getParentArrowIcon, getVisualBreadcrumbOrder } from "../layoutDirection";
 import { buildOverviewLayout } from "../model/overviewLayout";
 import {
   resolveOverviewCardSelectionState,
   startOverviewSelectionAnimation
 } from "../overviewNavigation";
-import { resolveColumnWheelTarget } from "../columnWheelNavigation";
 import { ARBOR_THEME_VARIABLES, resolveArborThemeVariables } from "../theme";
-import {
-  canDragCard,
-  canStartCardDrag,
-  CARD_PREVIEW_MAX_HEIGHT_PX,
-  hasVerticalOverflow,
-  resolveColumnWheelNavigation
-} from "../cardViewport";
+import { CARD_PREVIEW_MAX_HEIGHT_PX } from "../cardViewport";
 import { toBlob } from "html-to-image";
 import { compactColumns, useCompactLayout } from "../mobile";
 import {
@@ -125,6 +116,8 @@ import { BranchViewportController } from "./branch/BranchViewportController";
 import { OverviewViewportController } from "./overview/OverviewViewportController";
 import { ZoomController } from "./interaction/ZoomController";
 import { TouchController } from "./interaction/TouchController";
+import { BranchRenderer, routeBranchViewportWheel } from "./branch/BranchRenderer";
+import { DragDropController } from "./branch/DragDropController";
 export {
   getBlockOutputMenuActions,
   getOutputCardPresentation
@@ -134,13 +127,6 @@ export type {
   BlockOutputMenuAction,
   OutputCardPresentation
 } from "./output/outputPresentation";
-
-interface DragState {
-  draggedBlockId: BranchBlockId;
-  targetParentId: BranchBlockId | null;
-  targetIndex: number;
-  columnKey: string;
-}
 
 export class ArborView extends FileView {
   private compactLayout = false;
@@ -156,7 +142,8 @@ export class ArborView extends FileView {
   private readonly overviewViewport: OverviewViewportController;
   private readonly zoomController: ZoomController;
   private readonly touchController: TouchController;
-  private dragState: DragState | null = null;
+  private readonly branchRenderer: BranchRenderer;
+  private readonly dragDropController: DragDropController;
   private renderFrame: number | null = null;
   private isPersisting = false;
   private pendingFocusBlockId: BranchBlockId | null = null;
@@ -192,7 +179,6 @@ export class ArborView extends FileView {
   private overviewSurfaceEl: HTMLElement | null = null;
   private outputStageEl: HTMLElement | null = null;
   private outputSurfaceEl: HTMLElement | null = null;
-  private rootEmptyEl: HTMLElement | null = null;
   private renderedPreviewSignature = "";
   private previewSearchQuery = "";
   private isSearchOpen = false;
@@ -232,16 +218,7 @@ export class ArborView extends FileView {
       new Notice(message);
     }
   });
-  private readonly columnElementMap = new Map<string, HTMLElement>();
-  private readonly currentColumnMap = new Map<string, BranchColumnModel>();
   private breadcrumbScrollFrame: number | null = null;
-  private dragPreviewEl: HTMLElement | null = null;
-  private dragPreviewPoint: { x: number; y: number } | null = null;
-  private dragPreviewOffset = { x: 0, y: 0 };
-  private dragPreviewFrame: number | null = null;
-  private transparentDragImageEl: HTMLCanvasElement | null = null;
-  private lastCardPointerPosition: { blockId: BranchBlockId; clientX: number; clientY: number } | null = null;
-  private readonly documentDragOverHandler = (event: DragEvent) => this.handleDocumentDragOver(event);
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: ArborPlugin) {
     super(leaf);
@@ -290,7 +267,12 @@ export class ArborView extends FileView {
       openBlockMenu: (id, event) => this.buildBlockMenu(id).showAtMouseEvent(event)
     });
     this.branchViewport = new BranchViewportController({
-      read: { getState: () => this.state, getSettings: () => this.plugin.settings, getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
+      read: {
+        getState: () => this.state,
+        getSettings: () => this.plugin.settings,
+        getMode: () => this.presentationMode,
+        getFilePath: () => this.file?.path ?? ""
+      },
       getElements: () => ({ root: this.contentEl, stage: this.columnsStageEl, viewport: this.columnsViewportEl, columns: this.columnsEl, previewContent: this.previewContentEl }),
       getSession: () => this.editor.getSession(),
       isCompact: () => this.compactLayout,
@@ -321,6 +303,57 @@ export class ArborView extends FileView {
         top: this.overviewSceneEl?.offsetTop ?? 0
       }),
       revealCompactSelection: () => this.revealCompactSelection()
+    });
+    this.dragDropController = new DragDropController({
+      read: {
+        getState: () => this.state,
+        getSettings: () => this.plugin.settings,
+        getMode: () => this.presentationMode,
+        getFilePath: () => this.file?.path ?? ""
+      },
+      getDocument: () => this.contentEl.ownerDocument,
+      getRoot: () => this.contentEl,
+      getStage: () => this.columnsStageEl,
+      getColumn: (key) => this.branchRenderer.getColumn(key),
+      usesTouchControls: () => this.usesTouchControls,
+      isEditing: (id) => this.editor.getSession()?.blockId === id,
+      selectBlock: (id, options) => this.selectBlock(id, options),
+      move: (label, mutate) => this.applyMutation(label, mutate),
+      requestRender: () => this.render()
+    });
+    this.branchRenderer = new BranchRenderer({
+      read: {
+        getState: () => this.state,
+        getSettings: () => this.plugin.settings,
+        getMode: () => this.presentationMode,
+        getFilePath: () => this.file?.path ?? ""
+      },
+      editor: this.editor,
+      markdown: { render: (markdown, target, sourcePath) => MarkdownRenderer.render(this.app, markdown, target, sourcePath, this) },
+      events: {
+        click: (event) => this.handleCardClick(event),
+        doubleClick: (event) => this.handleCardDoubleClick(event),
+        contextMenu: (event) => this.handleCardContextMenu(event),
+        keyDown: (event) => this.handleCardKeyDown(event),
+        pointer: (id, x, y) => this.dragDropController.rememberCardPointerPosition(id, x, y),
+        hover: (id) => this.setHoveredBlock(id),
+        dragStart: (event) => this.dragDropController.handleCardDragStart(event),
+        dragEnd: () => this.dragDropController.handleCardDragEnd(),
+        dragOver: (event) => this.dragDropController.handleCardDragOver(event),
+        drop: (event) => this.dragDropController.handleCardDrop(event),
+        columnDragOver: (event) => this.dragDropController.handleColumnDragOver(event),
+        columnDrop: (column) => this.dragDropController.applyDrop(column)
+      },
+      getColumnsRoot: () => this.columnsEl,
+      getContext: () => this.viewContext,
+      getDragState: () => this.dragDropController.getDragState(),
+      usesTouchControls: () => this.usesTouchControls,
+      selectBlock: (id, options) => this.selectBlock(id, options),
+      consumeAutofocus: (session) => this.editor.consumeAutofocus(session),
+      scheduleColumnAlignment: () => this.scheduleColumnAlignment(),
+      createRootBlock: () => this.createRootBlock(),
+      createChild: () => this.createChild(),
+      setCollapsedState: (id, collapsed) => this.setCollapsedState(id, collapsed)
     });
     this.allowNoFile = false;
     const doc = this.contentEl.ownerDocument;
@@ -410,12 +443,11 @@ export class ArborView extends FileView {
     this.clearBreadcrumbScrollFrame();
     this.branchViewport.reset();
     this.overviewViewport.reset();
-    this.cleanupDragPreview();
+    this.dragDropController.reset();
     this.cleanupViewportPan();
     this.state = null;
     this.history.clear();
     this.editor.reset();
-    this.dragState = null;
     this.isSearchOpen = false;
     this.showFullMiniMap = false;
     this.shouldFocusSearchInput = false;
@@ -433,7 +465,7 @@ export class ArborView extends FileView {
     this.clearBreadcrumbScrollFrame();
     this.branchViewport.reset();
     this.overviewViewport.reset();
-    this.cleanupDragPreview();
+    this.dragDropController.reset();
     this.cleanupOverviewPan();
     this.overviewSelectionAnimation?.cancel();
     this.overviewSelectionAnimation = null;
@@ -527,7 +559,7 @@ export class ArborView extends FileView {
   private resetLoadedUiState(selectedBlockId: BranchBlockId | null): void {
     this.history.clear();
     this.editor.reset();
-    this.dragState = null;
+    this.dragDropController.reset();
     this.previewSearchQuery = "";
     this.isSearchOpen = false;
     this.showFullMiniMap = false;
@@ -1156,10 +1188,7 @@ export class ArborView extends FileView {
     const allColumns = buildColumnModels(this.state.metadata, this.state.selectedBlockId, this.plugin.settings.previewSnippetLength);
     const columns = this.compactLayout ? compactColumns(allColumns, this.state.selectedBlockId) : allColumns;
     const preservedSceneWidth = this.armSceneWidthForPendingScroll(columns.length);
-    this.currentColumnMap.clear();
-    columns.forEach((column) => this.currentColumnMap.set(column.key, column));
-
-    await this.syncColumns(columns, this.viewContext);
+    await this.branchRenderer.syncColumns(columns, this.viewContext);
     await this.syncPreview(this.viewContext);
     this.applyPendingFocusAndScroll(preservedSceneWidth);
     this.syncHoverLinkedState();
@@ -1261,8 +1290,27 @@ export class ArborView extends FileView {
       };
       this.syncViewportEdgeFades();
     }, { passive: true });
-    this.columnsViewportEl.addEventListener("dragover", (event) => this.handleViewportDragOver(event));
-    this.columnsViewportEl.addEventListener("wheel", (event) => this.handleViewportWheel(event, this.columnsViewportEl!), { passive: false });
+    this.columnsViewportEl.addEventListener("dragover", (event) => this.dragDropController.handleViewportDragOver(event));
+    this.columnsViewportEl.addEventListener("wheel", (event) => {
+      routeBranchViewportWheel(
+        event,
+        this.columnsViewportEl!,
+        this.branchRenderer,
+        {
+          getState: () => this.state,
+          getSettings: () => this.plugin.settings,
+          getMode: () => this.presentationMode,
+          getFilePath: () => this.file?.path ?? ""
+        },
+        {
+          previous: () => this.selectPreviousSiblingBlock(),
+          next: () => this.selectNextSiblingBlock(),
+          selectBlock: (id, options) => this.selectBlock(id, options),
+          updateZoomLevel: (value) => this.zoomController.updateZoomLevel(value)
+        },
+        this.compactLayout
+      );
+    }, { passive: false });
     this.columnsViewportEl.addEventListener("keydown", (event) => this.handleViewportKeyDown(event));
     this.columnsViewportEl.addEventListener("pointerdown", (event) => this.handleViewportPointerDown(event, this.columnsViewportEl!));
     this.columnsViewportEl.addEventListener("pointermove", (event) => this.handleViewportPointerMove(event, this.columnsViewportEl!));
@@ -1338,7 +1386,7 @@ export class ArborView extends FileView {
   }
 
   private teardownShell(): void {
-    this.cleanupDragPreview();
+    this.dragDropController.reset();
     this.cleanupViewportPan();
     this.cleanupOverviewPan();
     this.overviewSelectionAnimation?.cancel();
@@ -1376,10 +1424,9 @@ export class ArborView extends FileView {
     this.overviewSurfaceEl = null;
     this.outputStageEl = null;
     this.outputSurfaceEl = null;
-    this.rootEmptyEl = null;
     this.renderedPreviewSignature = "";
-    this.columnElementMap.clear();
-    this.currentColumnMap.clear();
+    this.branchRenderer.reset();
+    this.dragDropController.reset();
   }
 
   private syncBreadcrumbs(): void {
@@ -1670,325 +1717,6 @@ export class ArborView extends FileView {
         this.searchInputEl?.select();
       });
     }
-  }
-
-  private async syncColumns(columns: BranchColumnModel[], context: BranchViewContext): Promise<void> {
-    if (!this.columnsEl) {
-      return;
-    }
-
-    if (columns.length === 1 && columns[0].blocks.length === 0) {
-      this.columnElementMap.forEach((columnEl) => columnEl.remove());
-      this.columnElementMap.clear();
-      this.columnsEl.empty();
-      this.rootEmptyEl = this.columnsEl.createDiv({ cls: "arbor-root-empty" });
-      this.rootEmptyEl.createEl("p", { text: "This note has no branch blocks yet." });
-      const button = this.rootEmptyEl.createEl("button", { text: "Create root block" });
-      button.addEventListener("click", () => void this.createRootBlock());
-      return;
-    }
-
-    this.rootEmptyEl?.remove();
-    this.rootEmptyEl = null;
-
-    const desiredKeys = new Set(columns.map((column) => column.key));
-    for (const [key, columnEl] of this.columnElementMap) {
-      if (!desiredKeys.has(key)) {
-        columnEl.remove();
-        this.columnElementMap.delete(key);
-      }
-    }
-
-    for (let index = 0; index < columns.length; index += 1) {
-      const column = columns[index];
-      const columnEl = this.ensureColumnElement(column.key);
-      columnEl.dataset.columnKey = column.key;
-      columnEl.dataset.parentId = column.parentId ?? "";
-      columnEl.dataset.columnDepth = String(index);
-
-      const siblingAtIndex = this.columnsEl.children[index] ?? null;
-      if (siblingAtIndex !== columnEl) {
-        this.columnsEl.insertBefore(columnEl, siblingAtIndex);
-      }
-
-      await this.syncColumn(columnEl, column, context);
-    }
-  }
-
-  private ensureColumnElement(columnKey: string): HTMLElement {
-    const existing = this.columnElementMap.get(columnKey);
-    if (existing) {
-      return existing;
-    }
-
-    const columnEl = this.columnsEl!.createDiv({ cls: "arbor-column" });
-    columnEl.dataset.columnKey = columnKey;
-    const cardsEl = columnEl.createDiv({ cls: "arbor-card-list" });
-    cardsEl.addEventListener("dragover", (event) => this.handleColumnDragOver(event));
-    cardsEl.addEventListener("drop", (event) => {
-      event.preventDefault();
-      const column = this.currentColumnMap.get(cardsEl.dataset.columnKey ?? "");
-      if (column) {
-        void this.applyDrop(column);
-      }
-    });
-    this.columnElementMap.set(columnKey, columnEl);
-    return columnEl;
-  }
-
-  private async syncColumn(columnEl: HTMLElement, column: BranchColumnModel, context: BranchViewContext): Promise<void> {
-    const cardsEl = columnEl.querySelector<HTMLElement>(".arbor-card-list") ?? columnEl.createDiv({ cls: "arbor-card-list" });
-    cardsEl.dataset.columnKey = column.key;
-    const nextParentId = column.parentId ?? "";
-    const parentChanged = (cardsEl.dataset.parentId ?? "") !== nextParentId;
-    cardsEl.dataset.parentId = nextParentId;
-
-    if (parentChanged) {
-      cardsEl.addClass("is-rebinding");
-      cardsEl.setCssProps({ "--arbor-card-list-offset-y": "0px" });
-    }
-
-    if (column.collapsedBlockId) {
-      cardsEl.empty();
-      const summary = cardsEl.createDiv({ cls: "arbor-column-summary" });
-      summary.dataset.nodeKey = `collapsed-${column.key}`;
-      summary.createDiv({
-        cls: "arbor-column-summary-title",
-        text: `${column.collapsedCount ?? 0} hidden block${(column.collapsedCount ?? 0) === 1 ? "" : "s"}`
-      });
-      if ((column.collapsedPreviewLabels?.length ?? 0) > 0) {
-        const labelsEl = summary.createDiv({ cls: "arbor-column-summary-labels" });
-        column.collapsedPreviewLabels?.forEach((label) => {
-          labelsEl.createSpan({ cls: "arbor-column-summary-chip", text: label });
-        });
-      }
-      const expandButton = summary.createEl("button", {
-        cls: "arbor-column-summary-action",
-        text: "Expand branch",
-        attr: { type: "button" }
-      });
-      expandButton.addEventListener("click", () => void this.setCollapsedState(column.collapsedBlockId!, false));
-      return;
-    }
-
-    if (column.blocks.length === 0) {
-      cardsEl.empty();
-      const empty = cardsEl.createDiv({ cls: "arbor-column-empty" });
-      empty.dataset.nodeKey = `empty-${column.key}`;
-      empty.setText(column.parentId ? "No child blocks yet." : "No root blocks yet.");
-      empty.toggleClass("is-selectable-context", column.parentId === this.state?.selectedBlockId);
-      if (column.parentId) {
-        empty.addEventListener("contextmenu", (event) => {
-          event.preventDefault();
-          this.selectBlock(column.parentId);
-          const menu = new Menu();
-          menu.addItem((item) =>
-            item.setTitle("Create child block").setIcon(getChildArrowIcon(this.plugin.settings.layoutDirection)).onClick(() => void this.createChild())
-          );
-          menu.showAtMouseEvent(event);
-        });
-      }
-      return;
-    }
-
-    const existingChildren = new Map<string, HTMLElement>();
-    Array.from(cardsEl.children).forEach((child) => {
-      if (child.instanceOf(HTMLElement) && child.dataset.nodeKey) {
-        existingChildren.set(child.dataset.nodeKey, child);
-      }
-    });
-
-    const desiredNodes: HTMLElement[] = [];
-    for (let index = 0; index < column.blocks.length; index += 1) {
-      if (this.dragState && this.dragState.columnKey === column.key && this.dragState.targetIndex === index) {
-        desiredNodes.push(this.ensureIndicatorNode(cardsEl, existingChildren, `indicator-${column.key}-${index}`));
-      }
-
-      const block = column.blocks[index];
-      const card = this.ensureCardNode(cardsEl, existingChildren, block.id);
-      await this.syncCardNode(card, block, column, index, context);
-      desiredNodes.push(card);
-    }
-
-    if (this.dragState && this.dragState.columnKey === column.key && this.dragState.targetIndex === column.blocks.length) {
-      desiredNodes.push(this.ensureIndicatorNode(cardsEl, existingChildren, `indicator-${column.key}-${column.blocks.length}`));
-    }
-
-    desiredNodes.forEach((node, index) => {
-      const siblingAtIndex = cardsEl.children[index] ?? null;
-      if (siblingAtIndex !== node) {
-        cardsEl.insertBefore(node, siblingAtIndex);
-      }
-    });
-
-    const desiredNodeKeys = new Set(desiredNodes.map((node) => node.dataset.nodeKey!));
-    existingChildren.forEach((node, key) => {
-      if (!desiredNodeKeys.has(key)) {
-        node.remove();
-      }
-    });
-  }
-
-  private ensureIndicatorNode(cardsEl: HTMLElement, existingChildren: Map<string, HTMLElement>, key: string): HTMLElement {
-    const existing = existingChildren.get(key);
-    if (existing) {
-      existing.className = "arbor-drop-indicator";
-      existing.dataset.nodeKey = key;
-      return existing;
-    }
-
-    const indicator = cardsEl.createDiv({ cls: "arbor-drop-indicator" });
-    indicator.dataset.nodeKey = key;
-    return indicator;
-  }
-
-  private ensureCardNode(cardsEl: HTMLElement, existingChildren: Map<string, HTMLElement>, blockId: BranchBlockId): HTMLElement {
-    const key = `card-${blockId}`;
-    const existing = existingChildren.get(key);
-    if (existing) {
-      existing.dataset.nodeKey = key;
-      return existing;
-    }
-
-    const card = cardsEl.createDiv({ cls: "arbor-card" });
-    card.tabIndex = 0;
-    card.dataset.nodeKey = key;
-    card.addEventListener("pointerdown", (event) => this.rememberCardPointerPosition(blockId, event.clientX, event.clientY));
-    card.addEventListener("mousedown", (event) => this.rememberCardPointerPosition(blockId, event.clientX, event.clientY));
-    card.addEventListener("click", (event) => this.handleCardClick(event));
-    card.addEventListener("dblclick", (event) => this.handleCardDoubleClick(event));
-    card.addEventListener("contextmenu", (event) => this.handleCardContextMenu(event));
-    card.addEventListener("keydown", (event) => this.handleCardKeyDown(event));
-    card.addEventListener("mouseenter", () => this.setHoveredBlock(blockId));
-    card.addEventListener("mouseleave", () => this.setHoveredBlock(null));
-    card.addEventListener("dragstart", (event) => this.handleCardDragStart(event));
-    card.addEventListener("dragend", () => this.handleCardDragEnd());
-    card.addEventListener("dragover", (event) => this.handleCardDragOver(event));
-    card.addEventListener("drop", (event) => this.handleCardDrop(event));
-    return card;
-  }
-
-  private async syncCardNode(
-    card: HTMLElement,
-    block: BranchBlock,
-    column: BranchColumnModel,
-    index: number,
-    context: BranchViewContext
-  ): Promise<void> {
-    card.dataset.blockId = block.id;
-    card.dataset.columnKey = column.key;
-    card.dataset.blockIndex = String(index);
-    card.dataset.parentId = block.parentId ?? "";
-    const isEditingCard = this.editingSession?.blockId === block.id && this.editingSession.origin === "card";
-    card.draggable = canDragCard(this.plugin.settings.dragAndDrop && !this.usesTouchControls, isEditingCard);
-    card.removeClass(
-      "is-active",
-      "is-on-path",
-      "is-selectable",
-      "is-muted",
-      "is-drag-source",
-      "is-editing",
-      "is-search-match",
-      "is-search-related",
-      "is-search-muted"
-    );
-
-    if (this.state?.selectedBlockId === block.id) {
-      card.addClass("is-active");
-    } else if (context.activePathIds.has(block.id)) {
-      card.addClass("is-on-path");
-    } else if (context.selectableChildIds.has(block.id)) {
-      card.addClass("is-selectable");
-    } else if (context.activePathIds.size > 0) {
-      card.addClass("is-muted");
-    }
-
-    if (this.dragState?.draggedBlockId === block.id) {
-      card.addClass("is-drag-source");
-    }
-
-    if (context.searchQuery.length > 0) {
-      if (context.searchMatchedIds.has(block.id)) {
-        card.addClass("is-search-match");
-      } else if (context.searchRelatedIds.has(block.id)) {
-        card.addClass("is-search-related");
-      } else {
-        card.addClass("is-search-muted");
-      }
-    }
-
-    if (isEditingCard) {
-      card.addClass("is-editing");
-      this.syncEditorNode(card, block);
-      this.syncOutputCardPresentation(card, block.id, context);
-      return;
-    }
-
-    await this.syncCardContentNode(card, block);
-    if (context !== this.viewContext) {
-      return;
-    }
-    this.syncOutputCardPresentation(card, block.id, context);
-  }
-
-  private wireEditorElement(editor: HTMLTextAreaElement, block: BranchBlock, origin: EditingOrigin): void {
-    this.editor.wireEditorElement(editor, block, origin);
-  }
-
-  private syncEditorNode(card: HTMLElement, block: BranchBlock): void {
-    let editor = card.querySelector<HTMLTextAreaElement>("textarea.arbor-editor");
-    if (!editor) {
-      card.empty();
-      editor = card.createEl("textarea", { cls: "arbor-editor" });
-    }
-
-    this.wireEditorElement(editor, block, "card");
-
-    if (editor.value !== this.editingSession!.value) {
-      editor.value = this.editingSession!.value;
-    }
-    this.resizeEditor(editor);
-    card.dataset.renderMode = "editing";
-
-    if (this.editingSession?.autofocus && this.editingSession.origin === "card") {
-      const editorEl = editor;
-      window.requestAnimationFrame(() => {
-        editorEl.focus({ preventScroll: true });
-        editorEl.setSelectionRange(editorEl.value.length, editorEl.value.length);
-        this.resizeEditor(editorEl);
-        if (this.editingSession) {
-          this.editor.consumeAutofocus(this.editingSession);
-        }
-      });
-    }
-  }
-
-  private async syncCardContentNode(card: HTMLElement, block: BranchBlock): Promise<void> {
-    const renderSignature = hashString(block.content);
-    let content = card.querySelector<HTMLElement>(".arbor-card-content");
-    const needsRender = !content || card.dataset.renderSignature !== renderSignature || card.dataset.renderMode === "editing";
-
-    if (needsRender) {
-      card.empty();
-      content = card.createDiv({ cls: "arbor-card-content markdown-rendered" });
-      await MarkdownRenderer.render(this.app, block.content, content, this.file?.path ?? "", this);
-      if (content.innerText.trim().length === 0) {
-        content.setText(extractSnippet(block.content, this.plugin.settings.previewSnippetLength));
-      }
-      content.querySelectorAll("img").forEach((image) => {
-        image.addEventListener("load", () => this.scheduleColumnAlignment(), { once: true });
-      });
-      card.dataset.renderSignature = renderSignature;
-    }
-
-    if (content) {
-      const isCompactPreview = !card.hasClass("is-active") && !card.hasClass("is-editing");
-      card.toggleClass(
-        "has-truncated-content",
-        isCompactPreview && hasVerticalOverflow(content.scrollHeight, content.clientHeight)
-      );
-    }
-    card.dataset.renderMode = "content";
   }
 
   private async syncTreeOverview(): Promise<void> {
@@ -2609,9 +2337,7 @@ export class ArborView extends FileView {
 
     const listEl = container.createDiv({ cls: "arbor-preview-minimap-list" });
     const visibleNodeIds = new Set<BranchBlockId>([...context.activePathIds]);
-    this.currentColumnMap.forEach((column) => {
-      column.blocks.forEach((block) => visibleNodeIds.add(block.id));
-    });
+    this.branchRenderer.getVisibleBlockIds().forEach((id) => visibleNodeIds.add(id));
     const minimapNodes = context.searchQuery.length > 0
       ? context.overviewNodes.filter((node) => node.isSearchMatch || node.isSearchRelated || visibleNodeIds.has(node.id))
       : this.showFullMiniMap
@@ -2936,42 +2662,6 @@ export class ArborView extends FileView {
     });
   }
 
-  private handleColumnDragOver(event: DragEvent): void {
-    if (!this.plugin.settings.dragAndDrop) {
-      return;
-    }
-
-    event.preventDefault();
-    this.updateDragPreviewPointer(event);
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = "move";
-    }
-    const cardsEl = event.currentTarget as HTMLElement;
-    const column = this.currentColumnMap.get(cardsEl.dataset.columnKey ?? "");
-    const draggedBlockId = this.readDraggedBlockId(event);
-    if (!column || !draggedBlockId || column.blocks.length > 0) {
-      return;
-    }
-
-    this.updateDragState({
-      draggedBlockId,
-      targetParentId: column.parentId,
-      targetIndex: 0,
-      columnKey: column.key
-    });
-  }
-
-  private handleViewportDragOver(event: DragEvent): void {
-    if (!this.plugin.settings.dragAndDrop || !this.dragPreviewEl) {
-      return;
-    }
-
-    this.updateDragPreviewPointer(event);
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = "move";
-    }
-  }
-
   private handleCardClick(event: MouseEvent): void {
     this.navigationController.handleCardClick(event);
   }
@@ -2992,225 +2682,12 @@ export class ArborView extends FileView {
     this.navigationController.handleViewportKeyDown(event);
   }
 
-  private handleCardDragStart(event: DragEvent): void {
-    const card = event.currentTarget as HTMLElement;
-    const blockId = card.dataset.blockId;
-    if (!canStartCardDrag(this.plugin.settings.dragAndDrop, this.editingSession?.blockId ?? null, blockId)) {
-      event.preventDefault();
-      return;
-    }
-
-    const columnKey = card.dataset.columnKey ?? "";
-    const blockIndex = Number(card.dataset.blockIndex ?? "-1");
-    const column = this.currentColumnMap.get(columnKey);
-    if (!blockId || !column || blockIndex < 0) {
-      return;
-    }
-
-    event.dataTransfer?.setData("text/plain", blockId);
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setDragImage(this.getTransparentDragImage(), 0, 0);
-    }
-
-    this.dragState = {
-      draggedBlockId: blockId,
-      targetParentId: column.parentId,
-      targetIndex: blockIndex,
-      columnKey
-    };
-    card.addClass("is-drag-source");
-    this.startDragPreview(card, blockId, event);
+  private wireEditorElement(editor: HTMLTextAreaElement, block: BranchBlock, origin: EditingOrigin): void {
+    this.editor.wireEditorElement(editor, block, origin);
   }
 
-  private handleCardDragOver(event: DragEvent): void {
-    if (!this.plugin.settings.dragAndDrop) {
-      return;
-    }
-
-    event.preventDefault();
-    this.updateDragPreviewPointer(event);
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = "move";
-    }
-    const card = event.currentTarget as HTMLElement;
-    const columnKey = card.dataset.columnKey ?? "";
-    const blockIndex = Number(card.dataset.blockIndex ?? "-1");
-    const column = this.currentColumnMap.get(columnKey);
-    const draggedBlockId = this.readDraggedBlockId(event);
-    if (!column || !draggedBlockId || blockIndex < 0) {
-      return;
-    }
-
-    const rect = card.getBoundingClientRect();
-    const before = event.clientY < rect.top + rect.height / 2;
-    this.updateDragState({
-      draggedBlockId,
-      targetParentId: column.parentId,
-      targetIndex: before ? blockIndex : blockIndex + 1,
-      columnKey
-    });
-  }
-
-  private handleCardDrop(event: DragEvent): void {
-    event.preventDefault();
-    const column = this.currentColumnMap.get((event.currentTarget as HTMLElement).dataset.columnKey ?? "");
-    if (column) {
-      void this.applyDrop(column);
-    }
-  }
-
-  private handleCardDragEnd(): void {
-    this.dragState = null;
-    this.cleanupDragPreview();
-    this.render();
-  }
-
-  private async applyDrop(_column: BranchColumnModel): Promise<void> {
-    if (!this.dragState || !this.state) {
-      return;
-    }
-
-    const { draggedBlockId, targetIndex, targetParentId } = this.dragState;
-    this.dragState = null;
-    this.cleanupDragPreview();
-    await this.applyMutation("Move block", (metadata) => ({
-      metadata: moveBlockToParentAtIndex(metadata, draggedBlockId, targetParentId, targetIndex),
-      selectedBlockId: draggedBlockId
-    }));
-  }
-
-  private readDraggedBlockId(event: DragEvent): BranchBlockId | null {
-    return event.dataTransfer?.getData("text/plain") || this.dragState?.draggedBlockId || null;
-  }
-
-  private getTransparentDragImage(): HTMLCanvasElement {
-    if (!this.transparentDragImageEl) {
-      const canvas = this.contentEl.createEl("canvas");
-      canvas.remove();
-      canvas.width = 1;
-      canvas.height = 1;
-      this.transparentDragImageEl = canvas;
-    }
-
-    return this.transparentDragImageEl;
-  }
-
-  private startDragPreview(card: HTMLElement, blockId: BranchBlockId, event: DragEvent): void {
-    this.cleanupDragPreview();
-
-    if (!this.columnsStageEl) {
-      return;
-    }
-
-    const preview = card.cloneNode(true) as HTMLElement;
-    preview.removeAttribute("tabindex");
-    preview.draggable = false;
-    preview.classList.remove("is-drag-source", "is-hover-linked", "is-hover-linked-path");
-    preview.classList.add("arbor-drag-preview");
-    preview.dataset.blockId = blockId;
-    preview.setAttribute("aria-hidden", "true");
-    preview.querySelectorAll<HTMLElement>("[tabindex]").forEach((element) => element.removeAttribute("tabindex"));
-    preview.setCssProps({ "--arbor-drag-preview-width": `${card.offsetWidth}px` });
-
-    const rect = card.getBoundingClientRect();
-    const stageRect = this.columnsStageEl.getBoundingClientRect();
-    const initialLeft = rect.left - stageRect.left;
-    const initialTop = rect.top - stageRect.top;
-    preview.setCssProps({
-      "--arbor-drag-preview-x": `${Math.round(initialLeft)}px`,
-      "--arbor-drag-preview-y": `${Math.round(initialTop)}px`
-    });
-
-    const rememberedPointer =
-      this.lastCardPointerPosition?.blockId === blockId
-        ? this.lastCardPointerPosition
-        : null;
-    const pointerX = rememberedPointer?.clientX ?? event.clientX;
-    const pointerY = rememberedPointer?.clientY ?? event.clientY;
-    const hasPointer = Number.isFinite(pointerX) && Number.isFinite(pointerY) && (pointerX !== 0 || pointerY !== 0);
-
-    this.dragPreviewOffset = hasPointer
-      ? {
-          x: Math.max(0, Math.min(pointerX - rect.left, rect.width)),
-          y: Math.max(0, Math.min(pointerY - rect.top, rect.height))
-        }
-      : {
-          x: Math.min(rect.width * 0.34, 72),
-          y: Math.min(rect.height * 0.28, 56)
-        };
-    this.dragPreviewPoint = hasPointer ? { x: pointerX, y: pointerY } : null;
-    this.dragPreviewEl = preview;
-    this.columnsStageEl.addClass("is-dragging");
-    this.columnsStageEl.appendChild(preview);
-    this.contentEl.ownerDocument.addEventListener("dragover", this.documentDragOverHandler);
-    if (this.dragPreviewPoint) {
-      this.scheduleDragPreviewPosition();
-    }
-  }
-
-  private handleDocumentDragOver(event: DragEvent): void {
-    if (!this.dragPreviewEl) {
-      return;
-    }
-
-    this.updateDragPreviewPointer(event);
-  }
-
-  private updateDragPreviewPointer(event: Pick<DragEvent, "clientX" | "clientY">): void {
-    if (!this.dragPreviewEl) {
-      return;
-    }
-
-    this.dragPreviewPoint = { x: event.clientX, y: event.clientY };
-    this.scheduleDragPreviewPosition();
-  }
-
-  private scheduleDragPreviewPosition(): void {
-    if (this.dragPreviewFrame !== null) {
-      return;
-    }
-
-    this.dragPreviewFrame = window.requestAnimationFrame(() => {
-      this.dragPreviewFrame = null;
-      this.syncDragPreviewPosition();
-    });
-  }
-
-  private syncDragPreviewPosition(): void {
-    if (!this.dragPreviewEl || !this.columnsStageEl || !this.dragPreviewPoint) {
-      return;
-    }
-
-    const stageRect = this.columnsStageEl.getBoundingClientRect();
-    const left = this.dragPreviewPoint.x - stageRect.left - this.dragPreviewOffset.x;
-    const top = this.dragPreviewPoint.y - stageRect.top - this.dragPreviewOffset.y;
-    this.dragPreviewEl.setCssProps({
-      "--arbor-drag-preview-x": `${Math.round(left)}px`,
-      "--arbor-drag-preview-y": `${Math.round(top)}px`
-    });
-  }
-
-  private cleanupDragPreview(): void {
-    this.contentEl.ownerDocument.removeEventListener("dragover", this.documentDragOverHandler);
-    if (this.dragPreviewFrame !== null) {
-      window.cancelAnimationFrame(this.dragPreviewFrame);
-      this.dragPreviewFrame = null;
-    }
-
-    this.dragPreviewEl?.remove();
-    this.dragPreviewEl = null;
-    this.dragPreviewPoint = null;
-    this.dragPreviewOffset = { x: 0, y: 0 };
-    this.lastCardPointerPosition = null;
-    this.columnsStageEl?.removeClass("is-dragging");
-    this.contentEl.querySelectorAll(".arbor-card.is-drag-source").forEach((element) => {
-      element.classList.remove("is-drag-source");
-    });
-  }
-
-  private rememberCardPointerPosition(blockId: BranchBlockId, clientX: number, clientY: number): void {
-    this.lastCardPointerPosition = { blockId, clientX, clientY };
+  private resizeEditor(textarea: HTMLTextAreaElement): void {
+    this.editor.resizeEditor(textarea);
   }
 
   private async applyMutation(
@@ -3336,11 +2813,10 @@ export class ArborView extends FileView {
     this.clearBlurCommitTimer();
     this.zoomController.reset();
     this.branchViewport.reset();
-    this.cleanupDragPreview();
+    this.dragDropController.reset();
     this.state = null;
     this.history.clear();
     this.editor.reset();
-    this.dragState = null;
     this.isSearchOpen = false;
     this.showFullMiniMap = false;
     this.shouldFocusSearchInput = false;
@@ -3666,84 +3142,6 @@ export class ArborView extends FileView {
   private async runWithSelectedBlock(blockId: BranchBlockId, callback: () => Promise<void>): Promise<void> {
     this.selectBlock(blockId);
     await callback();
-  }
-
-  private updateDragState(nextDragState: DragState): void {
-    const current = this.dragState;
-    if (
-      current?.draggedBlockId === nextDragState.draggedBlockId &&
-      current?.targetParentId === nextDragState.targetParentId &&
-      current?.targetIndex === nextDragState.targetIndex &&
-      current?.columnKey === nextDragState.columnKey
-    ) {
-      return;
-    }
-
-    this.dragState = nextDragState;
-    this.render();
-  }
-
-  private resizeEditor(textarea: HTMLTextAreaElement): void {
-    this.editor.resizeEditor(textarea);
-  }
-
-  private handleViewportWheel(event: WheelEvent, viewport: HTMLElement): void {
-    if (this.compactLayout) return;
-    if ((event.ctrlKey || event.metaKey) && this.plugin.settings.enableCtrlWheelZoom) {
-      event.preventDefault();
-      const factor = event.deltaY < 0 ? 1.06 : 1 / 1.06;
-      this.zoomController.updateZoomLevel(this.plugin.settings.zoomLevel * factor);
-      return;
-    }
-
-    const hoveredColumn = this.getColumnAtPointerX(event.clientX);
-    const wheelNavigation = resolveColumnWheelNavigation(
-      event.deltaX,
-      event.deltaY,
-      event.ctrlKey,
-      event.metaKey,
-      hoveredColumn !== null
-    );
-    if (wheelNavigation) {
-      event.preventDefault();
-      const columnTarget = this.state && hoveredColumn
-        ? resolveColumnWheelTarget(this.state.metadata, this.state.selectedBlockId, hoveredColumn)
-        : null;
-      if (columnTarget) {
-        this.selectBlock(columnTarget, { focus: true });
-        return;
-      }
-      if (wheelNavigation === "previous") {
-        this.selectPreviousSiblingBlock();
-      } else {
-        this.selectNextSiblingBlock();
-      }
-      return;
-    }
-
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || event.ctrlKey || event.metaKey) {
-      return;
-    }
-
-    if (viewport.scrollWidth <= viewport.clientWidth) {
-      return;
-    }
-
-    event.preventDefault();
-    viewport.scrollBy({
-      left: getHorizontalWheelDelta(event.deltaY, this.plugin.settings.layoutDirection),
-      behavior: "auto"
-    });
-  }
-
-  private getColumnAtPointerX(clientX: number): BranchColumnModel | null {
-    for (const [columnKey, columnEl] of this.columnElementMap) {
-      const bounds = columnEl.getBoundingClientRect();
-      if (clientX >= bounds.left && clientX <= bounds.right) {
-        return this.currentColumnMap.get(columnKey) ?? null;
-      }
-    }
-    return null;
   }
 
   private afterZoom(): void {
