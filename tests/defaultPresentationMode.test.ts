@@ -12,7 +12,7 @@ describe("default presentation mode", () => {
     const openOutputPreview = sourceMethod("src/view/ArborView.ts", "ArborView", "openOutputPreview");
     const closeOutputPreview = sourceMethod("src/view/ArborView.ts", "ArborView", "closeOutputPreview");
     const refresh = sourceMethod("src/view/ArborView.ts", "ArborView", "refreshView");
-    const outputRender = sourceMethod("src/view/ArborView.ts", "ArborView", "syncOutputPreview");
+    const outputRender = sourceMethod("src/view/preview/OutputPreviewController.ts", "OutputPreviewController", "syncOutputPreview");
 
     expect(types).toContain('export type ArborPresentationMode = "editor" | "overview" | "output";');
     expect(openOutputPreview).toContain('this.presentationMode = "output";');
@@ -28,9 +28,9 @@ describe("default presentation mode", () => {
     expect(closeOutputPreview).not.toContain("vault.create");
     expect(closeOutputPreview).not.toContain("vault.modify");
     expect(refresh).not.toContain("persistState");
-    expect(outputRender).toContain("projectOutput(metadata, this.state.outputState)");
+    expect(outputRender).toContain("projectOutput(metadata, state.outputState)");
     expect(outputRender).toContain("renderVersion !== this.outputRenderVersion");
-    expect(outputRender).toContain("MarkdownRenderer.render");
+    expect(outputRender).toContain("this.port.markdown.render");
     expect(outputRender).not.toContain("vault.create");
     expect(outputRender).not.toContain("vault.modify");
     expect(outputRender).not.toContain("persistState");

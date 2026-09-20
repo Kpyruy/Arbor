@@ -39,7 +39,7 @@ describe("managed note opening", () => {
     const openCurrentFile = sourceMethod("src/view/ArborView.ts", "ArborView", "openCurrentFileInMarkdown");
     const openOutputPreview = sourceMethod("src/view/ArborView.ts", "ArborView", "openOutputPreview");
     const closeOutputPreview = sourceMethod("src/view/ArborView.ts", "ArborView", "closeOutputPreview");
-    const outputRender = sourceMethod("src/view/ArborView.ts", "ArborView", "syncOutputPreview");
+    const outputRender = sourceMethod("src/view/preview/OutputPreviewController.ts", "OutputPreviewController", "syncOutputPreview");
 
     expect(openCurrentFile).toContain("await this.openFileInMarkdownView(this.file);");
     expect(openOutputPreview).toContain('this.presentationMode = "output";');
