@@ -88,7 +88,7 @@ describe("Arbor layout direction", () => {
   });
 
   it("renders RTL as a CSS mirror while keeping semantic depth and card text in place", () => {
-    const view = readSource("src/view/ArborView.ts");
+    const view = readSource("src/view/chrome/ViewShell.ts");
     const renderer = readSource("src/view/branch/BranchRenderer.ts");
     const directionalCreate = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleDirectionalCreateShortcut");
     const editorArrow = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleEditorArrow");
@@ -100,7 +100,7 @@ describe("Arbor layout direction", () => {
     expect(editorArrow).toContain("getParentArrowKey(direction)");
     expect(editorArrow).toContain("getChildArrowKey(direction)");
     expect(renderer).toContain("getHorizontalWheelDelta(event.deltaY, settings.layoutDirection)");
-    expect(view).toContain('root.classList.toggle("is-rtl", this.plugin.settings.layoutDirection === "rtl")');
+    expect(view).toContain('root.classList.toggle("is-rtl", direction === "rtl")');
     expect(styles).toContain(".arbor-view.is-rtl .arbor-breadcrumbs");
     const rtlColumns = styles.slice(
       styles.indexOf(".arbor-view.is-rtl .arbor-columns"),

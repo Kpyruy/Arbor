@@ -388,6 +388,7 @@ describe("Output Profiles manager UI", () => {
       render: () => void;
       branchRenderer: { forEachCard: (callback: (card: HTMLElement) => void) => void };
       overview: { forEachCard: (callback: (card: HTMLElement) => void) => void };
+      shell: { syncOutputProfileButton: () => void };
       applyActiveOutputProfile: (next: ArborOutputState) => Promise<ArborOutputState>;
     };
     view.state = { metadata: tree(), outputState: outputState("full"), outputError: null };
@@ -396,6 +397,7 @@ describe("Output Profiles manager UI", () => {
     view.render = () => renderedProfileIds.push(view.state.outputState.activeProfileId);
     view.branchRenderer = { forEachCard: () => undefined };
     view.overview = { forEachCard: () => undefined };
+    view.shell = { syncOutputProfileButton: () => undefined };
 
     const activation = view.applyActiveOutputProfile(outputState("draft"));
     await Promise.resolve();
@@ -429,6 +431,7 @@ describe("Output Profiles manager UI", () => {
       viewContext: null;
       branchRenderer: { forEachCard: (callback: (card: HTMLElement) => void) => void };
       overview: { forEachCard: (callback: (card: HTMLElement) => void) => void };
+      shell: { syncOutputProfileButton: () => void };
       commitEditIfNeeded: () => Promise<void>;
       persistState: () => Promise<void>;
       render: () => void;
@@ -438,6 +441,7 @@ describe("Output Profiles manager UI", () => {
     view.viewContext = null;
     view.branchRenderer = { forEachCard: () => undefined };
     view.overview = { forEachCard: (callback) => callback(card) };
+    view.shell = { syncOutputProfileButton: () => undefined };
     view.commitEditIfNeeded = async () => undefined;
     view.persistState = () => pendingSave.promise;
     view.render = () => undefined;

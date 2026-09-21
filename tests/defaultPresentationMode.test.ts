@@ -39,7 +39,7 @@ describe("default presentation mode", () => {
   it("keeps the header row reserved while Output Preview hides breadcrumbs", () => {
     const styles = readSource("styles.css");
     const renderNow = sourceMethod("src/view/ArborView.ts", "ArborView", "renderNow");
-    const breadcrumbs = sourceMethod("src/view/ArborView.ts", "ArborView", "syncBreadcrumbs");
+    const breadcrumbs = sourceMethod("src/view/chrome/BreadcrumbsController.ts", "BreadcrumbsController", "syncBreadcrumbs");
     const reservedBreadcrumbStart = styles.indexOf(".arbor-breadcrumbs.is-reserved-hidden");
     const reservedBreadcrumbStyles = styles.slice(
       reservedBreadcrumbStart,
@@ -47,8 +47,8 @@ describe("default presentation mode", () => {
     );
 
     expect(renderNow).not.toContain('this.breadcrumbsEl?.setCssStyles({ display: "none" });');
-    expect(breadcrumbs).toContain('this.breadcrumbsEl.toggleClass("is-reserved-hidden", hideBreadcrumbContent);');
-    expect(breadcrumbs).toContain('this.breadcrumbsEl.setAttr("aria-hidden", hideBreadcrumbContent ? "true" : "false");');
+    expect(breadcrumbs).toContain('breadcrumbs.toggleClass("is-reserved-hidden", hideBreadcrumbContent);');
+    expect(breadcrumbs).toContain('breadcrumbs.setAttr("aria-hidden", hideBreadcrumbContent ? "true" : "false");');
     expect(reservedBreadcrumbStart).toBeGreaterThanOrEqual(0);
     expect(reservedBreadcrumbStyles).toContain("min-height: 40px;");
     expect(reservedBreadcrumbStyles).toContain("visibility: hidden;");
@@ -56,29 +56,30 @@ describe("default presentation mode", () => {
   });
 
   it("keeps one persistent profile and mode control layer outside presentation stages", () => {
-    const source = readSource("src/view/ArborView.ts");
-    const touchDock = sourceMethod("src/view/ArborView.ts", "ArborView", "syncTouchDock");
-    const controlPlacement = touchDock.slice(
-      touchDock.indexOf("const controlsHost"),
-      touchDock.indexOf('if (this.presentationMode === "output")')
-    );
+    const source = readSource("src/view/chrome/ViewShell.ts");
+    const touchDock = sourceMethod("src/view/chrome/ViewShell.ts", "ViewShell", "syncTouchDock");
+    const placementStart = touchDock.indexOf("const controlsHost");
+    const placementEnd = touchDock.indexOf('if (this.port.read.getMode() === "output"');
+    expect(placementStart).toBeGreaterThanOrEqual(0);
+    expect(placementEnd).toBeGreaterThan(placementStart);
+    const controlPlacement = touchDock.slice(placementStart, placementEnd);
 
-    expect(source).toContain('this.modeControlsEl = this.bodyEl.createDiv({ cls: "arbor-mode-controls" });');
-    expect(source).toContain("this.outputProfileButtonEl = createOutputProfileButton(this.modeControlsEl, state.outputState);");
-    expect(source).toContain('this.overviewButtonEl = this.modeControlsEl.createEl("button"');
-    expect(source).not.toContain("appendChild(this.overviewButtonEl)");
-    expect(source).not.toContain("appendChild(this.outputProfileButtonEl)");
+    expect(source).toContain('const modeControlsEl = bodyEl.createDiv({ cls: "arbor-mode-controls" });');
+    expect(source).toContain("const outputProfileButtonEl = createOutputProfileButton(modeControlsEl, state.outputState);");
+    expect(source).toContain('const overviewButtonEl = modeControlsEl.createEl("button"');
+    expect(source).not.toMatch(/appendChild\((?:this\.elements\.)?overviewButtonEl\)/);
+    expect(source).not.toMatch(/appendChild\((?:this\.elements\.)?outputProfileButtonEl\)/);
     expect(source).not.toContain('cls: "arbor-overview-exit"');
-    expect(touchDock).toContain("const controlsHost = this.usesTouchControls ? this.frameEl : this.bodyEl;");
-    expect(touchDock).toContain("if (this.modeControlsEl && this.modeControlsEl.parentElement !== controlsHost)");
-    expect(controlPlacement).not.toContain("this.presentationMode");
-    expect(source).toContain("private syncOverviewModeButton(): void");
-    expect(source).toContain('this.overviewButtonEl.setAttr("aria-label", isOverview ? "Return to branch editor" : "Open tree overview");');
-    expect(source).toContain('setIcon(this.overviewButtonEl, isOverview ? "git-fork" : "map");');
+    expect(touchDock).toContain("const controlsHost = this.usesTouchControls() ? this.elements.frameEl : this.elements.bodyEl;");
+    expect(touchDock).toContain("if (modeControlsEl && modeControlsEl.parentElement !== controlsHost)");
+    expect(controlPlacement).not.toContain("getMode()");
+    expect(source).toContain("syncOverviewModeButton(): void");
+    expect(source).toContain('button.setAttr("aria-label", isOverview ? "Return to branch editor" : "Open tree overview");');
+    expect(source).toContain('setIcon(button, isOverview ? "git-fork" : "map");');
   });
 
   it("places Output preview immediately above clean export in the view menu", () => {
-    const menu = sourceMethod("src/view/ArborView.ts", "ArborView", "openViewMenu");
+    const menu = sourceMethod("src/view/chrome/ViewMenus.ts", "ViewMenus", "openViewMenu");
     const outputPreviewIndex = menu.indexOf('setTitle("Output preview")');
     const cleanExportIndex = menu.indexOf('setTitle("Export clean copy…")');
 
@@ -104,9 +105,9 @@ describe("default presentation mode", () => {
   });
 
   it("places the overview switch in the canvas and relies on one accessible tooltip", () => {
-    const source = readSource("src/view/ArborView.ts");
+    const source = readSource("src/view/chrome/ViewShell.ts");
 
-    expect(source).toContain('this.overviewButtonEl = this.modeControlsEl.createEl("button"');
+    expect(source).toContain('const overviewButtonEl = modeControlsEl.createEl("button"');
     expect(source).toContain('attr: { type: "button", "aria-label": "Open tree overview" }');
   });
 
@@ -155,11 +156,11 @@ describe("default presentation mode", () => {
   });
 
   it("opens Theme studio from a dedicated toolbar button", () => {
-    const source = readSource("src/view/ArborView.ts");
+    const source = readSource("src/view/chrome/ViewShell.ts");
 
     expect(source).toContain('cls: "arbor-theme-button"');
     expect(source).toContain('"aria-label": "Open theme studio"');
-    expect(source).toContain('this.plugin.openThemeStudio()');
+    expect(source).toContain("this.port.toolbar.openThemeStudio()");
   });
 
   it("reserves the control edge before laying out breadcrumbs", () => {
@@ -251,7 +252,7 @@ describe("default presentation mode", () => {
   });
 
   it("lets removed breadcrumbs exit instead of disappearing during parent navigation", () => {
-    const view = readSource("src/view/ArborView.ts");
+    const view = readSource("src/view/chrome/BreadcrumbsController.ts");
     const styles = readSource("styles.css");
 
     expect(view).toContain("this.animateRemovedBreadcrumbs(path)");

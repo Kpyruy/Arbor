@@ -16,7 +16,7 @@ describe("breadcrumb animation", () => {
   });
 
   it("applies the entrance class only from the newly entering path IDs", () => {
-    const view = readSource("src/view/ArborView.ts");
+    const view = readSource("src/view/chrome/BreadcrumbsController.ts");
     const styles = readSource("styles.css");
 
     expect(view).toContain("getEnteringBreadcrumbIds(previousPathIds, path.map((block) => block.id))");

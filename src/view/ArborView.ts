@@ -8,7 +8,6 @@ import {
   Modal,
   Notice,
   Platform,
-  setIcon,
   TFile,
   WorkspaceLeaf
 } from "obsidian";
@@ -30,10 +29,7 @@ import {
   getBlock,
   getChildren,
   getDescendantIds,
-  getPreferredChildBlock,
-  getNextSibling,
   getParentBlock,
-  getPreviousSibling,
   moveBlockDown,
   moveBlockLeft,
   moveBlockRight,
@@ -61,8 +57,6 @@ import {
   getActiveOutputProfile,
   reconcileProfilesAfterTreeChange,
   resolveOutputStates,
-  setBlockOnlyState,
-  setSubtreeState,
   setActiveOutputProfile
 } from "../outputProfiles";
 import { buildBranchDocument, parseBranchDocument } from "../storage/document";
@@ -70,19 +64,11 @@ import { loadImportedBranchDocument } from "../storage/reconcile";
 import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
 import { deepClone, extractPathLabel } from "../utils";
-import { buildArborBlockLink } from "../blockLinks";
-import { getEnteringBreadcrumbIds } from "../breadcrumbAnimation";
 import { MOBILE_TREE_OVERVIEW_EXPORT_LIMITS, resolveTreeOverviewExportSize, type TreeOverviewExportQuality } from "../treeOverviewExport";
-import { getBreadcrumbScrollInsets, getChildArrowIcon, getParentArrowIcon, getVisualBreadcrumbOrder } from "../layoutDirection";
 import { ARBOR_THEME_VARIABLES, resolveArborThemeVariables } from "../theme";
-import { CARD_PREVIEW_MAX_HEIGHT_PX } from "../cardViewport";
+import { OutputProfilesModal, type OutputProfilesController } from "./OutputProfilesModal";
 import { toBlob } from "html-to-image";
-import { compactColumns, useCompactLayout } from "../mobile";
-import {
-  createOutputProfileButton,
-  getOutputProfileButtonPresentation,
-  OutputProfilesModal
-} from "./OutputProfilesModal";
+import { compactColumns } from "../mobile";
 import { buildViewContext } from "./state/viewModel";
 import type {
   BranchViewContext,
@@ -92,7 +78,6 @@ import type {
   LoadingOverlayState
 } from "./state/viewTypes";
 import {
-  getBlockOutputMenuActions,
   getOutputCardPresentation,
   syncOutputCardPresentation
 } from "./output/outputPresentation";
@@ -114,6 +99,9 @@ import { DragDropController } from "./branch/DragDropController";
 import { LinearPreviewController } from "./preview/LinearPreviewController";
 import { OutputPreviewController } from "./preview/OutputPreviewController";
 import { SearchController } from "./chrome/SearchController";
+import { BreadcrumbsController } from "./chrome/BreadcrumbsController";
+import { ViewShell } from "./chrome/ViewShell";
+import { ViewMenus } from "./chrome/ViewMenus";
 export {
   getBlockOutputMenuActions,
   getOutputCardPresentation
@@ -125,8 +113,6 @@ export type {
 } from "./output/outputPresentation";
 
 export class ArborView extends FileView {
-  private compactLayout = false;
-  private touchDockEl: HTMLElement | null = null;
   navigation = true;
 
   private readonly history = new BranchHistory();
@@ -144,28 +130,14 @@ export class ArborView extends FileView {
   private readonly preview: LinearPreviewController;
   private readonly output: OutputPreviewController;
   private readonly search: SearchController;
+  private readonly shell: ViewShell;
+  private readonly breadcrumbs: BreadcrumbsController;
+  private readonly menus: ViewMenus;
   private renderFrame: number | null = null;
   private isPersisting = false;
   private pendingFocusBlockId: BranchBlockId | null = null;
   private pendingScrollBlockId: BranchBlockId | null = null;
   private lastViewportScroll = { left: 0, top: 0 };
-  private frameEl: HTMLElement | null = null;
-  private breadcrumbsEl: HTMLElement | null = null;
-  private breadcrumbExitLayerEl: HTMLElement | null = null;
-  private zoomIndicatorEl: HTMLButtonElement | null = null;
-  private modeControlsEl: HTMLElement | null = null;
-  private outputProfileButtonEl: HTMLButtonElement | null = null;
-  private overviewButtonEl: HTMLButtonElement | null = null;
-  private markdownButtonEl: HTMLButtonElement | null = null;
-  private themeButtonEl: HTMLButtonElement | null = null;
-  private viewMenuButtonEl: HTMLButtonElement | null = null;
-  private bannerEl: HTMLElement | null = null;
-  private loadingOverlayEl: HTMLElement | null = null;
-  private bodyEl: HTMLElement | null = null;
-  private columnsStageEl: HTMLElement | null = null;
-  private columnsViewportEl: HTMLElement | null = null;
-  private columnsEl: HTMLElement | null = null;
-  private outputStageEl: HTMLElement | null = null;
   private hoveredBlockId: BranchBlockId | null = null;
   private viewContext: BranchViewContext | null = null;
   private loadingState: LoadingOverlayState | null = null;
@@ -195,7 +167,22 @@ export class ArborView extends FileView {
       new Notice(message);
     }
   });
-  private breadcrumbScrollFrame: number | null = null;
+  private get frameEl(): HTMLElement | null { return this.shell.getElements().frameEl; }
+  private get breadcrumbsEl(): HTMLElement | null { return this.shell.getElements().breadcrumbsEl; }
+  private get breadcrumbExitLayerEl(): HTMLElement | null { return this.shell.getElements().breadcrumbExitLayerEl; }
+  private get zoomIndicatorEl(): HTMLButtonElement | null { return this.shell.getElements().zoomIndicatorEl; }
+  private get modeControlsEl(): HTMLElement | null { return this.shell.getElements().modeControlsEl; }
+  private get outputProfileButtonEl(): HTMLButtonElement | null { return this.shell.getElements().outputProfileButtonEl; }
+  private get overviewButtonEl(): HTMLButtonElement | null { return this.shell.getElements().overviewButtonEl; }
+  private get markdownButtonEl(): HTMLButtonElement | null { return this.shell.getElements().markdownButtonEl; }
+  private get themeButtonEl(): HTMLButtonElement | null { return this.shell.getElements().themeButtonEl; }
+  private get viewMenuButtonEl(): HTMLButtonElement | null { return this.shell.getElements().viewMenuButtonEl; }
+  private get bodyEl(): HTMLElement | null { return this.shell.getElements().bodyEl; }
+  private get columnsStageEl(): HTMLElement | null { return this.shell.getElements().columnsStageEl; }
+  private get columnsViewportEl(): HTMLElement | null { return this.shell.getElements().columnsViewportEl; }
+  private get columnsEl(): HTMLElement | null { return this.shell.getElements().columnsEl; }
+  private get outputStageEl(): HTMLElement | null { return this.shell.getElements().outputStageEl; }
+  private get compactLayout(): boolean { return this.shell.isCompact(); }
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: ArborPlugin) {
     super(leaf);
@@ -398,6 +385,102 @@ export class ArborView extends FileView {
       handleSearchShortcut: (event) => this.navigationController.handleSearchShortcut(event),
       requestRender: () => this.render()
     });
+    this.shell = new ViewShell(this.contentEl, {
+      read: {
+        getState: () => this.state,
+        getSettings: () => this.plugin.settings,
+        getMode: () => this.presentationMode,
+        getFilePath: () => this.file?.path ?? ""
+      },
+      getSession: () => this.editor.getSession(),
+      getLoadingState: () => this.loadingState,
+      getThemeVariables: () => {
+        const theme = this.plugin.getEffectiveThemeState();
+        return resolveArborThemeVariables(theme.activeThemeId, theme.customThemes);
+      },
+      getLastScroll: () => this.lastViewportScroll,
+      onScroll: (position) => {
+        this.lastViewportScroll = position;
+        this.syncViewportEdgeFades();
+      },
+      bindBranchViewport: (element) => this.bindBranchViewport(element),
+      toolbar: {
+        resetZoom: () => this.resetViewFromZoomIndicator(),
+        openMarkdown: () => this.openCurrentFileInMarkdown(),
+        openThemeStudio: () => this.plugin.openThemeStudio(),
+        openViewMenu: (event) => this.openViewMenu(event),
+        openOutputProfileMenu: (event) => this.openOutputProfileMenu(event),
+        toggleOverview: () => {
+          if (this.presentationMode === "overview") this.closeTreeOverview();
+          else this.openTreeOverview();
+        }
+      },
+      dock: {
+        selectParent: () => this.selectParentBlock(),
+        selectPrevious: () => this.selectPreviousSiblingBlock(),
+        selectNext: () => this.selectNextSiblingBlock(),
+        selectChild: () => this.selectPreferredChildBlock(),
+        edit: () => {
+          const id = this.state?.selectedBlockId;
+          if (id) this.beginEditingBlock(id, this.presentationMode === "overview" ? "overview" : "card");
+        },
+        cancel: () => this.cancelEditingSession(),
+        save: () => this.commitEditingSession(),
+        createRoot: () => this.createRootBlock(),
+        createChild: () => this.createChild(),
+        createSibling: () => this.createSiblingBelow(),
+        openBlockMenu: () => this.openActiveBlockMenu(),
+        clearBlurCommitTimer: () => this.clearBlurCommitTimer()
+      },
+      onCompactChange: () => {
+        this.pendingScrollBlockId = this.state?.selectedBlockId ?? null;
+        this.render();
+      },
+      resizeEditors: () => this.resizeEditors(),
+      onResizeDuringEdit: () => this.revealSelectionAfterShellResize(),
+      onDirectionApplied: (direction) => { this.renderedLayoutDirection = direction; }
+    });
+    this.breadcrumbs = new BreadcrumbsController(
+      { getState: () => this.state, getSettings: () => this.plugin.settings, getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
+      { selectBlock: (id, options) => this.selectBlock(id, options) },
+      () => ({ frame: this.frameEl, breadcrumbs: this.breadcrumbsEl, exitLayer: this.breadcrumbExitLayerEl }),
+      () => this.file?.basename ?? ""
+    );
+    this.menus = new ViewMenus({
+      read: { getState: () => this.state, getSettings: () => this.plugin.settings, getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
+      selection: { selectBlock: (id, options) => this.selectBlock(id, options) },
+      editor: this.editor,
+      commands: {
+        createChild: () => this.createChild(), createParentLevelBlock: () => this.createParentLevelBlock(),
+        createSiblingAbove: () => this.createSiblingAbove(), createSiblingBelow: () => this.createSiblingBelow(),
+        selectParentBlock: () => this.selectParentBlock(), selectPreviousSiblingBlock: () => this.selectPreviousSiblingBlock(),
+        selectNextSiblingBlock: () => this.selectNextSiblingBlock(), selectFirstChildBlock: () => this.selectFirstChildBlock(),
+        toggleCollapsedState: (id) => this.toggleCollapsedState(id), duplicateSelectedSubtree: () => this.duplicateSelectedSubtree(),
+        revealCurrentBlockInMarkdown: () => this.revealCurrentBlockInMarkdown(), deleteSelectedBlock: () => this.deleteSelectedBlock(),
+        deleteSelectedSubtree: () => this.deleteSelectedSubtree(), openTreeOverview: () => this.openTreeOverview(), closeTreeOverview: () => this.closeTreeOverview(),
+        openOutputPreview: () => this.openOutputPreview(), closeOutputPreview: () => this.closeOutputPreview(),
+        exportCleanCopy: () => this.exportCleanCopy(), exportTreeOverview: () => this.exportTreeOverview()
+      },
+      getRoot: () => this.contentEl,
+      getViewMenuButton: () => this.viewMenuButtonEl,
+      getProfileButton: () => this.outputProfileButtonEl,
+      runWithSelectedBlock: (id, action) => this.runWithSelectedBlock(id, action),
+      openSearchOverlay: () => this.openSearchOverlay(),
+      updateZoomLevel: (value) => this.zoomController.updateZoomLevel(value),
+      syncOverviewZoom: () => this.syncOverviewZoom(),
+      openCurrentFileInMarkdown: () => this.openCurrentFileInMarkdown(),
+      updateViewSetting: (key, value, refreshAll) => this.updateViewSetting(key, value, refreshAll),
+      openArborSettings: () => this.openArborSettings(),
+      activateOutputProfile: (id) => this.activateOutputProfile(id),
+      applyActiveOutputProfile: (state) => this.applyActiveOutputProfile(state),
+      applyOutputProfileMutation: (label, state) => this.applyOutputProfileMutation(label, state),
+      resetInvalidOutputProfiles: () => this.resetInvalidOutputProfiles(),
+      applyOutputMutation: (label, mutate) => this.applyOutputMutation(label, mutate),
+      openProfiles: (controller) => this.openOutputProfilesManager(controller),
+      writeClipboard: (text) => navigator.clipboard.writeText(text),
+      showCopyLinkFallback: (text) => this.showCopyLinkFallback(text),
+      reportError: (message, error) => console.error(message, error)
+    });
     this.allowNoFile = false;
     const doc = this.contentEl.ownerDocument;
     this.registerDomEvent(doc, "visibilitychange", () => {
@@ -417,35 +500,143 @@ export class ArborView extends FileView {
   }
 
   private get usesTouchControls(): boolean {
-    return this.compactLayout || Platform.isMobile;
+    return this.shell.usesTouchControls();
   }
 
   private handleMobileResize(): void {
-    const compact = useCompactLayout(this.contentEl.clientWidth);
-    if (compact !== this.compactLayout) {
-      this.compactLayout = compact;
-      this.pendingScrollBlockId = this.state?.selectedBlockId ?? null;
-      this.render();
-    }
-    if (!this.usesTouchControls) return;
+    this.shell.handleMobileResize();
+  }
+
+  private resizeEditors(): void {
     this.contentEl.querySelectorAll<HTMLTextAreaElement>("textarea.arbor-editor").forEach((editor) => this.resizeEditor(editor));
-    const viewport = this.contentEl.ownerDocument.defaultView?.visualViewport;
-    const rect = this.contentEl.getBoundingClientRect();
-    let bottom = Math.min(rect.bottom - 8, (viewport?.height ?? window.innerHeight) + (viewport?.offsetTop ?? 0));
-    if (Platform.isMobile) {
-      this.contentEl.ownerDocument.querySelectorAll<HTMLElement>(".mobile-navbar, .mobile-toolbar").forEach((bar) => {
-        const bounds = bar.getBoundingClientRect();
-        if (bounds.height > 0 && bounds.width > 0 && bounds.top > rect.top && bounds.top < bottom && bounds.right > rect.left && bounds.left < rect.right && getComputedStyle(bar).visibility !== "hidden") bottom = bounds.top - 8;
-      });
+  }
+
+  private revealSelectionAfterShellResize(): void {
+    if (!this.usesTouchControls || !this.editingSession) return;
+    if (this.presentationMode === "overview") {
+      const card = this.overview.getElements().surface?.querySelector<HTMLElement>(".arbor-overview-card.is-active");
+      if (card) this.revealOverviewSelectedCard(card);
     }
-    this.contentEl.setCssProps({ "--arbor-mobile-height": `${Math.max(120, bottom - rect.top - 8)}px` });
-    if (this.editingSession) {
-      if (this.presentationMode === "overview") {
-        const card = this.overview.getElements().surface?.querySelector<HTMLElement>(".arbor-overview-card.is-active");
-        if (card) this.revealOverviewSelectedCard(card);
-      }
-      else this.revealCompactSelection();
+    else this.revealCompactSelection();
+  }
+
+  private applyCssVars(root: HTMLElement): void { this.shell.applyCssVars(root); }
+  private applyViewClasses(root: HTMLElement): void { this.shell.applyViewClasses(root); }
+  private syncTouchDock(): void { this.shell.syncTouchDock(); }
+  private syncBanner(): void { this.shell.syncBanner(); }
+  private syncLoadingOverlay(): void { this.shell.syncLoadingOverlay(); }
+  private syncBreadcrumbs(): void { this.breadcrumbs.syncBreadcrumbs(); }
+  private clearBreadcrumbScrollFrame(): void { this.breadcrumbs.clearBreadcrumbScrollFrame(); }
+  private syncZoomIndicator(): void { this.shell.syncZoomIndicator(); }
+  private syncOutputProfileButton(): void {
+    this.shell.syncOutputProfileButton();
+  }
+  private syncOverviewModeButton(): void {
+    this.shell.syncOverviewModeButton();
+  }
+  private openViewMenu(event?: MouseEvent): void { this.menus.openViewMenu(event); }
+  private openOutputProfileMenu(event: MouseEvent): void { this.menus.openOutputProfileMenu(event); }
+  private buildBlockMenu(blockId: BranchBlockId): Menu { return this.menus.buildBlockMenu(blockId); }
+
+  private teardownShell(): void {
+    this.dragDropController.reset();
+    this.cleanupViewportPan();
+    this.cleanupOverviewPan();
+    this.overview.reset();
+    this.touchController.reset();
+    this.search.reset();
+    this.preview.reset();
+    this.output.reset();
+    this.breadcrumbs.reset();
+    this.shell.teardownShell();
+    this.branchRenderer.reset();
+    this.dragDropController.reset();
+  }
+
+  private openOutputProfilesManager(controller: OutputProfilesController): void {
+    new OutputProfilesModal(this.app, controller).open();
+  }
+
+  private async activateOutputProfile(profileId: string): Promise<ArborOutputState> {
+    if (!this.state) {
+      return createDefaultOutputState();
     }
+    const next = setActiveOutputProfile(this.state.outputState, profileId, this.state.metadata);
+    return this.applyActiveOutputProfile(next);
+  }
+
+  private async applyActiveOutputProfile(next: ArborOutputState): Promise<ArborOutputState> {
+    if (!this.state || this.state.outputError) {
+      return deepClone(this.state?.outputState ?? createDefaultOutputState());
+    }
+    await this.commitEditIfNeeded();
+    if (!this.state) {
+      return createDefaultOutputState();
+    }
+    this.state.outputState = deepClone(next);
+    this.syncVisibleOutputCardPresentations();
+    this.render();
+    await this.persistState("Switch output profile");
+    return deepClone(this.state.outputState);
+  }
+
+  private async applyOutputProfileMutation(label: string, next: ArborOutputState): Promise<ArborOutputState> {
+    if (!this.state || this.state.outputError) {
+      return deepClone(this.state?.outputState ?? createDefaultOutputState());
+    }
+    await this.commitEditIfNeeded();
+    if (!this.state) {
+      return createDefaultOutputState();
+    }
+    this.history.push(label, this.state.metadata, this.state.outputState, this.state.selectedBlockId);
+    this.state.outputState = deepClone(next);
+    this.pendingFocusBlockId = this.state.selectedBlockId;
+    this.pendingScrollBlockId = this.state.selectedBlockId;
+    this.overview.requestKeyboardFocusAfterMutation(
+      this.presentationMode === "overview" && this.overview.getElements().viewport?.contains(this.contentEl.ownerDocument.activeElement) === true
+    );
+    await this.persistState(label);
+    this.render();
+    return deepClone(this.state.outputState);
+  }
+
+  private async resetInvalidOutputProfiles(): Promise<ArborOutputState> {
+    if (!this.state || !this.state.outputError) {
+      return deepClone(this.state?.outputState ?? createDefaultOutputState());
+    }
+    await this.commitEditIfNeeded();
+    if (!this.state) {
+      return createDefaultOutputState();
+    }
+    this.state.outputState = createDefaultOutputState();
+    this.state.outputRaw = "";
+    this.state.outputError = null;
+    await this.persistState("Reset output profiles");
+    this.render();
+    return deepClone(this.state.outputState);
+  }
+
+  private async updateViewSetting<Key extends keyof ArborSettings>(key: Key, value: ArborSettings[Key], refreshAll = true): Promise<void> {
+    this.plugin.settings[key] = value;
+    await this.plugin.saveSettings();
+    if (refreshAll) {
+      this.plugin.refreshAllBranchViews();
+      return;
+    }
+    this.render();
+  }
+
+  private showCopyLinkFallback(link: string): void {
+    const modal = new Modal(this.app);
+    modal.modalEl.addClass("arbor-export-modal");
+    modal.contentEl.createEl("h3", { text: "Copy block link" });
+    modal.contentEl.createEl("p", { text: "Select and copy this link." });
+    const input = modal.contentEl.createEl("textarea", { cls: "arbor-copy-link", attr: { readonly: "", "aria-label": "Block link" } });
+    input.value = link;
+    new ButtonComponent(modal.contentEl).setButtonText("Close").onClick(() => modal.close());
+    modal.open();
+    input.focus();
+    input.select();
   }
 
   getViewType(): string {
@@ -1206,25 +1397,21 @@ export class ArborView extends FileView {
     this.search.syncSearchOverlay(this.viewContext);
     this.syncBanner();
     this.syncLoadingOverlay();
+    this.shell.showMode(this.presentationMode);
     if (this.presentationMode === "output") {
       this.overview.hide();
-      this.columnsStageEl?.setCssStyles({ display: "none" });
       this.preview.hide();
-      this.outputStageEl?.setCssStyles({ display: "" });
       await this.output.syncOutputPreview();
       return;
     }
 
-    this.outputStageEl?.setCssStyles({ display: "none" });
     if (this.presentationMode === "overview") {
-      this.columnsStageEl?.setCssStyles({ display: "none" });
       this.preview.hide();
       await this.overview.syncTreeOverview();
       return;
     }
 
     this.overview.hide();
-    this.columnsStageEl?.setCssStyles({ display: "" });
     const allColumns = buildColumnModels(this.state.metadata, this.state.selectedBlockId, this.plugin.settings.previewSnippetLength);
     const columns = this.compactLayout ? compactColumns(allColumns, this.state.selectedBlockId) : allColumns;
     const preservedSceneWidth = this.armSceneWidthForPendingScroll(columns.length);
@@ -1235,411 +1422,42 @@ export class ArborView extends FileView {
   }
 
   private ensureShell(): void {
-    if (
-      this.frameEl &&
-      this.columnsStageEl &&
-      this.columnsViewportEl &&
-      this.columnsEl &&
-      this.bodyEl &&
-      this.breadcrumbsEl &&
-      this.breadcrumbExitLayerEl &&
-      this.modeControlsEl &&
-      this.outputProfileButtonEl &&
-      this.bannerEl &&
-      this.loadingOverlayEl &&
-      this.outputStageEl
-    ) {
-      return;
-    }
-
-    const state = this.state;
-    if (!state) {
-      return;
-    }
-
-    const { contentEl } = this;
-    contentEl.empty();
-    contentEl.addClass("arbor-view");
-    this.applyViewClasses(contentEl);
-
-    this.frameEl = contentEl.createDiv({ cls: "arbor-frame" });
-    this.breadcrumbsEl = this.frameEl.createDiv({ cls: "arbor-breadcrumbs" });
-    this.breadcrumbExitLayerEl = this.frameEl.createDiv({ cls: "arbor-breadcrumb-exit-layer" });
-    this.zoomIndicatorEl = this.frameEl.createEl("button", {
-      cls: "arbor-zoom-indicator",
-      attr: {
-        type: "button",
-        "aria-label": "Reset zoom to 100%"
-      }
-    });
-    this.zoomIndicatorEl.addEventListener("click", () => this.resetViewFromZoomIndicator());
-    this.zoomIndicatorEl.addEventListener("mousedown", (event) => event.stopPropagation());
-    this.markdownButtonEl = this.frameEl.createEl("button", {
-      cls: "arbor-markdown-button",
-      attr: { type: "button", "aria-label": "Open in Markdown" }
-    });
-    setIcon(this.markdownButtonEl, "file-text");
-    this.markdownButtonEl.addEventListener("click", () => void this.openCurrentFileInMarkdown());
-    this.markdownButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
-    this.themeButtonEl = this.frameEl.createEl("button", {
-      cls: "arbor-theme-button",
-      attr: { type: "button", "aria-label": "Open theme studio" }
-    });
-    setIcon(this.themeButtonEl, "palette");
-    this.themeButtonEl.addEventListener("click", () => this.plugin.openThemeStudio());
-    this.themeButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
-    this.viewMenuButtonEl = this.frameEl.createEl("button", {
-      cls: "arbor-view-menu-button",
-      attr: {
-        type: "button",
-        "aria-label": "Open view menu"
-      }
-    });
-    setIcon(this.viewMenuButtonEl, "sliders-horizontal");
-    this.viewMenuButtonEl.addEventListener("click", (event) => this.openViewMenu(event));
-    this.viewMenuButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
-    this.bannerEl = this.frameEl.createDiv({ cls: "arbor-banner" });
-    this.loadingOverlayEl = this.frameEl.createDiv({ cls: "arbor-loading-overlay" });
-    this.bodyEl = this.frameEl.createDiv({ cls: "arbor-body" });
-    this.modeControlsEl = this.bodyEl.createDiv({ cls: "arbor-mode-controls" });
-    this.outputProfileButtonEl = createOutputProfileButton(this.modeControlsEl, state.outputState);
-    this.outputProfileButtonEl.addEventListener("click", (event) => this.openOutputProfileMenu(event));
-    this.outputProfileButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
-    this.overviewButtonEl = this.modeControlsEl.createEl("button", {
-      cls: "arbor-overview-button",
-      attr: { type: "button", "aria-label": "Open tree overview" }
-    });
-    setIcon(this.overviewButtonEl, "map");
-    this.overviewButtonEl.addEventListener("click", () => {
-      if (this.presentationMode === "overview") {
-        this.closeTreeOverview();
-        return;
-      }
-      this.openTreeOverview();
-    });
-    this.overviewButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
-    this.columnsStageEl = this.bodyEl.createDiv({ cls: "arbor-columns-stage" });
-    this.columnsViewportEl = this.columnsStageEl.createDiv({ cls: "arbor-columns-viewport" });
-    this.columnsViewportEl.tabIndex = 0;
-    this.columnsViewportEl.scrollLeft = this.lastViewportScroll.left;
-    this.columnsViewportEl.scrollTop = this.lastViewportScroll.top;
-    this.columnsViewportEl.addEventListener("scroll", () => {
-      this.lastViewportScroll = {
-        left: this.columnsViewportEl?.scrollLeft ?? 0,
-        top: this.columnsViewportEl?.scrollTop ?? 0
-      };
-      this.syncViewportEdgeFades();
-    }, { passive: true });
-    this.columnsViewportEl.addEventListener("dragover", (event) => this.dragDropController.handleViewportDragOver(event));
-    this.columnsViewportEl.addEventListener("wheel", (event) => {
-      routeBranchViewportWheel(
-        event,
-        this.columnsViewportEl!,
-        this.branchRenderer,
-        {
-          getState: () => this.state,
-          getSettings: () => this.plugin.settings,
-          getMode: () => this.presentationMode,
-          getFilePath: () => this.file?.path ?? ""
-        },
-        {
-          previous: () => this.selectPreviousSiblingBlock(),
-          next: () => this.selectNextSiblingBlock(),
-          selectBlock: (id, options) => this.selectBlock(id, options),
-          updateZoomLevel: (value) => this.zoomController.updateZoomLevel(value)
-        },
-        this.compactLayout
-      );
-    }, { passive: false });
-    this.columnsViewportEl.addEventListener("keydown", (event) => this.handleViewportKeyDown(event));
-    this.columnsViewportEl.addEventListener("pointerdown", (event) => this.handleViewportPointerDown(event, this.columnsViewportEl!));
-    this.columnsViewportEl.addEventListener("pointermove", (event) => this.handleViewportPointerMove(event, this.columnsViewportEl!));
-    this.columnsViewportEl.addEventListener("pointerup", (event) => this.handleViewportPointerUp(event, this.columnsViewportEl!));
-    this.columnsViewportEl.addEventListener("pointercancel", (event) => this.handleViewportPointerUp(event, this.columnsViewportEl!));
-    this.columnsViewportEl.addEventListener("lostpointercapture", (event) => this.handleViewportPointerCaptureLost(event, this.columnsViewportEl!));
-    this.touchController.bindBranchTouch(this.columnsViewportEl);
-    this.columnsEl = this.columnsViewportEl.createDiv({ cls: "arbor-columns" });
-    const viewportFadesEl = this.columnsStageEl.createDiv({ cls: "arbor-viewport-fades" });
-    viewportFadesEl.createDiv({ cls: "arbor-edge-fade is-top" });
-    viewportFadesEl.createDiv({ cls: "arbor-edge-fade is-right" });
-    viewportFadesEl.createDiv({ cls: "arbor-edge-fade is-bottom" });
-    viewportFadesEl.createDiv({ cls: "arbor-edge-fade is-left" });
-    this.outputStageEl = this.bodyEl.createDiv({ cls: "arbor-output-preview-stage" });
-    this.outputStageEl.setCssStyles({ display: "none" });
-    this.syncZoomIndicator();
+    this.shell.ensureShell();
   }
 
-  private syncTouchDock(): void {
-    if (!this.frameEl || !this.state) return;
-    this.contentEl.toggleClass("is-compact", this.compactLayout);
-    this.contentEl.toggleClass("has-touch-controls", this.usesTouchControls);
-    const controlsHost = this.usesTouchControls ? this.frameEl : this.bodyEl;
-    if (this.modeControlsEl && this.modeControlsEl.parentElement !== controlsHost) {
-      controlsHost?.appendChild(this.modeControlsEl);
-    }
-    if (this.presentationMode === "output") {
-      this.touchDockEl?.remove();
-      this.touchDockEl = null;
-      return;
-    }
-    if (!this.usesTouchControls) {
-      this.touchDockEl?.remove();
-      this.touchDockEl = null;
-      return;
-    }
-    const dock = this.touchDockEl ?? this.frameEl.createDiv({ cls: "arbor-touch-dock", attr: { role: "toolbar", "aria-label": "Block actions" } });
-    this.touchDockEl = dock;
-    this.contentEl.toggleClass("is-touch-editing", Boolean(this.editingSession));
-    window.requestAnimationFrame(() => this.handleMobileResize());
-    dock.empty();
-    const button = (label: string, icon: string, action: () => void, disabled = false, text = false) => {
-      const el = dock.createEl("button", { cls: "arbor-touch-action", attr: { type: "button", "aria-label": label } });
-      setIcon(el, icon);
-      if (text) el.createSpan({ text: label });
-      el.disabled = disabled;
-      el.addEventListener("pointerdown", (event) => { event.preventDefault(); this.clearBlurCommitTimer(); });
-      el.addEventListener("click", action);
-      return el;
+  private bindBranchViewport(viewport: HTMLElement): () => void {
+    const dragOver = (event: DragEvent) => this.dragDropController.handleViewportDragOver(event);
+    const wheel = (event: WheelEvent) => routeBranchViewportWheel(
+      event, viewport, this.branchRenderer,
+      { getState: () => this.state, getSettings: () => this.plugin.settings, getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
+      { previous: () => this.selectPreviousSiblingBlock(), next: () => this.selectNextSiblingBlock(), selectBlock: (id, options) => this.selectBlock(id, options), updateZoomLevel: (value) => this.zoomController.updateZoomLevel(value) },
+      this.compactLayout
+    );
+    const keyDown = (event: KeyboardEvent) => this.handleViewportKeyDown(event);
+    const pointerDown = (event: PointerEvent) => this.handleViewportPointerDown(event, viewport);
+    const pointerMove = (event: PointerEvent) => this.handleViewportPointerMove(event, viewport);
+    const pointerUp = (event: PointerEvent) => this.handleViewportPointerUp(event, viewport);
+    const lostPointerCapture = (event: PointerEvent) => this.handleViewportPointerCaptureLost(event, viewport);
+    viewport.addEventListener("dragover", dragOver);
+    viewport.addEventListener("wheel", wheel, { passive: false });
+    viewport.addEventListener("keydown", keyDown);
+    viewport.addEventListener("pointerdown", pointerDown);
+    viewport.addEventListener("pointermove", pointerMove);
+    viewport.addEventListener("pointerup", pointerUp);
+    viewport.addEventListener("pointercancel", pointerUp);
+    viewport.addEventListener("lostpointercapture", lostPointerCapture);
+    const disposeTouch = this.touchController.bindBranchTouch(viewport);
+    return () => {
+      viewport.removeEventListener("dragover", dragOver);
+      viewport.removeEventListener("wheel", wheel);
+      viewport.removeEventListener("keydown", keyDown);
+      viewport.removeEventListener("pointerdown", pointerDown);
+      viewport.removeEventListener("pointermove", pointerMove);
+      viewport.removeEventListener("pointerup", pointerUp);
+      viewport.removeEventListener("pointercancel", pointerUp);
+      viewport.removeEventListener("lostpointercapture", lostPointerCapture);
+      disposeTouch();
     };
-    if (this.editingSession) {
-      dock.addClass("is-editing");
-      button("Cancel", "x", () => this.cancelEditingSession(), false, true);
-      button("Save", "check", () => void this.commitEditingSession(), false, true).addClass("mod-cta");
-      return;
-    }
-    dock.removeClass("is-editing");
-    const id = this.state.selectedBlockId;
-    const tree = this.state.metadata;
-    button("Parent block", getParentArrowIcon(this.plugin.settings.layoutDirection), () => this.selectParentBlock(), !getParentBlock(tree, id));
-    button("Previous block", "chevron-up", () => this.selectPreviousSiblingBlock(), !getPreviousSibling(tree, id));
-    button("Next block", "chevron-down", () => this.selectNextSiblingBlock(), !getNextSibling(tree, id));
-    button("Child block", getChildArrowIcon(this.plugin.settings.layoutDirection), () => this.selectPreferredChildBlock(), !getPreferredChildBlock(tree, id));
-    button("Edit block", "pencil", () => { if (id) this.beginEditingBlock(id, this.presentationMode === "overview" ? "overview" : "card"); }, !id);
-    const add = button("Add block", "plus", () => {
-      const menu = new Menu();
-      menu.addItem((item) => item.setTitle(id ? "Create child" : "Create root block").setIcon("git-branch").onClick(() => void (id ? this.createChild() : this.createRootBlock())));
-      if (id) menu.addItem((item) => item.setTitle("Create sibling below").setIcon("plus").onClick(() => void this.createSiblingBelow()));
-      const rect = add.getBoundingClientRect();
-      menu.showAtPosition({ x: rect.left, y: rect.top }, add.ownerDocument);
-    });
-    button("Block menu", "ellipsis", () => this.openActiveBlockMenu(), !id);
-  }
-
-  private teardownShell(): void {
-    this.dragDropController.reset();
-    this.cleanupViewportPan();
-    this.cleanupOverviewPan();
-    this.overview.reset();
-    this.touchController.reset();
-    this.search.reset();
-    this.preview.reset();
-    this.output.reset();
-    this.contentEl.empty();
-    this.frameEl = null;
-    this.touchDockEl = null;
-    this.breadcrumbsEl = null;
-    this.breadcrumbExitLayerEl = null;
-    this.zoomIndicatorEl = null;
-    this.modeControlsEl = null;
-    this.outputProfileButtonEl = null;
-    this.markdownButtonEl = null;
-    this.themeButtonEl = null;
-    this.overviewButtonEl = null;
-    this.viewMenuButtonEl = null;
-    this.bannerEl = null;
-    this.loadingOverlayEl = null;
-    this.bodyEl = null;
-    this.columnsStageEl = null;
-    this.columnsViewportEl = null;
-    this.columnsEl = null;
-    this.outputStageEl = null;
-    this.branchRenderer.reset();
-    this.dragDropController.reset();
-  }
-
-  private syncBreadcrumbs(): void {
-    if (!this.breadcrumbsEl || !this.state) {
-      return;
-    }
-
-    const hideBreadcrumbContent =
-      !this.plugin.settings.showBreadcrumb || this.presentationMode === "output";
-    this.breadcrumbsEl.toggleClass("is-reserved-hidden", hideBreadcrumbContent);
-    this.breadcrumbsEl.setAttr("aria-hidden", hideBreadcrumbContent ? "true" : "false");
-    if (hideBreadcrumbContent) {
-      return;
-    }
-
-    const path = getActivePath(this.state.metadata, this.state.selectedBlockId);
-    const previousPathIds = Array.from(
-      this.breadcrumbsEl.querySelectorAll<HTMLElement>("[data-block-id]")
-    ).map((element) => element.dataset.blockId ?? "");
-    const enteringBlockIds = getEnteringBreadcrumbIds(previousPathIds, path.map((block) => block.id));
-    this.animateRemovedBreadcrumbs(path);
-    this.breadcrumbsEl.empty();
-    if (path.length === 0) {
-      this.breadcrumbsEl.createSpan({ cls: "arbor-breadcrumb-empty", text: this.file?.basename ?? "Arbor" });
-      return;
-    }
-
-    this.renderBreadcrumbItems(this.breadcrumbsEl, path, enteringBlockIds);
-    this.syncBreadcrumbScroll();
-  }
-
-  private getBreadcrumbLabel(markdown: string): string {
-    return extractPathLabel(markdown, {
-      preferredPrefix: this.plugin.settings.breadcrumbLabelPreferredPrefix,
-      fallback: this.plugin.settings.breadcrumbLabelFallback,
-      maxWords: 4,
-      maxLength: 34
-    });
-  }
-
-  private renderBreadcrumbItems(
-    container: HTMLElement,
-    path: BranchBlock[],
-    enteringBlockIds: ReadonlySet<BranchBlockId> = new Set<BranchBlockId>()
-  ): void {
-    const visualPath = getVisualBreadcrumbOrder(path, this.plugin.settings.layoutDirection);
-    visualPath.forEach((block, index) => {
-      const button = container.createEl("button", {
-        cls: block.id === this.state?.selectedBlockId ? "is-active" : "",
-        text: this.getBreadcrumbLabel(block.content),
-        attr: { "data-block-id": block.id }
-      });
-      button.toggleClass("is-entering", enteringBlockIds.has(block.id));
-      button.setCssProps({ "--bw-crumb-index": String(index) });
-      button.addEventListener("click", () => this.selectBlock(block.id, { focus: true }));
-
-      if (this.plugin.settings.showBreadcrumbFlow && index < visualPath.length - 1) {
-        const connector = container.createSpan({ cls: "arbor-breadcrumb-connector" });
-        connector.setCssProps({ "--bw-crumb-index": String(index + 0.45) });
-      }
-    });
-  }
-
-  private animateRemovedBreadcrumbs(nextPath: BranchBlock[]): void {
-    const breadcrumbsEl = this.breadcrumbsEl;
-    const exitLayerEl = this.breadcrumbExitLayerEl;
-    const frameEl = this.frameEl;
-    if (!breadcrumbsEl || !exitLayerEl || !frameEl) {
-      return;
-    }
-
-    exitLayerEl.empty();
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return;
-    }
-
-    const nextPathIds = new Set(nextPath.map((block) => block.id));
-    const frameRect = frameEl.getBoundingClientRect();
-    breadcrumbsEl.querySelectorAll<HTMLButtonElement>("button[data-block-id]").forEach((button) => {
-      if (nextPathIds.has(button.dataset.blockId ?? "")) {
-        return;
-      }
-
-      const buttonRect = button.getBoundingClientRect();
-      const exitButton = exitLayerEl.createEl("button", {
-        cls: "arbor-breadcrumb-exiting",
-        text: button.textContent ?? ""
-      });
-      exitButton.toggleClass("is-active", button.hasClass("is-active"));
-      exitButton.setCssProps({
-        left: `${buttonRect.left - frameRect.left}px`,
-        top: `${buttonRect.top - frameRect.top}px`,
-        width: `${buttonRect.width}px`,
-        height: `${buttonRect.height}px`
-      });
-      exitButton.addEventListener("animationend", () => exitButton.remove(), { once: true });
-    });
-  }
-
-  private syncBreadcrumbScroll(): void {
-    if (!this.breadcrumbsEl) {
-      return;
-    }
-
-    this.clearBreadcrumbScrollFrame();
-    this.breadcrumbScrollFrame = window.requestAnimationFrame(() => {
-      this.breadcrumbScrollFrame = null;
-      const breadcrumbsEl = this.breadcrumbsEl;
-      if (!breadcrumbsEl || breadcrumbsEl.scrollWidth <= breadcrumbsEl.clientWidth + 1) {
-        return;
-      }
-
-      const activeButton =
-        breadcrumbsEl.querySelector<HTMLElement>("button.is-active") ??
-        breadcrumbsEl.querySelector<HTMLElement>("button:last-of-type");
-      if (!activeButton) {
-        return;
-      }
-
-      const breadcrumbsRect = breadcrumbsEl.getBoundingClientRect();
-      const activeRect = activeButton.getBoundingClientRect();
-      const { left: leftInset, right: rightInset } = getBreadcrumbScrollInsets(this.plugin.settings.layoutDirection);
-      const isFullyVisible =
-        activeRect.left >= breadcrumbsRect.left + leftInset &&
-        activeRect.right <= breadcrumbsRect.right - rightInset;
-      if (isFullyVisible) {
-        return;
-      }
-
-      const maxScrollLeft = Math.max(0, breadcrumbsEl.scrollWidth - breadcrumbsEl.clientWidth);
-      const activeCenter =
-        breadcrumbsEl.scrollLeft +
-        (activeRect.left - breadcrumbsRect.left) +
-        activeRect.width / 2;
-      const targetLeft = Math.max(
-        0,
-        Math.min(
-          activeCenter - (breadcrumbsEl.clientWidth - rightInset - leftInset) / 2 - leftInset,
-          maxScrollLeft
-        )
-      );
-
-      breadcrumbsEl.scrollTo({
-        left: targetLeft,
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
-      });
-    });
-  }
-
-  private syncBanner(): void {
-    if (!this.bannerEl || !this.state) {
-      return;
-    }
-
-    const showBanner = this.state.origin === "reconciled";
-    this.bannerEl.setCssStyles({ display: showBanner ? "" : "none" });
-    if (showBanner) {
-      this.bannerEl.empty();
-      this.bannerEl.createSpan({
-        text: "This note changed in plain Markdown mode. The branch tree was rebuilt from the visible note body."
-      });
-    }
-  }
-
-  private syncLoadingOverlay(): void {
-    if (!this.loadingOverlayEl) {
-      return;
-    }
-
-    const activeState = this.loadingState;
-    this.loadingOverlayEl.empty();
-    this.loadingOverlayEl.setCssStyles({ display: activeState ? "flex" : "none" });
-    if (!activeState) {
-      return;
-    }
-
-    const panel = this.loadingOverlayEl.createDiv({ cls: "arbor-loading-overlay-panel" });
-    panel.createEl("h2", {
-      cls: "arbor-loading-overlay-title",
-      text: activeState.title
-    });
-    panel.createEl("p", {
-      cls: "arbor-loading-overlay-description",
-      text: activeState.description
-    });
   }
 
   private bindOverviewViewport(viewport: HTMLElement): () => void {
@@ -1750,224 +1568,6 @@ export class ArborView extends FileView {
 
   private handleHistoryShortcut(event: KeyboardEvent): boolean {
     return this.navigationController.handleHistoryShortcut(event);
-  }
-
-  private openViewMenu(event?: MouseEvent): void {
-    event?.preventDefault();
-    event?.stopPropagation();
-
-    const menu = new Menu();
-    menu.addItem((item) => item.setTitle("Search blocks").setIcon("search").onClick(() => this.openSearchOverlay()));
-    for (const [label, icon, factor] of [["Zoom in", "zoom-in", 1.15], ["Zoom out", "zoom-out", 1 / 1.15]] as const) {
-      menu.addItem((item) => item.setTitle(label).setIcon(icon).onClick(() => {
-        this.zoomController.updateZoomLevel(this.plugin.settings.zoomLevel * factor);
-      }));
-    }
-    menu.addItem((item) =>
-      item.setTitle("Open in Markdown").setIcon("file-text").onClick(() => void this.openCurrentFileInMarkdown())
-    );
-    menu.addItem((item) =>
-      this.presentationMode === "output"
-        ? item.setTitle("Return to branch editor").setIcon("git-fork").onClick(() => this.closeOutputPreview())
-        : item.setTitle("Output preview").setIcon("file-check-2").onClick(() => this.openOutputPreview())
-    );
-    menu.addItem((item) =>
-      item.setTitle("Export clean copy…").setIcon("file-output").onClick(() => void this.exportCleanCopy())
-    );
-    menu.addItem((item) =>
-      item.setTitle("Export tree overview…").setIcon("image-down").onClick(() => void this.exportTreeOverview())
-    );
-    menu.addItem((item) =>
-      this.presentationMode === "overview"
-        ? item.setTitle("Return to branch editor").setIcon("git-fork").onClick(() => this.closeTreeOverview())
-        : item.setTitle("Tree overview").setIcon("map").onClick(() => this.openTreeOverview())
-    );
-    menu.addSeparator();
-    this.addViewToggleMenuItem(menu, "Selected block panel", this.plugin.settings.liveLinearPreview, async () => {
-      await this.updateViewSetting("liveLinearPreview", !this.plugin.settings.liveLinearPreview);
-    });
-    this.addViewToggleMenuItem(menu, "Breadcrumb path", this.plugin.settings.showBreadcrumb, async () => {
-      await this.updateViewSetting("showBreadcrumb", !this.plugin.settings.showBreadcrumb);
-    });
-    this.addViewToggleMenuItem(menu, "Breadcrumb flow", this.plugin.settings.showBreadcrumbFlow, async () => {
-      await this.updateViewSetting("showBreadcrumbFlow", !this.plugin.settings.showBreadcrumbFlow);
-    });
-    this.addViewToggleMenuItem(menu, "Ctrl/Cmd + wheel zoom", this.plugin.settings.enableCtrlWheelZoom, async () => {
-      await this.updateViewSetting("enableCtrlWheelZoom", !this.plugin.settings.enableCtrlWheelZoom, false);
-    });
-    menu.addSeparator();
-    menu.addItem((item) =>
-      item.setTitle("Reset zoom to 100%").setIcon("maximize").onClick(() => this.zoomController.updateZoomLevel(1))
-    );
-    menu.addItem((item) =>
-      item.setTitle("Open settings").setIcon("settings-2").onClick(() => this.openArborSettings())
-    );
-
-    const anchor = this.viewMenuButtonEl;
-    if (anchor) {
-      const rect = anchor.getBoundingClientRect();
-      menu.showAtPosition({ x: rect.right - 8, y: rect.bottom + 6 }, anchor.ownerDocument);
-      return;
-    }
-
-    menu.showAtPosition({ x: 220, y: 120 }, this.contentEl.ownerDocument);
-  }
-
-  private syncOutputProfileButton(): void {
-    if (!this.outputProfileButtonEl || !this.state) {
-      return;
-    }
-    const presentation = getOutputProfileButtonPresentation(this.state.outputState);
-    this.outputProfileButtonEl.setText(presentation.text);
-    this.outputProfileButtonEl.setAttr("aria-label", presentation.ariaLabel);
-  }
-
-  private syncOverviewModeButton(): void {
-    if (!this.overviewButtonEl) {
-      return;
-    }
-    const isOverview = this.presentationMode === "overview";
-    this.overviewButtonEl.setAttr("aria-label", isOverview ? "Return to branch editor" : "Open tree overview");
-    setIcon(this.overviewButtonEl, isOverview ? "git-fork" : "map");
-  }
-
-  private openOutputProfileMenu(event: MouseEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!this.state) {
-      return;
-    }
-
-    const menu = new Menu();
-    const profiles = [
-      { id: FULL_OUTPUT_PROFILE_ID, name: "Full tree" },
-      ...this.state.outputState.profiles.map((profile) => ({ id: profile.id, name: profile.name }))
-    ];
-    profiles.forEach((profile) => {
-      menu.addItem((item) =>
-        item
-          .setTitle(profile.name)
-          .setIcon(profile.id === this.state?.outputState.activeProfileId ? "check" : "circle")
-          .setDisabled(Boolean(this.state?.outputError))
-          .onClick(() => void this.activateOutputProfile(profile.id))
-      );
-    });
-    menu.addSeparator();
-    menu.addItem((item) =>
-      item
-        .setTitle("Manage output profiles…")
-        .setIcon("list-tree")
-        .onClick(() => this.openOutputProfilesManager())
-    );
-
-    const anchor = this.outputProfileButtonEl;
-    if (anchor) {
-      const rect = anchor.getBoundingClientRect();
-      menu.showAtPosition({ x: rect.left, y: rect.bottom + 6 }, anchor.ownerDocument);
-    }
-  }
-
-  private openOutputProfilesManager(): void {
-    if (!this.state) {
-      return;
-    }
-    new OutputProfilesModal(this.app, {
-      initialState: deepClone(this.state.outputState),
-      metadata: cloneMetadata(this.state.metadata),
-      selectedBlockId: this.state.selectedBlockId,
-      outputError: this.state.outputError,
-      activate: (state) => this.applyActiveOutputProfile(state),
-      mutate: (label, state) => this.applyOutputProfileMutation(label, state),
-      reset: () => this.resetInvalidOutputProfiles(),
-      closed: () => undefined
-    }).open();
-  }
-
-  private async activateOutputProfile(profileId: string): Promise<ArborOutputState> {
-    if (!this.state) {
-      return createDefaultOutputState();
-    }
-    const next = setActiveOutputProfile(this.state.outputState, profileId, this.state.metadata);
-    return this.applyActiveOutputProfile(next);
-  }
-
-  private async applyActiveOutputProfile(next: ArborOutputState): Promise<ArborOutputState> {
-    if (!this.state || this.state.outputError) {
-      return deepClone(this.state?.outputState ?? createDefaultOutputState());
-    }
-    await this.commitEditIfNeeded();
-    if (!this.state) {
-      return createDefaultOutputState();
-    }
-    this.state.outputState = deepClone(next);
-    this.syncVisibleOutputCardPresentations();
-    this.render();
-    await this.persistState("Switch output profile");
-    return deepClone(this.state.outputState);
-  }
-
-  private async applyOutputProfileMutation(
-    label: string,
-    next: ArborOutputState
-  ): Promise<ArborOutputState> {
-    if (!this.state || this.state.outputError) {
-      return deepClone(this.state?.outputState ?? createDefaultOutputState());
-    }
-    await this.commitEditIfNeeded();
-    if (!this.state) {
-      return createDefaultOutputState();
-    }
-    this.history.push(label, this.state.metadata, this.state.outputState, this.state.selectedBlockId);
-    this.state.outputState = deepClone(next);
-    this.pendingFocusBlockId = this.state.selectedBlockId;
-    this.pendingScrollBlockId = this.state.selectedBlockId;
-    this.overview.requestKeyboardFocusAfterMutation(
-      this.presentationMode === "overview" &&
-      this.overview.getElements().viewport?.contains(this.contentEl.ownerDocument.activeElement) === true
-    );
-    await this.persistState(label);
-    this.render();
-    return deepClone(this.state.outputState);
-  }
-
-  private async resetInvalidOutputProfiles(): Promise<ArborOutputState> {
-    if (!this.state || !this.state.outputError) {
-      return deepClone(this.state?.outputState ?? createDefaultOutputState());
-    }
-    await this.commitEditIfNeeded();
-    if (!this.state) {
-      return createDefaultOutputState();
-    }
-    this.state.outputState = createDefaultOutputState();
-    this.state.outputRaw = "";
-    this.state.outputError = null;
-    await this.persistState("Reset output profiles");
-    this.render();
-    return deepClone(this.state.outputState);
-  }
-
-  private addViewToggleMenuItem(menu: Menu, title: string, enabled: boolean, callback: () => void | Promise<void>): void {
-    menu.addItem((item) =>
-      item
-        .setTitle(title)
-        .setIcon(enabled ? "check" : "circle")
-        .onClick(() => void callback())
-    );
-  }
-
-  private async updateViewSetting<Key extends keyof ArborSettings>(
-    key: Key,
-    value: ArborSettings[Key],
-    refreshAll = true
-  ): Promise<void> {
-    this.plugin.settings[key] = value;
-    await this.plugin.saveSettings();
-    if (refreshAll) {
-      this.plugin.refreshAllBranchViews();
-      return;
-    }
-
-    this.render();
   }
 
   private openArborSettings(): void {
@@ -2207,165 +1807,6 @@ export class ArborView extends FileView {
     }
   }
 
-  private applyCssVars(root: HTMLElement): void {
-    root.setCssProps({
-      "--bw-card-width": `${this.plugin.settings.cardWidth}px`,
-      "--bw-card-min-height": `${this.plugin.settings.cardMinHeight}px`,
-      "--bw-column-gap": `${this.plugin.settings.horizontalSpacing}px`,
-      "--bw-card-gap": `${this.plugin.settings.verticalSpacing}px`,
-      "--bw-zoom": `${this.plugin.settings.zoomLevel}`,
-      "--bw-content-zoom": `${this.plugin.settings.zoomLevel}`,
-      "--arbor-card-preview-max-height": `${CARD_PREVIEW_MAX_HEIGHT_PX}px`
-    });
-    this.syncZoomIndicator();
-  }
-
-  private applyViewClasses(root: HTMLElement): void {
-    this.compactLayout = useCompactLayout(root.clientWidth);
-    root.toggleClass("is-compact", this.compactLayout);
-    root.toggleClass("has-touch-controls", this.usesTouchControls);
-    root.classList.add("is-context-dim-mode");
-    root.classList.toggle("is-rtl", this.plugin.settings.layoutDirection === "rtl");
-    this.applyThemeVariables(root);
-    this.renderedLayoutDirection = this.plugin.settings.layoutDirection;
-  }
-
-  private applyThemeVariables(root: HTMLElement): void {
-    const theme = this.plugin.getEffectiveThemeState();
-    const customVariables = resolveArborThemeVariables(
-      theme.activeThemeId,
-      theme.customThemes
-    );
-    root.setCssProps(Object.fromEntries(
-      ARBOR_THEME_VARIABLES.map((name) => [name, customVariables[name] ?? ""])
-    ));
-  }
-
-  private buildBlockMenu(blockId: BranchBlockId): Menu {
-    const menu = new Menu();
-    menu.addItem((item) => item.setTitle("Edit block").setIcon("pencil").onClick(() => this.beginEditingBlock(blockId, this.presentationMode === "overview" ? "overview" : "card")));
-    const canCreateLeft = this.state ? Boolean(getParentBlock(this.state.metadata, blockId)) : false;
-    const childCount = this.state ? getChildren(this.state.metadata, blockId).length : 0;
-    const block = this.state ? getBlock(this.state.metadata, blockId) : null;
-
-    menu
-      .addItem((item) =>
-        item.setTitle("Create child").setIcon(getChildArrowIcon(this.plugin.settings.layoutDirection)).onClick(() => void this.runWithSelectedBlock(blockId, () => this.createChild()))
-      );
-
-    if (canCreateLeft) {
-      menu.addItem((item) =>
-        item.setTitle("Create at parent level").setIcon(getParentArrowIcon(this.plugin.settings.layoutDirection)).onClick(() => void this.runWithSelectedBlock(blockId, () => this.createParentLevelBlock()))
-      );
-    }
-
-    menu
-      .addItem((item) =>
-        item.setTitle("Create sibling above").setIcon("arrow-up").onClick(() => void this.runWithSelectedBlock(blockId, () => this.createSiblingAbove()))
-      )
-      .addItem((item) =>
-        item.setTitle("Create sibling below").setIcon("arrow-down").onClick(() => void this.runWithSelectedBlock(blockId, () => this.createSiblingBelow()))
-      )
-      .addSeparator()
-      .addItem((item) =>
-        item.setTitle("Select parent").setIcon("corner-up-left").onClick(() => this.runWithSelectedBlock(blockId, () => {
-          this.selectParentBlock();
-          return Promise.resolve();
-        }))
-      )
-      .addItem((item) =>
-        item.setTitle("Select previous sibling").setIcon("chevron-up").onClick(() => this.runWithSelectedBlock(blockId, () => {
-          this.selectPreviousSiblingBlock();
-          return Promise.resolve();
-        }))
-      )
-      .addItem((item) =>
-        item.setTitle("Select next sibling").setIcon("chevron-down").onClick(() => this.runWithSelectedBlock(blockId, () => {
-          this.selectNextSiblingBlock();
-          return Promise.resolve();
-        }))
-      )
-      .addItem((item) =>
-        item.setTitle("Select first child").setIcon("chevron-right").onClick(() => this.runWithSelectedBlock(blockId, () => {
-          this.selectFirstChildBlock();
-          return Promise.resolve();
-        }))
-      );
-
-    if (childCount > 0 && block) {
-      menu
-        .addItem((item) =>
-          item
-            .setTitle(block.collapsed ? "Expand branch" : "Collapse branch")
-            .setIcon(block.collapsed ? "chevrons-down-up" : "chevrons-up-down")
-            .onClick(() => void this.runWithSelectedBlock(blockId, () => this.toggleCollapsedState(blockId)))
-        );
-    }
-
-    menu.addSeparator();
-    this.addBlockOutputMenuItems(menu, blockId);
-
-    menu
-      .addSeparator()
-      .addItem((item) =>
-        item.setTitle("Copy block link").setIcon("link").onClick(() => void this.copyBlockLink(blockId))
-      )
-      .addItem((item) =>
-        item.setTitle("Duplicate subtree").setIcon("copy-plus").onClick(() => void this.runWithSelectedBlock(blockId, () => this.duplicateSelectedSubtree()))
-      )
-      .addItem((item) =>
-        item.setTitle("Reveal in Markdown").setIcon("file-text").onClick(() => void this.runWithSelectedBlock(blockId, () => this.revealCurrentBlockInMarkdown()))
-      )
-      .addSeparator()
-      .addItem((item) =>
-        item
-          .setTitle("Delete block")
-          .setIcon("trash")
-          .setWarning(true)
-          .onClick(() => void this.runWithSelectedBlock(blockId, () => this.deleteSelectedBlock()))
-      )
-      .addItem((item) =>
-        item
-          .setTitle("Delete subtree")
-          .setIcon("trash-2")
-          .setWarning(true)
-          .onClick(() => void this.runWithSelectedBlock(blockId, () => this.deleteSelectedSubtree()))
-      );
-
-    this.applyDangerMenuItemStyles(menu);
-
-    return menu;
-  }
-
-  private addBlockOutputMenuItems(menu: Menu, blockId: BranchBlockId): void {
-    if (!this.state) {
-      return;
-    }
-
-    getBlockOutputMenuActions(this.state.outputState).forEach((action) => {
-      menu.addItem((item) => {
-        item
-          .setTitle(action.label)
-          .setIcon(action.icon)
-          .setDisabled(Boolean(this.state?.outputError));
-
-        if (action.id === "create-profile") {
-          item.onClick(() => this.openOutputProfilesManager());
-          return;
-        }
-
-        item.onClick(() => void this.applyOutputMutation(action.label, (profile) => {
-          if (!action.state || !action.scope || !this.state) {
-            return profile;
-          }
-          return action.scope === "block"
-            ? setBlockOnlyState(this.state.metadata, profile, blockId, action.state)
-            : setSubtreeState(this.state.metadata, profile, blockId, action.state);
-        }));
-      });
-    });
-  }
-
   private async applyOutputMutation(
     label: string,
     mutate: (profile: ArborOutputProfile) => ArborOutputProfile
@@ -2447,46 +1888,6 @@ export class ArborView extends FileView {
     this.overview.forEachCard(syncCard);
   }
 
-  private async copyBlockLink(blockId: BranchBlockId): Promise<void> {
-    const block = this.state ? getBlock(this.state.metadata, blockId) : null;
-    if (!this.file || !block) {
-      return;
-    }
-    const link = buildArborBlockLink(this.file.path, blockId, extractPathLabel(block.content));
-    try {
-      await navigator.clipboard.writeText(link);
-    } catch (error) {
-      console.error("[Arbor] Failed to copy block link", error);
-      const modal = new Modal(this.app);
-      modal.modalEl.addClass("arbor-export-modal");
-      modal.contentEl.createEl("h3", { text: "Copy block link" });
-      modal.contentEl.createEl("p", { text: "Select and copy this link." });
-      const input = modal.contentEl.createEl("textarea", { cls: "arbor-copy-link", attr: { readonly: "", "aria-label": "Block link" } });
-      input.value = link;
-      new ButtonComponent(modal.contentEl).setButtonText("Close").onClick(() => modal.close());
-      modal.open();
-      input.focus();
-      input.select();
-    }
-  }
-
-  private applyDangerMenuItemStyles(menu: Menu): void {
-    const menuWithDom = menu as Menu & { dom?: HTMLElement };
-    window.requestAnimationFrame(() => {
-      const menuEl = menuWithDom.dom;
-      if (!menuEl) {
-        return;
-      }
-
-      menuEl.querySelectorAll<HTMLElement>(".menu-item-title").forEach((titleEl) => {
-        const text = titleEl.textContent?.trim();
-        if (text === "Delete block" || text === "Delete subtree") {
-          titleEl.closest(".menu-item")?.addClass("arbor-menu-danger");
-        }
-      });
-    });
-  }
-
   private async runWithSelectedBlock(blockId: BranchBlockId, callback: () => Promise<void>): Promise<void> {
     this.selectBlock(blockId);
     await callback();
@@ -2517,20 +1918,6 @@ export class ArborView extends FileView {
     });
   }
 
-  private syncZoomIndicator(): void {
-    if (!this.zoomIndicatorEl) {
-      return;
-    }
-
-    const zoomPercent = Math.round(this.plugin.settings.zoomLevel * 100);
-    this.zoomIndicatorEl.textContent = `${zoomPercent}%`;
-    const isDefaultZoom = Math.abs(this.plugin.settings.zoomLevel - 1) < 0.001;
-    this.zoomIndicatorEl.classList.toggle("is-default", isDefaultZoom);
-    this.zoomIndicatorEl.title = isDefaultZoom
-      ? "Zoom 100%. Ctrl/Cmd + wheel to zoom."
-      : "Click to reset zoom to 100%. Ctrl/Cmd + wheel to zoom.";
-  }
-
   private flashZoomIndicator(): void {
     if (!this.zoomIndicatorEl) {
       return;
@@ -2541,13 +1928,6 @@ export class ArborView extends FileView {
 
   private hideZoomIndicator(): void {
     this.zoomIndicatorEl?.removeClass("is-visible");
-  }
-
-  private clearBreadcrumbScrollFrame(): void {
-    if (this.breadcrumbScrollFrame !== null) {
-      window.cancelAnimationFrame(this.breadcrumbScrollFrame);
-      this.breadcrumbScrollFrame = null;
-    }
   }
 
   private revealCompactSelection(): void { this.branchViewport.revealCompactSelection(); }

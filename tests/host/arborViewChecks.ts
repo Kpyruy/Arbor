@@ -1,11 +1,12 @@
 import type { TFile } from "obsidian";
 import type { BranchColumnModel } from "../../src/types";
-import type { ArborSettings, BranchBlock, BranchBlockId } from "../../src/types";
+import type { ArborPresentationMode, ArborSettings, BranchBlock, BranchBlockId } from "../../src/types";
 import type { BranchRenderer } from "../../src/view/branch/BranchRenderer";
 import { TreeOverviewController } from "../../src/view/overview/TreeOverviewController";
 import { LinearPreviewController } from "../../src/view/preview/LinearPreviewController";
 import { OutputPreviewController } from "../../src/view/preview/OutputPreviewController";
 import { SearchController } from "../../src/view/chrome/SearchController";
+import type { ViewShell } from "../../src/view/chrome/ViewShell";
 import { ExportController, type ExportPort } from "../../src/view/export/ExportController";
 import { projectOutput } from "../../src/outputProjection";
 import { buildViewContext } from "../../src/view/state/viewModel";
@@ -84,7 +85,48 @@ export function checkButtonHitTarget(button: HTMLButtonElement): void {
   const rect = button.getBoundingClientRect();
   assertHost(rect.width > 0 && rect.height > 0, "Button has no hit area");
   const hit = button.ownerDocument.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-  assertHost(hit && (hit === button || button.contains(hit)), "Button is covered by another element");
+  assertHost(hit?.closest("button") === button, "Button is covered by another element");
+}
+
+export interface ViewShellHostFixture {
+  shell: ViewShell;
+  getMode(): ArborPresentationMode;
+  setMode(mode: ArborPresentationMode): void;
+  getProfileMenuOpenCount(): number;
+  getOverviewToggleCount(): number;
+  modes: readonly ["output", "overview", "editor"];
+}
+
+export function checkViewShellHost(fixture: ViewShellHostFixture): void {
+  const { shell } = fixture;
+  const profileButton = shell.getElements().outputProfileButtonEl;
+  const overviewButton = shell.getElements().overviewButtonEl;
+  assertHost(profileButton && overviewButton, "Shell toolbar controls were not mounted");
+  const initialMode = fixture.getMode();
+  try {
+    for (const mode of fixture.modes) {
+      fixture.setMode(mode);
+      assertHost(fixture.getMode() === mode, "Fixture did not change the shell read backing mode");
+      shell.showMode(mode);
+      shell.syncTouchDock();
+      assertHost(shell.getElements().outputProfileButtonEl === profileButton, "Profile button identity changed across modes");
+      assertHost(shell.getElements().overviewButtonEl === overviewButton, "Overview button identity changed across modes");
+      checkButtonHitTarget(profileButton);
+      checkButtonHitTarget(overviewButton);
+
+      const beforeProfileClick = fixture.getProfileMenuOpenCount();
+      profileButton.click();
+      assertHost(fixture.getProfileMenuOpenCount() === beforeProfileClick + 1, "Profile button did not route its click callback");
+
+      const beforeOverviewClick = fixture.getOverviewToggleCount();
+      overviewButton.click();
+      assertHost(fixture.getOverviewToggleCount() === beforeOverviewClick + 1, "Overview button did not route its click callback");
+    }
+  } finally {
+    fixture.setMode(initialMode);
+    shell.showMode(initialMode);
+    shell.syncTouchDock();
+  }
 }
 
 interface DeferredRender {
