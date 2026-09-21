@@ -116,28 +116,31 @@ export class DocumentController {
 
   async persistState(reason: string): Promise<void> {
     const file = this.port.getFile();
-    if (!file || !this.state) {
+    const state = this.state;
+    if (!file || !state) {
       return;
     }
 
-    const metadata = normalizeMetadata(this.state.metadata);
-    this.state.metadata = metadata;
-    this.state.linearized = linearizeTree(metadata);
+    const metadata = normalizeMetadata(state.metadata);
+    state.metadata = metadata;
+    state.linearized = linearizeTree(metadata);
     const document = buildBranchDocument(
-      this.state.frontmatter,
-      this.state.linearized.body,
+      state.frontmatter,
+      state.linearized.body,
       metadata,
-      this.state.outputState,
-      this.state.outputError ? this.state.outputRaw : undefined
+      state.outputState,
+      state.outputError ? state.outputRaw : undefined
     );
 
     this.isPersisting = true;
     try {
       this.port.markOwnWrite(file.path);
       await this.port.process(file, () => document);
-      this.port.rememberManagedNote(this.port.getFile()!.path);
-      this.state.origin = "metadata";
-      this.state.staleMetadata = null;
+      this.port.rememberManagedNote(file.path);
+      if (this.state === state && this.port.getFile() === file) {
+        state.origin = "metadata";
+        state.staleMetadata = null;
+      }
     } catch (error) {
       this.port.reportError(`[Arbor] Failed to persist state after ${reason}`, error);
       this.port.notify(`Arbor could not save the note after "${reason}".`);

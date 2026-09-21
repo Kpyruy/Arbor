@@ -123,6 +123,7 @@ export class ArborView extends FileView {
   private readonly breadcrumbs: BreadcrumbsController;
   private readonly menus: ViewMenus;
   private renderFrame: number | null = null;
+  private loadGeneration = 0;
   private pendingFocusBlockId: BranchBlockId | null = null;
   private pendingScrollBlockId: BranchBlockId | null = null;
   private lastViewportScroll = { left: 0, top: 0 };
@@ -625,8 +626,13 @@ export class ArborView extends FileView {
   }
 
   async onLoadFile(file: TFile): Promise<void> {
-    const prepared = await this.prepareLoadedFileState(file, this.state?.selectedBlockId ?? null);
-    if (!prepared) {
+    const generation = this.beginLoad();
+    const prepared = await this.prepareLoadedFileState(
+      file,
+      this.state?.selectedBlockId ?? null,
+      generation
+    );
+    if (!prepared || !this.isCurrentLoad(generation, file)) {
       return;
     }
 
@@ -641,11 +647,13 @@ export class ArborView extends FileView {
   }
 
   async onUnloadFile(): Promise<void> {
+    this.invalidatePendingLoads();
     await this.commitEditIfNeeded();
     this.resetViewState();
   }
 
   clear(): void {
+    this.invalidatePendingLoads();
     this.clearBlurCommitTimer();
     this.zoomController.reset();
     this.clearBreadcrumbScrollFrame();
@@ -667,6 +675,7 @@ export class ArborView extends FileView {
   }
 
   async onClose(): Promise<void> {
+    this.invalidatePendingLoads();
     this.navigationController.clearNumericNavigation();
     this.zoomController.reset();
     this.touchController.reset();
@@ -702,8 +711,14 @@ export class ArborView extends FileView {
       return;
     }
 
-    const prepared = await this.prepareLoadedFileState(this.file, this.state?.selectedBlockId ?? null);
-    if (!prepared) {
+    const file = this.file;
+    const generation = this.beginLoad();
+    const prepared = await this.prepareLoadedFileState(
+      file,
+      this.state?.selectedBlockId ?? null,
+      generation
+    );
+    if (!prepared || !this.isCurrentLoad(generation, file)) {
       return;
     }
 
@@ -761,17 +776,28 @@ export class ArborView extends FileView {
 
   private async prepareLoadedFileState(
     file: TFile,
-    preferredSelectedBlockId: BranchBlockId | null
+    preferredSelectedBlockId: BranchBlockId | null,
+    generation: number
   ): Promise<LoadedFileState | null> {
     const initial = await this.documentController.readLoadedFileState(file, preferredSelectedBlockId);
+    if (!this.isCurrentLoad(generation, file)) {
+      return null;
+    }
+
     const expectedArborOpen = this.plugin.consumeExplicitArborOpen(file.path);
     const staysInArbor = Boolean(initial.parsed.metadata)
       || (expectedArborOpen && canOpenImportedBranchDocumentInArbor(initial.loaded));
     if (!staysInArbor) {
+      if (!this.isCurrentLoad(generation, file)) {
+        return null;
+      }
       await this.openFileInMarkdownView(file);
       return null;
     }
 
+    if (!this.isCurrentLoad(generation, file)) {
+      return null;
+    }
     this.documentController.replaceLoadedState(initial.state);
 
     if (!initial.loaded.needsVisibleMarkerMigration) {
@@ -786,20 +812,57 @@ export class ArborView extends FileView {
     this.ensureShell();
     this.syncLoadingOverlay();
     await this.waitForNextPaint();
+    if (!this.isCurrentLoad(generation, file)) {
+      return null;
+    }
 
     try {
       await this.persistState("Upgrade note structure");
+      if (!this.isCurrentLoad(generation, file)) {
+        return null;
+      }
+
       const remainingLoadingTime = 220 - (performance.now() - loadingStartedAt);
       if (remainingLoadingTime > 0) {
         await this.wait(remainingLoadingTime);
       }
+      if (!this.isCurrentLoad(generation, file)) {
+        return null;
+      }
+
       const migrated = await this.documentController.readLoadedFileState(file, initial.state.selectedBlockId);
+      if (!this.isCurrentLoad(generation, file)) {
+        return null;
+      }
+
       this.documentController.replaceLoadedState(migrated.state);
+      if (!this.isCurrentLoad(generation, file)) {
+        return null;
+      }
       this.plugin.rememberManagedNote(file.path);
       return migrated.state;
     } finally {
-      this.loadingState = null;
+      if (this.isCurrentLoad(generation, file)) {
+        this.loadingState = null;
+      }
     }
+  }
+
+  private beginLoad(): number {
+    const generation = ++this.loadGeneration;
+    if (this.loadingState) {
+      this.loadingState = null;
+      this.syncLoadingOverlay();
+    }
+    return generation;
+  }
+
+  private invalidatePendingLoads(): void {
+    this.loadGeneration += 1;
+  }
+
+  private isCurrentLoad(generation: number, file: TFile): boolean {
+    return this.loadGeneration === generation && this.file === file;
   }
 
   private waitForNextPaint(): Promise<void> {
