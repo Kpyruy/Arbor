@@ -97,10 +97,12 @@ describe("default presentation mode", () => {
   });
 
   it("refreshes the same Output Preview when the active profile changes", () => {
-    const switchProfile = sourceMethod("src/view/ArborView.ts", "ArborView", "applyActiveOutputProfile");
+    const wrapper = sourceMethod("src/view/ArborView.ts", "ArborView", "applyActiveOutputProfile");
+    const switchProfile = sourceMethod("src/view/state/DocumentController.ts", "DocumentController", "applyActiveOutputProfile");
 
+    expect(wrapper).toContain("this.documentController.applyActiveOutputProfile(next)");
     expect(switchProfile).toContain('await this.persistState("Switch output profile")');
-    expect(switchProfile).toContain("this.render();");
+    expect(switchProfile).toContain("this.port.requestRender();");
     expect(switchProfile).not.toContain("this.presentationMode =");
   });
 

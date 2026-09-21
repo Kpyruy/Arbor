@@ -3,10 +3,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { addChild } from "../src/model/tree";
 import { reconcileProfilesAfterTreeChange } from "../src/outputProfiles";
 import { ArborOutputState, BranchTreeMetadata } from "../src/types";
-import { deferred as createDeferred, fixtureOutput } from "./helpers/arborFixtures";
+import { DocumentController, type DocumentPort } from "../src/view/state/DocumentController";
+import type { EditingSession, LoadedFileState } from "../src/view/state/viewTypes";
+import type { TFile } from "obsidian";
+import { deferred as createDeferred, fixtureLoaded, fixtureOutput } from "./helpers/arborFixtures";
 
 type OutputProfilesUiModule = typeof import("../src/view/OutputProfilesModal");
-type ArborViewUiModule = typeof import("../src/view/ArborView");
+type ArborViewUiModule = typeof import("../src/view/ArborView") & { testNotices: string[] };
 type OutputPresentationUiModule = typeof import("../src/view/output/outputPresentation");
 
 let ui: OutputProfilesUiModule;
@@ -38,7 +41,11 @@ beforeAll(async () => {
 
   const arborViewBundle = await build({
     absWorkingDir: process.cwd(),
-    entryPoints: ["src/view/ArborView.ts"],
+    stdin: {
+      contents: 'export * from "./src/view/ArborView"; export { testNotices } from "obsidian";',
+      resolveDir: process.cwd(),
+      loader: "ts"
+    },
     bundle: true,
     format: "esm",
     platform: "node",
@@ -55,7 +62,7 @@ beforeAll(async () => {
             "export class MarkdownView {}",
             "export class Menu {}",
             "export class Modal {}",
-            "export class Notice {}",
+            "export const testNotices = []; export class Notice { constructor(message) { testNotices.push(message); } }",
             "export class TFile {}",
             "export class WorkspaceLeaf {}",
             "export const MarkdownRenderer = {};",
@@ -123,7 +130,111 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise: pending.promise, resolve: () => pending.resolve(undefined) };
 }
 
+function pendingSavePort(
+  pendingSave: Promise<unknown>,
+  onProfileActivated: () => void
+): DocumentPort {
+  // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- lightweight test fixture
+  const file = { path: "Output.md" } as unknown as TFile;
+  return {
+    getFile: () => file,
+    cachedRead: async () => "",
+    process: async (_file, transform) => {
+      transform("");
+      return pendingSave.then(() => "");
+    },
+    markOwnWrite: () => undefined,
+    rememberManagedNote: () => undefined,
+    commitEditIfNeeded: async () => undefined,
+    clearEditingSession: () => undefined,
+    beforeOverviewEditSave: () => undefined,
+    onMutationPrepared: () => undefined,
+    onSelectionRestored: () => undefined,
+    onEditedBlockSaved: () => undefined,
+    onProfileActivated,
+    requestRender: () => undefined,
+    notify: () => undefined,
+    reportError: () => undefined
+  };
+}
+
+function createProfileView(pendingSave: Promise<unknown>) {
+  const view = Object.create(arborViewUi.ArborView.prototype) as {
+    documentController: DocumentController;
+    file: TFile;
+    plugin: { consumeOwnWrite(path: string): boolean };
+    editor: { getSession(): EditingSession | null };
+    readonly state: Readonly<LoadedFileState> | null;
+    viewContext: null;
+    branchRenderer: { forEachCard(callback: (card: HTMLElement) => void): void };
+    overview: { forEachCard(callback: (card: HTMLElement) => void): void };
+    shell: { syncOutputProfileButton(): void };
+    render(): void;
+    syncVisibleOutputCardPresentations(): void;
+    applyActiveOutputProfile(next: ArborOutputState): Promise<ArborOutputState>;
+    handleFileModified(file: TFile): Promise<void>;
+    onLoadFile(file: TFile): Promise<void>;
+  };
+  const port = pendingSavePort(pendingSave, () => view.syncVisibleOutputCardPresentations());
+  port.requestRender = () => view.render();
+  view.documentController = new DocumentController(port);
+  view.file = port.getFile()!;
+  view.plugin = { consumeOwnWrite: () => false };
+  view.editor = { getSession: () => null };
+  view.documentController.replaceLoadedState(fixtureLoaded("full"));
+  view.viewContext = null;
+  view.branchRenderer = { forEachCard: () => undefined };
+  view.overview = { forEachCard: () => undefined };
+  view.shell = { syncOutputProfileButton: () => undefined };
+  view.render = () => undefined;
+  return view;
+}
+
 describe("Output Profiles manager UI", () => {
+  it("ignores owned and in-flight writes, then reloads an external modification", async () => {
+    const pending = deferred();
+    const view = createProfileView(pending.promise);
+    let reloads = 0;
+    view.onLoadFile = async () => { reloads += 1; };
+    view.plugin.consumeOwnWrite = () => true;
+    await view.handleFileModified(view.file);
+    expect(reloads).toBe(0);
+
+    view.plugin.consumeOwnWrite = () => false;
+    const activation = view.applyActiveOutputProfile(outputState("draft"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(view.documentController.isWriting()).toBe(true);
+    await view.handleFileModified(view.file);
+    expect(reloads).toBe(0);
+    pending.resolve();
+    await activation;
+    await view.handleFileModified(view.file);
+    expect(reloads).toBe(1);
+  });
+
+  it("warns about an external write without reloading or losing an active draft", async () => {
+    const view = createProfileView(Promise.resolve());
+    const session: EditingSession = {
+      blockId: "first", originalContent: "First", value: "Unsaved draft", autofocus: false, origin: "card"
+    };
+    const before = structuredClone(view.state);
+    let reloads = 0;
+    view.editor.getSession = () => session;
+    view.onLoadFile = async () => { reloads += 1; };
+    const noticeCount = arborViewUi.testNotices.length;
+
+    await view.handleFileModified(view.file);
+
+    expect(reloads).toBe(0);
+    expect(view.editor.getSession()).toBe(session);
+    expect(session.value).toBe("Unsaved draft");
+    expect(view.state).toEqual(before);
+    expect(arborViewUi.testNotices.slice(noticeCount)).toEqual([
+      "The note changed on disk while a block was being edited. Finish or cancel the card edit before reloading."
+    ]);
+  });
+
   it("offers creation and the complete custom-profile action set", () => {
     const model = ui.buildOutputProfileManagerModel(outputState(), tree());
     const draft = model.profiles.find((profile) => profile.id === "draft");
@@ -377,27 +488,8 @@ describe("Output Profiles manager UI", () => {
   it("renders an active profile before its asynchronous persistence finishes", async () => {
     const pendingSave = deferred();
     const renderedProfileIds: string[] = [];
-    const view = Object.create(arborViewUi.ArborView.prototype) as ArborViewUiModule["ArborView"] & {
-      state: {
-        metadata: BranchTreeMetadata;
-        outputState: ArborOutputState;
-        outputError: null;
-      };
-      commitEditIfNeeded: () => Promise<void>;
-      persistState: () => Promise<void>;
-      render: () => void;
-      branchRenderer: { forEachCard: (callback: (card: HTMLElement) => void) => void };
-      overview: { forEachCard: (callback: (card: HTMLElement) => void) => void };
-      shell: { syncOutputProfileButton: () => void };
-      applyActiveOutputProfile: (next: ArborOutputState) => Promise<ArborOutputState>;
-    };
-    view.state = { metadata: tree(), outputState: outputState("full"), outputError: null };
-    view.commitEditIfNeeded = async () => undefined;
-    view.persistState = () => pendingSave.promise;
-    view.render = () => renderedProfileIds.push(view.state.outputState.activeProfileId);
-    view.branchRenderer = { forEachCard: () => undefined };
-    view.overview = { forEachCard: () => undefined };
-    view.shell = { syncOutputProfileButton: () => undefined };
+    const view = createProfileView(pendingSave.promise);
+    view.render = () => { renderedProfileIds.push(view.state!.outputState.activeProfileId); };
 
     const activation = view.applyActiveOutputProfile(outputState("draft"));
     await Promise.resolve();
@@ -408,7 +500,7 @@ describe("Output Profiles manager UI", () => {
     await expect(activation).resolves.toMatchObject({ activeProfileId: "draft" });
   });
 
-  it("updates visible Tree Overview cards before profile persistence finishes", async () => {
+  it.each(["branchRenderer", "overview"] as const)("updates visible %s cards through the facade before profile persistence finishes", async (renderer) => {
     const pendingSave = deferred();
     const classNames = new Set<string>();
     const attributes = new Map<string, string>();
@@ -422,29 +514,8 @@ describe("Output Profiles manager UI", () => {
       removeAttribute: (name: string) => attributes.delete(name),
       createSpan: () => badge
     } as unknown as HTMLElement;
-    const view = Object.create(arborViewUi.ArborView.prototype) as ArborViewUiModule["ArborView"] & {
-      state: {
-        metadata: BranchTreeMetadata;
-        outputState: ArborOutputState;
-        outputError: null;
-      };
-      viewContext: null;
-      branchRenderer: { forEachCard: (callback: (card: HTMLElement) => void) => void };
-      overview: { forEachCard: (callback: (card: HTMLElement) => void) => void };
-      shell: { syncOutputProfileButton: () => void };
-      commitEditIfNeeded: () => Promise<void>;
-      persistState: () => Promise<void>;
-      render: () => void;
-      applyActiveOutputProfile: (next: ArborOutputState) => Promise<ArborOutputState>;
-    };
-    view.state = { metadata: tree(), outputState: outputState("full"), outputError: null };
-    view.viewContext = null;
-    view.branchRenderer = { forEachCard: () => undefined };
-    view.overview = { forEachCard: (callback) => callback(card) };
-    view.shell = { syncOutputProfileButton: () => undefined };
-    view.commitEditIfNeeded = async () => undefined;
-    view.persistState = () => pendingSave.promise;
-    view.render = () => undefined;
+    const view = createProfileView(pendingSave.promise);
+    view[renderer] = { forEachCard: (callback) => callback(card) };
 
     const activation = view.applyActiveOutputProfile(outputState("draft"));
     await Promise.resolve();
@@ -518,11 +589,11 @@ describe("Output Profiles manager UI", () => {
       createSpan: () => badge
     } as unknown as HTMLElement;
     const view = Object.create(arborViewUi.ArborView.prototype) as {
-      state: null;
+      documentController: { getState: () => null };
       viewContext: null;
       syncOutputCardPresentation(card: HTMLElement, blockId: string): void;
     };
-    view.state = null;
+    view.documentController = { getState: () => null };
     view.viewContext = null;
 
     expect(() => view.syncOutputCardPresentation(card, "root")).not.toThrow();

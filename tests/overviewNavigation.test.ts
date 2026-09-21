@@ -178,9 +178,13 @@ describe("overview arrow navigation", () => {
   it("restores overview keyboard focus after deleting a block", () => {
     const source = readSource("src/view/ArborView.ts");
     const handler = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleOverviewKeyDown");
-    const mutation = sourceMethod("src/view/ArborView.ts", "ArborView", "applyMutation");
+    const wrapper = sourceMethod("src/view/ArborView.ts", "ArborView", "applyMutation");
+    const mutation = sourceMethod("src/view/ArborView.ts", "ArborView", "prepareDocumentMutation");
+    const documentMutation = sourceMethod("src/view/state/DocumentController.ts", "DocumentController", "applyMutation");
 
     expect(handler).toContain("this.handleDeleteShortcut(event)");
+    expect(wrapper).toContain("this.documentController.applyMutation(label, mutate, autofocusSelection)");
+    expect(documentMutation).toContain("this.port.onMutationPrepared(autofocusSelection)");
     expect(mutation).toContain("this.overview.requestKeyboardFocusAfterMutation(");
     expect(mutation).toContain("this.presentationMode === \"overview\"");
     expect(source).toContain("clearPendingFocus: () => { this.pendingFocusBlockId = null; }");

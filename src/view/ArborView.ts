@@ -12,14 +12,11 @@ import {
   WorkspaceLeaf
 } from "obsidian";
 import type ArborPlugin from "../main";
-import { BranchHistory } from "../history";
 import {
   addChild,
   addRootBlock,
   addSibling,
   buildColumnModels,
-  cloneMetadata,
-  createEmptyTree,
   deleteBlockAndLiftChildren,
   deleteSubtree,
   duplicateBlock,
@@ -36,34 +33,26 @@ import {
   moveBlockUp,
   setBlockCollapsed,
   toggleBlockCollapsed,
-  updateBlockContent
 } from "../model/tree";
 import { VIEW_TYPE_ARBOR } from "../constants";
 import {
   BranchBlock,
   BranchBlockId,
-  BranchHistoryEntry,
   BranchTreeMetadata,
-  ImportedBranchDocument,
+  BranchTreeMutationResult,
   ArborPresentationMode,
   ArborOutputProfile,
   ArborOutputState,
-  BranchTreeMutationResult,
   ArborSettings
 } from "../types";
 import {
   createDefaultOutputState,
-  FULL_OUTPUT_PROFILE_ID,
   getActiveOutputProfile,
-  reconcileProfilesAfterTreeChange,
   resolveOutputStates,
   setActiveOutputProfile
 } from "../outputProfiles";
-import { buildBranchDocument, parseBranchDocument } from "../storage/document";
-import { loadImportedBranchDocument } from "../storage/reconcile";
-import { linearizeTree, normalizeMetadata } from "../storage/serializer";
 import { canOpenImportedBranchDocumentInArbor } from "../opening";
-import { deepClone, extractPathLabel } from "../utils";
+import { extractPathLabel } from "../utils";
 import { MOBILE_TREE_OVERVIEW_EXPORT_LIMITS, resolveTreeOverviewExportSize, type TreeOverviewExportQuality } from "../treeOverviewExport";
 import { ARBOR_THEME_VARIABLES, resolveArborThemeVariables } from "../theme";
 import { OutputProfilesModal, type OutputProfilesController } from "./OutputProfilesModal";
@@ -102,6 +91,7 @@ import { SearchController } from "./chrome/SearchController";
 import { BreadcrumbsController } from "./chrome/BreadcrumbsController";
 import { ViewShell } from "./chrome/ViewShell";
 import { ViewMenus } from "./chrome/ViewMenus";
+import { DocumentController } from "./state/DocumentController";
 export {
   getBlockOutputMenuActions,
   getOutputCardPresentation
@@ -115,8 +105,7 @@ export type {
 export class ArborView extends FileView {
   navigation = true;
 
-  private readonly history = new BranchHistory();
-  private state: LoadedFileState | null = null;
+  private readonly documentController: DocumentController;
   private readonly editor: BlockEditorController;
   private readonly attachments: EditorAttachments;
   private readonly navigationController: NavigationController;
@@ -134,7 +123,6 @@ export class ArborView extends FileView {
   private readonly breadcrumbs: BreadcrumbsController;
   private readonly menus: ViewMenus;
   private renderFrame: number | null = null;
-  private isPersisting = false;
   private pendingFocusBlockId: BranchBlockId | null = null;
   private pendingScrollBlockId: BranchBlockId | null = null;
   private lastViewportScroll = { left: 0, top: 0 };
@@ -147,6 +135,9 @@ export class ArborView extends FileView {
 
   private get editingSession(): EditingSession | null {
     return this.editor.getSession();
+  }
+  private get state(): Readonly<LoadedFileState> | null {
+    return this.documentController.getState();
   }
   private readonly exportController = new ExportController({
     getFile: () => this.file,
@@ -186,6 +177,27 @@ export class ArborView extends FileView {
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: ArborPlugin) {
     super(leaf);
+    this.documentController = new DocumentController({
+      getFile: () => this.file,
+      cachedRead: (file) => this.app.vault.cachedRead(file),
+      process: (file, transform) => this.app.vault.process(file, transform),
+      markOwnWrite: (path) => this.plugin.markOwnWrite(path),
+      rememberManagedNote: (path) => this.plugin.rememberManagedNote(path),
+      commitEditIfNeeded: () => this.commitEditIfNeeded(),
+      clearEditingSession: () => this.editor.reset(),
+      beforeOverviewEditSave: () => this.preserveOverviewViewportPosition(),
+      onMutationPrepared: (autofocusSelection) => this.prepareDocumentMutation(autofocusSelection),
+      onSelectionRestored: () => {
+        const selectedBlockId = this.state?.selectedBlockId ?? null;
+        this.pendingFocusBlockId = selectedBlockId;
+        this.pendingScrollBlockId = selectedBlockId;
+      },
+      onEditedBlockSaved: (session) => { this.pendingFocusBlockId = session.blockId; },
+      onProfileActivated: () => this.syncVisibleOutputCardPresentations(),
+      requestRender: () => this.render(),
+      notify: (message) => new Notice(message),
+      reportError: (message, error) => console.error(message, error)
+    });
     this.attachments = new EditorAttachments({
       getFilePath: () => this.file?.path ?? "",
       hasSession: () => this.editor.getSession() !== null,
@@ -227,7 +239,7 @@ export class ArborView extends FileView {
       openSearchOverlay: () => this.openSearchOverlay(),
       closeSearchOverlay: () => this.closeSearchOverlay(),
       isSearchOpen: () => this.search.isOpen(),
-      setKeyboardSelection: (id) => { if (this.state) this.state.selectedBlockId = id; },
+      setKeyboardSelection: (id) => this.documentController.setSelection(id),
       openBlockMenu: (id, event) => this.buildBlockMenu(id).showAtMouseEvent(event)
     });
     this.branchViewport = new BranchViewportController({
@@ -566,54 +578,15 @@ export class ArborView extends FileView {
   }
 
   private async applyActiveOutputProfile(next: ArborOutputState): Promise<ArborOutputState> {
-    if (!this.state || this.state.outputError) {
-      return deepClone(this.state?.outputState ?? createDefaultOutputState());
-    }
-    await this.commitEditIfNeeded();
-    if (!this.state) {
-      return createDefaultOutputState();
-    }
-    this.state.outputState = deepClone(next);
-    this.syncVisibleOutputCardPresentations();
-    this.render();
-    await this.persistState("Switch output profile");
-    return deepClone(this.state.outputState);
+    return this.documentController.applyActiveOutputProfile(next);
   }
 
   private async applyOutputProfileMutation(label: string, next: ArborOutputState): Promise<ArborOutputState> {
-    if (!this.state || this.state.outputError) {
-      return deepClone(this.state?.outputState ?? createDefaultOutputState());
-    }
-    await this.commitEditIfNeeded();
-    if (!this.state) {
-      return createDefaultOutputState();
-    }
-    this.history.push(label, this.state.metadata, this.state.outputState, this.state.selectedBlockId);
-    this.state.outputState = deepClone(next);
-    this.pendingFocusBlockId = this.state.selectedBlockId;
-    this.pendingScrollBlockId = this.state.selectedBlockId;
-    this.overview.requestKeyboardFocusAfterMutation(
-      this.presentationMode === "overview" && this.overview.getElements().viewport?.contains(this.contentEl.ownerDocument.activeElement) === true
-    );
-    await this.persistState(label);
-    this.render();
-    return deepClone(this.state.outputState);
+    return this.documentController.applyOutputProfileMutation(label, next);
   }
 
   private async resetInvalidOutputProfiles(): Promise<ArborOutputState> {
-    if (!this.state || !this.state.outputError) {
-      return deepClone(this.state?.outputState ?? createDefaultOutputState());
-    }
-    await this.commitEditIfNeeded();
-    if (!this.state) {
-      return createDefaultOutputState();
-    }
-    this.state.outputState = createDefaultOutputState();
-    this.state.outputRaw = "";
-    this.state.outputError = null;
-    await this.persistState("Reset output profiles");
-    this.render();
-    return deepClone(this.state.outputState);
+    return this.documentController.resetInvalidOutputProfiles();
   }
 
   private async updateViewSetting<Key extends keyof ArborSettings>(key: Key, value: ArborSettings[Key], refreshAll = true): Promise<void> {
@@ -657,12 +630,13 @@ export class ArborView extends FileView {
       return;
     }
 
-    this.state = prepared;
-    if (this.state.origin === "reconciled") {
+    this.documentController.replaceLoadedState(prepared);
+    const state = this.state;
+    if (state?.origin === "reconciled") {
       new Notice("The tree was rebuilt from the visible Markdown body to avoid losing plain editor changes.");
     }
 
-    this.resetLoadedUiState(this.state.selectedBlockId);
+    this.resetLoadedUiState(state?.selectedBlockId ?? null);
     this.render();
   }
 
@@ -680,8 +654,7 @@ export class ArborView extends FileView {
     this.overview.reset();
     this.dragDropController.reset();
     this.cleanupViewportPan();
-    this.state = null;
-    this.history.clear();
+    this.documentController.reset();
     this.editor.reset();
     this.search.reset();
     this.preview.reset();
@@ -712,7 +685,7 @@ export class ArborView extends FileView {
       return;
     }
 
-    if (this.plugin.consumeOwnWrite(file.path) || this.isPersisting) {
+    if (this.plugin.consumeOwnWrite(file.path) || this.documentController.isWriting()) {
       return;
     }
 
@@ -735,13 +708,14 @@ export class ArborView extends FileView {
     }
 
     const directionChanged = this.renderedLayoutDirection !== this.plugin.settings.layoutDirection;
-    this.state = prepared;
+    this.documentController.replaceLoadedState(prepared);
+    const state = this.state;
     this.shouldSnapViewportAfterDirectionChange = directionChanged;
     if (directionChanged && this.presentationMode === "overview") {
       this.overview.requestCenterOnNextRender();
     }
-    this.pendingFocusBlockId = this.state.selectedBlockId;
-    this.pendingScrollBlockId = this.state.selectedBlockId;
+    this.pendingFocusBlockId = state?.selectedBlockId ?? null;
+    this.pendingScrollBlockId = state?.selectedBlockId ?? null;
     this.render();
   }
 
@@ -771,27 +745,8 @@ export class ArborView extends FileView {
     });
   }
 
-  private buildLoadedFileState(
-    parsed: ReturnType<typeof parseBranchDocument>,
-    loaded: ImportedBranchDocument,
-    preferredSelectedBlockId: BranchBlockId | null
-  ): LoadedFileState {
-    const selectedBlockId = ensureSelectedBlock(loaded.metadata, preferredSelectedBlockId);
-    return {
-      frontmatter: parsed.frontmatter,
-      metadata: loaded.metadata,
-      outputState: loaded.outputState,
-      outputRaw: loaded.outputRaw,
-      outputError: loaded.outputError,
-      selectedBlockId,
-      staleMetadata: loaded.staleMetadata,
-      origin: loaded.origin,
-      linearized: linearizeTree(loaded.metadata)
-    };
-  }
-
   private resetLoadedUiState(selectedBlockId: BranchBlockId | null): void {
-    this.history.clear();
+    this.documentController.clearHistory();
     this.editor.reset();
     this.dragDropController.reset();
     this.search.reset();
@@ -804,29 +759,11 @@ export class ArborView extends FileView {
     this.pendingScrollBlockId = selectedBlockId;
   }
 
-  private async readLoadedFileState(
-    file: TFile,
-    preferredSelectedBlockId: BranchBlockId | null
-  ): Promise<{
-    state: LoadedFileState;
-    loaded: ImportedBranchDocument;
-    parsed: ReturnType<typeof parseBranchDocument>;
-  }> {
-    const text = await this.app.vault.cachedRead(file);
-    const parsed = parseBranchDocument(text);
-    const loaded = loadImportedBranchDocument(text);
-    return {
-      state: this.buildLoadedFileState(parsed, loaded, preferredSelectedBlockId),
-      loaded,
-      parsed
-    };
-  }
-
   private async prepareLoadedFileState(
     file: TFile,
     preferredSelectedBlockId: BranchBlockId | null
   ): Promise<LoadedFileState | null> {
-    const initial = await this.readLoadedFileState(file, preferredSelectedBlockId);
+    const initial = await this.documentController.readLoadedFileState(file, preferredSelectedBlockId);
     const expectedArborOpen = this.plugin.consumeExplicitArborOpen(file.path);
     const staysInArbor = Boolean(initial.parsed.metadata)
       || (expectedArborOpen && canOpenImportedBranchDocumentInArbor(initial.loaded));
@@ -835,7 +772,7 @@ export class ArborView extends FileView {
       return null;
     }
 
-    this.state = initial.state;
+    this.documentController.replaceLoadedState(initial.state);
 
     if (!initial.loaded.needsVisibleMarkerMigration) {
       return initial.state;
@@ -856,8 +793,8 @@ export class ArborView extends FileView {
       if (remainingLoadingTime > 0) {
         await this.wait(remainingLoadingTime);
       }
-      const migrated = await this.readLoadedFileState(file, initial.state.selectedBlockId);
-      this.state = migrated.state;
+      const migrated = await this.documentController.readLoadedFileState(file, initial.state.selectedBlockId);
+      this.documentController.replaceLoadedState(migrated.state);
       this.plugin.rememberManagedNote(file.path);
       return migrated.state;
     } finally {
@@ -990,7 +927,7 @@ export class ArborView extends FileView {
     }
 
     const selectionChanged = this.state.selectedBlockId !== nextSelectedBlockId;
-    this.state.selectedBlockId = nextSelectedBlockId;
+    this.documentController.setSelection(nextSelectedBlockId);
     this.syncTouchDock();
 
     if (options?.focus) {
@@ -1271,88 +1208,15 @@ export class ArborView extends FileView {
   }
 
   async rebuildTreeFromMetadata(): Promise<void> {
-    if (!this.file || !this.state) {
-      return;
-    }
-
-    await this.commitEditIfNeeded();
-
-    const text = await this.app.vault.cachedRead(this.file);
-    const parsed = parseBranchDocument(text);
-    if (!parsed.metadata && !this.state.staleMetadata) {
-      new Notice("No stored metadata was found in this note.");
-      return;
-    }
-
-    const restored = cloneMetadata(parsed.metadata ?? this.state.staleMetadata ?? createEmptyTree());
-    const beforeMetadata = cloneMetadata(this.state.metadata);
-    this.history.push(
-      "Rebuild tree from metadata",
-      this.state.metadata,
-      this.state.outputState,
-      this.state.selectedBlockId
-    );
-    this.state.metadata = restored;
-    this.state.outputState = reconcileProfilesAfterTreeChange(
-      beforeMetadata,
-      restored,
-      this.state.outputState
-    );
-    this.state.selectedBlockId = ensureSelectedBlock(restored, this.state.selectedBlockId);
-    this.state.linearized = linearizeTree(restored);
-    this.state.origin = "metadata";
-    this.state.staleMetadata = null;
-    this.editor.reset();
-    this.pendingFocusBlockId = this.state.selectedBlockId;
-    this.pendingScrollBlockId = this.state.selectedBlockId;
-    await this.persistState("Rebuild tree from metadata");
-    this.render();
+    await this.documentController.rebuildTreeFromMetadata();
   }
 
   async undo(): Promise<void> {
-    if (!this.state || !this.history.canUndo()) {
-      return;
-    }
-
-    await this.commitEditIfNeeded();
-
-    const previous = this.history.undo(this.currentHistorySnapshot("Current state"));
-    if (!previous) {
-      return;
-    }
-
-    this.state.metadata = cloneMetadata(previous.metadata);
-    this.state.outputState = previous.outputState;
-    this.state.selectedBlockId = ensureSelectedBlock(previous.metadata, previous.selectedBlockId);
-    this.state.linearized = linearizeTree(this.state.metadata);
-    this.editor.reset();
-    this.pendingFocusBlockId = this.state.selectedBlockId;
-    this.pendingScrollBlockId = this.state.selectedBlockId;
-    await this.persistState("Undo");
-    this.render();
+    await this.documentController.undo();
   }
 
   async redo(): Promise<void> {
-    if (!this.state || !this.history.canRedo()) {
-      return;
-    }
-
-    await this.commitEditIfNeeded();
-
-    const next = this.history.redo(this.currentHistorySnapshot("Current state"));
-    if (!next) {
-      return;
-    }
-
-    this.state.metadata = cloneMetadata(next.metadata);
-    this.state.outputState = next.outputState;
-    this.state.selectedBlockId = ensureSelectedBlock(next.metadata, next.selectedBlockId);
-    this.state.linearized = linearizeTree(this.state.metadata);
-    this.editor.reset();
-    this.pendingFocusBlockId = this.state.selectedBlockId;
-    this.pendingScrollBlockId = this.state.selectedBlockId;
-    await this.persistState("Redo");
-    this.render();
+    await this.documentController.redo();
   }
 
   render(): void {
@@ -1642,51 +1506,25 @@ export class ArborView extends FileView {
     mutate: (metadata: BranchTreeMetadata) => BranchTreeMutationResult,
     autofocusSelection = false
   ): Promise<void> {
-    if (!this.state) {
-      return;
-    }
+    await this.documentController.applyMutation(label, mutate, autofocusSelection);
+  }
 
-    await this.commitEditIfNeeded();
-
-    const beforeMetadata = cloneMetadata(this.state.metadata);
-    this.history.push(label, beforeMetadata, this.state.outputState, this.state.selectedBlockId);
-    const result = mutate(cloneMetadata(beforeMetadata));
-    this.state.metadata = normalizeMetadata(result.metadata);
-    this.state.outputState = reconcileProfilesAfterTreeChange(
-      beforeMetadata,
-      this.state.metadata,
-      this.state.outputState,
-      result.duplicateMap
-    );
-    this.state.selectedBlockId = ensureSelectedBlock(this.state.metadata, result.selectedBlockId);
-    this.state.linearized = linearizeTree(this.state.metadata);
-    this.state.origin = "metadata";
-    this.state.staleMetadata = null;
-    this.pendingFocusBlockId = this.state.selectedBlockId;
-    this.pendingScrollBlockId = this.state.selectedBlockId;
+  private prepareDocumentMutation(autofocusSelection: boolean): void {
+    const state = this.state;
+    if (!state) return;
+    this.pendingFocusBlockId = state.selectedBlockId;
+    this.pendingScrollBlockId = state.selectedBlockId;
     this.overview.requestKeyboardFocusAfterMutation(
       this.presentationMode === "overview" &&
       this.overview.getElements().viewport?.contains(this.contentEl.ownerDocument.activeElement) === true
     );
 
-    if (autofocusSelection && this.state.selectedBlockId) {
-      const block = getBlock(this.state.metadata, this.state.selectedBlockId);
+    if (autofocusSelection && state.selectedBlockId) {
+      const block = getBlock(state.metadata, state.selectedBlockId);
       if (block) {
         this.editor.prepareCreatedBlock(block, this.presentationMode === "overview" ? "overview" : "card");
       }
     }
-
-    await this.persistState(label);
-    this.render();
-  }
-
-  private currentHistorySnapshot(label: string): BranchHistoryEntry {
-    return {
-      label,
-      metadata: cloneMetadata(this.state?.metadata ?? createEmptyTree()),
-      outputState: deepClone(this.state?.outputState ?? createDefaultOutputState()),
-      selectedBlockId: this.state?.selectedBlockId ?? null
-    };
   }
 
   private async commitEditIfNeeded(): Promise<void> {
@@ -1713,7 +1551,7 @@ export class ArborView extends FileView {
     if (!this.state) return;
     if (this.state.selectedBlockId !== session.blockId) this.pendingScrollBlockId = session.blockId;
     this.stopHorizontalScrollMotion();
-    this.state.selectedBlockId = session.blockId;
+    this.documentController.setSelection(session.blockId);
     this.pendingFocusBlockId = session.blockId;
     this.syncTouchDock();
     const block = getBlock(this.state.metadata, session.blockId);
@@ -1743,17 +1581,7 @@ export class ArborView extends FileView {
   }
 
   private async saveEditorSession(session: EditingSession): Promise<void> {
-    if (!this.state) return;
-    if (session.origin === "overview") this.preserveOverviewViewportPosition();
-    this.history.push("Edit block", this.state.metadata, this.state.outputState, this.state.selectedBlockId);
-    this.state.metadata = normalizeMetadata(updateBlockContent(this.state.metadata, session.blockId, session.value));
-    this.state.selectedBlockId = session.blockId;
-    this.state.linearized = linearizeTree(this.state.metadata);
-    this.state.origin = "metadata";
-    this.state.staleMetadata = null;
-    this.pendingFocusBlockId = session.blockId;
-    await this.persistState("Edit block");
-    this.render();
+    await this.documentController.commitEditedBlock(session);
   }
 
   private resetViewState(): void {
@@ -1762,8 +1590,7 @@ export class ArborView extends FileView {
     this.zoomController.reset();
     this.branchViewport.reset();
     this.dragDropController.reset();
-    this.state = null;
-    this.history.clear();
+    this.documentController.reset();
     this.editor.reset();
     this.search.reset();
     this.preview.reset();
@@ -1777,71 +1604,14 @@ export class ArborView extends FileView {
   }
 
   private async persistState(reason: string): Promise<void> {
-    if (!this.file || !this.state) {
-      return;
-    }
-
-    const metadata = normalizeMetadata(this.state.metadata);
-    this.state.metadata = metadata;
-    this.state.linearized = linearizeTree(metadata);
-    const document = buildBranchDocument(
-      this.state.frontmatter,
-      this.state.linearized.body,
-      metadata,
-      this.state.outputState,
-      this.state.outputError ? this.state.outputRaw : undefined
-    );
-
-    this.isPersisting = true;
-    try {
-      this.plugin.markOwnWrite(this.file.path);
-      await this.app.vault.process(this.file, () => document);
-      this.plugin.rememberManagedNote(this.file.path);
-      this.state.origin = "metadata";
-      this.state.staleMetadata = null;
-    } catch (error) {
-      console.error(`[Arbor] Failed to persist state after ${reason}`, error);
-      new Notice(`Arbor could not save the note after "${reason}".`);
-    } finally {
-      this.isPersisting = false;
-    }
+    await this.documentController.persistState(reason);
   }
 
   private async applyOutputMutation(
     label: string,
     mutate: (profile: ArborOutputProfile) => ArborOutputProfile
   ): Promise<void> {
-    if (!this.state || this.state.outputError) {
-      return;
-    }
-
-    await this.commitEditIfNeeded();
-    if (!this.state || this.state.outputError) {
-      return;
-    }
-
-    const activeProfile = getActiveOutputProfile(this.state.outputState);
-    if (activeProfile.id === FULL_OUTPUT_PROFILE_ID) {
-      return;
-    }
-
-    const selectedBlockId = this.state.selectedBlockId;
-    this.history.push(label, this.state.metadata, this.state.outputState, selectedBlockId);
-    const updatedProfile = mutate(activeProfile);
-    this.state.outputState = deepClone({
-      ...this.state.outputState,
-      profiles: this.state.outputState.profiles.map((profile) =>
-        profile.id === activeProfile.id ? updatedProfile : profile
-      )
-    });
-    this.pendingFocusBlockId = selectedBlockId;
-    this.pendingScrollBlockId = selectedBlockId;
-    this.overview.requestKeyboardFocusAfterMutation(
-      this.presentationMode === "overview" &&
-      this.overview.getElements().viewport?.contains(this.contentEl.ownerDocument.activeElement) === true
-    );
-    await this.persistState(label);
-    this.render();
+    await this.documentController.applyOutputMutation(label, mutate);
   }
 
   private syncOutputCardPresentation(
