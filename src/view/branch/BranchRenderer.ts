@@ -4,6 +4,7 @@ import { getChildArrowIcon, getHorizontalWheelDelta } from "../../layoutDirectio
 import { resolveColumnWheelTarget } from "../../columnWheelNavigation";
 import { extractSnippet, hashString } from "../../utils";
 import { getOutputCardPresentation, syncOutputCardPresentation } from "../output/outputPresentation";
+import { ViewWorkScope } from "../runtime/ViewWorkScope";
 import type { BranchBlock, BranchBlockId, BranchColumnModel } from "../../types";
 import type { DragState } from "./DragDropController";
 import type { BranchViewContext, EditorPort, MarkdownPort, SelectionOptions, ViewReadPort } from "../state/viewTypes";
@@ -110,12 +111,24 @@ export function routeBranchViewportWheel(
 export class BranchRenderer {
   private readonly columnElementMap = new Map<string, HTMLElement>();
   private readonly currentColumnMap = new Map<string, BranchColumnModel>();
+  private readonly work = new ViewWorkScope();
   private rootEmptyEl: HTMLElement | null = null;
 
   constructor(private readonly port: BranchRendererPort) {}
 
+  invalidate(): void {
+    this.work.reset();
+  }
+
   async syncColumns(columns: BranchColumnModel[], context: BranchViewContext): Promise<void> {
+    this.invalidate();
     const root = this.port.getColumnsRoot();
+    const workToken = this.work.token();
+    const state = this.port.read.getState();
+    const filePath = this.port.read.getFilePath();
+    const isCurrent = () => this.work.isCurrent(workToken) && this.port.getColumnsRoot() === root
+      && context === this.port.getContext() && state === this.port.read.getState()
+      && filePath === this.port.read.getFilePath();
     this.currentColumnMap.clear();
     columns.forEach((column) => this.currentColumnMap.set(column.key, column));
     if (!root) {
@@ -152,7 +165,8 @@ export class BranchRenderer {
       if (siblingAtIndex !== columnEl) {
         root.insertBefore(columnEl, siblingAtIndex);
       }
-      await this.syncColumn(columnEl, column, context);
+      await this.syncColumn(columnEl, column, context, isCurrent);
+      if (!isCurrent()) return;
     }
   }
   getColumn(key: string): BranchColumnModel | null {
@@ -180,9 +194,11 @@ export class BranchRenderer {
   }
 
   reset(): void {
+    this.work.reset();
     this.columnElementMap.forEach((element) => element.remove());
     this.columnElementMap.clear();
     this.currentColumnMap.clear();
+    this.rootEmptyEl?.remove();
     this.rootEmptyEl = null;
   }
 
@@ -211,7 +227,7 @@ export class BranchRenderer {
     return columnEl;
   }
 
-  private async syncColumn(columnEl: HTMLElement, column: BranchColumnModel, context: BranchViewContext): Promise<void> {
+  private async syncColumn(columnEl: HTMLElement, column: BranchColumnModel, context: BranchViewContext, isCurrent: () => boolean): Promise<void> {
     const cardsEl = columnEl.querySelector<HTMLElement>(".arbor-card-list") ?? columnEl.createDiv({ cls: "arbor-card-list" });
     cardsEl.dataset.columnKey = column.key;
     const nextParentId = column.parentId ?? "";
@@ -279,7 +295,8 @@ export class BranchRenderer {
 
       const block = column.blocks[index];
       const card = this.ensureCardNode(cardsEl, existingChildren, block.id);
-      await this.syncCardNode(card, block, column, index, context);
+      await this.syncCardNode(card, block, column, index, context, isCurrent);
+      if (!isCurrent()) return;
       desiredNodes.push(card);
     }
 
@@ -346,7 +363,8 @@ export class BranchRenderer {
     block: BranchBlock,
     column: BranchColumnModel,
     index: number,
-    context: BranchViewContext
+    context: BranchViewContext,
+    isCurrent: () => boolean
   ): Promise<void> {
     card.dataset.blockId = block.id;
     card.dataset.columnKey = column.key;
@@ -398,8 +416,8 @@ export class BranchRenderer {
       return;
     }
 
-    await this.syncCardContentNode(card, block);
-    if (context !== this.port.getContext()) {
+    await this.syncCardContentNode(card, block, isCurrent);
+    if (!isCurrent()) {
       return;
     }
     this.syncOutputCardPresentation(card, block.id, context);
@@ -422,32 +440,36 @@ export class BranchRenderer {
 
     if (this.port.editor.getSession()?.autofocus && this.port.editor.getSession()?.origin === "card") {
       const editorEl = editor;
-      window.requestAnimationFrame(() => {
+      const session = this.port.editor.getSession();
+      if (!session) return;
+      this.work.frame(window, () => {
+        if (this.port.editor.getSession() !== session || !editorEl.isConnected) return;
         editorEl.focus({ preventScroll: true });
         editorEl.setSelectionRange(editorEl.value.length, editorEl.value.length);
         this.port.editor.resizeEditor(editorEl);
-        const session = this.port.editor.getSession();
-        if (session) {
-          this.port.consumeAutofocus(session);
-        }
+        this.port.consumeAutofocus(session);
       });
     }
   }
 
-  private async syncCardContentNode(card: HTMLElement, block: BranchBlock): Promise<void> {
+  private async syncCardContentNode(card: HTMLElement, block: BranchBlock, isCurrent: () => boolean): Promise<void> {
     const renderSignature = hashString(block.content);
     let content = card.querySelector<HTMLElement>(".arbor-card-content");
     const needsRender = !content || card.dataset.renderSignature !== renderSignature || card.dataset.renderMode === "editing";
 
     if (needsRender) {
+      delete card.dataset.renderSignature;
       card.empty();
       content = card.createDiv({ cls: "arbor-card-content markdown-rendered" });
       await this.port.markdown.render(block.content, content, this.port.read.getFilePath());
+      if (!isCurrent()) return;
       if (content.innerText.trim().length === 0) {
         content.setText(extractSnippet(block.content, this.port.read.getSettings().previewSnippetLength));
       }
       content.querySelectorAll("img").forEach((image) => {
-        image.addEventListener("load", () => this.port.scheduleColumnAlignment(), { once: true });
+        image.addEventListener("load", () => {
+          if (card.isConnected && this.port.getColumnsRoot()?.contains(card)) this.port.scheduleColumnAlignment();
+        }, { once: true });
       });
       card.dataset.renderSignature = renderSignature;
     }

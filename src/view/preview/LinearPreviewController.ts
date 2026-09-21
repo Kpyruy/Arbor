@@ -3,6 +3,7 @@ import { buildPreviewPathLabels } from "../state/viewModel";
 import { extractSnippet } from "../../utils";
 import type { BranchBlock, BranchBlockId } from "../../types";
 import type { BranchViewContext, EditingSession, EditorPort, MarkdownPort, SelectionPort, ViewReadPort } from "../state/viewTypes";
+import { ViewWorkScope } from "../runtime/ViewWorkScope";
 
 export interface LinearPreviewPort {
   read: ViewReadPort;
@@ -24,17 +25,26 @@ export class LinearPreviewController {
   private previewContentEl: HTMLElement | null = null;
   private renderedPreviewSignature = "";
   private showFullMiniMap = false;
+  private readonly work = new ViewWorkScope();
+  private renderGeneration = 0;
 
   constructor(private readonly port: LinearPreviewPort) {}
+
+  invalidate(): void {
+    this.renderGeneration += 1;
+  }
 
   getContent(): HTMLElement | null {
     return this.previewContentEl;
   }
 
   async syncPreview(context: BranchViewContext): Promise<void> {
+    this.invalidate();
     const body = this.port.getBody();
     const filePath = this.port.read.getFilePath();
     const state = this.port.read.getState();
+    const workToken = this.work.token();
+    const renderGeneration = this.renderGeneration;
     if (!body || !filePath || !state) {
       return;
     }
@@ -70,18 +80,27 @@ export class LinearPreviewController {
     ].join("\u001f");
 
     if (this.previewContentEl && this.renderedPreviewSignature !== previewSignature) {
+      this.renderedPreviewSignature = "";
       this.previewContentEl.empty();
-      await this.renderPreviewBlocks(this.previewContentEl, context);
-      this.previewContentEl.scrollTop = 0;
+      const content = this.previewContentEl;
+      const isCurrent = () => this.work.isCurrent(workToken) && this.previewContentEl === content
+        && this.renderGeneration === renderGeneration
+        && this.port.read.getState() === state && this.port.read.getFilePath() === filePath;
+      await this.renderPreviewBlocks(content, context, isCurrent);
+      if (!isCurrent()) return;
+      content.scrollTop = 0;
       this.renderedPreviewSignature = previewSignature;
     }
   }
 
   hide(): void {
+    this.invalidate();
+    this.work.reset();
     this.previewPaneEl?.setCssStyles({ display: "none" });
   }
 
   reset(): void {
+    this.work.reset();
     this.detachPreviewDom();
     this.showFullMiniMap = false;
   }
@@ -94,7 +113,7 @@ export class LinearPreviewController {
     this.renderedPreviewSignature = "";
   }
 
-  private async renderPreviewBlocks(container: HTMLElement, context: BranchViewContext): Promise<void> {
+  private async renderPreviewBlocks(container: HTMLElement, context: BranchViewContext, isCurrent: () => boolean): Promise<void> {
     const state = this.port.read.getState();
     if (!state) {
       return;
@@ -209,19 +228,20 @@ export class LinearPreviewController {
         }
         this.port.editor.resizeEditor(editor);
         if (this.port.editor.getSession()?.autofocus) {
-          window.setTimeout(() => {
+          const session = this.port.editor.getSession();
+          if (!session) continue;
+          this.work.timeout(() => {
+            if (this.port.editor.getSession() !== session || !editor.isConnected) return;
             editor.focus();
             editor.setSelectionRange(editor.value.length, editor.value.length);
             this.port.editor.resizeEditor(editor);
-            const session = this.port.editor.getSession();
-            if (session) {
-              this.port.consumeAutofocus(session);
-            }
+            this.port.consumeAutofocus(session);
           }, 0);
         }
       } else {
         const bodyEl = previewBlockEl.createDiv({ cls: "arbor-preview-block-body markdown-rendered" });
         await this.port.markdown.render(block.content, bodyEl, this.port.read.getFilePath());
+        if (!isCurrent()) return;
         if (bodyEl.innerText.trim().length === 0) {
           bodyEl.setText(extractSnippet(block.content, this.port.read.getSettings().previewSnippetLength));
         }

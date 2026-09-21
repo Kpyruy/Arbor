@@ -92,6 +92,7 @@ import { BreadcrumbsController } from "./chrome/BreadcrumbsController";
 import { ViewShell } from "./chrome/ViewShell";
 import { ViewMenus } from "./chrome/ViewMenus";
 import { DocumentController } from "./state/DocumentController";
+import { ViewWorkScope } from "./runtime/ViewWorkScope";
 export {
   getBlockOutputMenuActions,
   getOutputCardPresentation
@@ -122,7 +123,9 @@ export class ArborView extends FileView {
   private readonly shell: ViewShell;
   private readonly breadcrumbs: BreadcrumbsController;
   private readonly menus: ViewMenus;
-  private renderFrame: number | null = null;
+  private readonly work = new ViewWorkScope();
+  private renderGeneration = 0;
+  private cancelRenderFrame: (() => void) | null = null;
   private loadGeneration = 0;
   private pendingFocusBlockId: BranchBlockId | null = null;
   private pendingScrollBlockId: BranchBlockId | null = null;
@@ -561,6 +564,7 @@ export class ArborView extends FileView {
     this.preview.reset();
     this.output.reset();
     this.breadcrumbs.reset();
+    this.menus.reset();
     this.shell.teardownShell();
     this.branchRenderer.reset();
     this.dragDropController.reset();
@@ -656,6 +660,7 @@ export class ArborView extends FileView {
 
   clear(): void {
     this.invalidatePendingLoads();
+    this.work.reset();
     this.clearBlurCommitTimer();
     this.zoomController.reset();
     this.clearBreadcrumbScrollFrame();
@@ -678,6 +683,8 @@ export class ArborView extends FileView {
 
   async onClose(): Promise<void> {
     this.invalidatePendingLoads();
+    await this.commitEditIfNeeded();
+    this.work.dispose();
     this.navigationController.clearNumericNavigation();
     this.zoomController.reset();
     this.touchController.reset();
@@ -687,7 +694,16 @@ export class ArborView extends FileView {
     this.dragDropController.reset();
     this.cleanupOverviewPan();
     this.overview.reset();
-    await this.commitEditIfNeeded();
+    this.documentController.reset();
+    this.editor.reset();
+    this.search.reset();
+    this.preview.reset();
+    this.output.reset();
+    this.hoveredBlockId = null;
+    this.viewContext = null;
+    this.loadingState = null;
+    this.presentationMode = "editor";
+    this.teardownShell();
     return super.onClose();
   }
 
@@ -752,7 +768,7 @@ export class ArborView extends FileView {
 
     this.syncBreadcrumbs();
     this.syncViewportEdgeFades();
-    window.requestAnimationFrame(() => {
+    this.work.frame(window, () => {
       this.alignColumnsToActivePath();
       const viewport = this.columnsViewportEl;
       const activeCard = this.columnsEl?.querySelector<HTMLElement>(".arbor-card.is-active");
@@ -1285,19 +1301,27 @@ export class ArborView extends FileView {
   }
 
   render(): void {
+    if (!this.work.isCurrent(this.work.token())) return;
+    this.renderGeneration += 1;
+    this.branchRenderer.invalidate();
+    this.preview.invalidate();
     this.overview.invalidate();
     this.output.invalidate();
-    if (this.renderFrame !== null) {
-      window.cancelAnimationFrame(this.renderFrame);
-    }
-
-    this.renderFrame = window.requestAnimationFrame(() => {
-      this.renderFrame = null;
+    this.cancelRenderFrame?.();
+    this.cancelRenderFrame = this.work.frame(window, () => {
+      this.cancelRenderFrame = null;
       void this.renderNow();
     });
   }
 
   private async renderNow(): Promise<void> {
+    const workToken = this.work.token();
+    if (!this.work.isCurrent(workToken)) return;
+    const renderGeneration = this.renderGeneration;
+    const renderedFile = this.file;
+    const renderedState = this.state;
+    const isCurrent = () => this.work.isCurrent(workToken) && this.renderGeneration === renderGeneration
+      && this.file === renderedFile && this.state === renderedState;
     const { contentEl } = this;
     contentEl.addClass("arbor-view");
     this.applyCssVars(contentEl);
@@ -1345,7 +1369,9 @@ export class ArborView extends FileView {
     const columns = this.compactLayout ? compactColumns(allColumns, this.state.selectedBlockId) : allColumns;
     const preservedSceneWidth = this.armSceneWidthForPendingScroll(columns.length);
     await this.branchRenderer.syncColumns(columns, this.viewContext);
+    if (!isCurrent()) return;
     await this.preview.syncPreview(this.viewContext);
+    if (!isCurrent()) return;
     this.applyPendingFocusAndScroll(preservedSceneWidth);
     this.syncHoverLinkedState();
   }
@@ -1451,7 +1477,7 @@ export class ArborView extends FileView {
     if (this.presentationMode !== "overview") {
       return;
     }
-    window.requestAnimationFrame(() => this.centerOverviewOnSelectedBlock());
+    this.work.frame(window, () => this.centerOverviewOnSelectedBlock());
   }
 
   private centerOverviewOnSelectedBlock(): void {
@@ -1650,6 +1676,7 @@ export class ArborView extends FileView {
   }
 
   private resetViewState(): void {
+    this.work.reset();
     this.navigationController.clearNumericNavigation();
     this.clearBlurCommitTimer();
     this.zoomController.reset();
@@ -1736,14 +1763,14 @@ export class ArborView extends FileView {
     if (this.compactLayout) {
       this.syncViewportEdgeFades();
       if (!this.touchController.isBranchPinching()) {
-        window.requestAnimationFrame(() => this.revealCompactSelection());
+        this.work.frame(window, () => this.revealCompactSelection());
       }
       return;
     }
 
     this.scheduleColumnAlignment();
 
-    window.requestAnimationFrame(() => {
+    this.work.frame(window, () => {
       this.alignColumnsToActivePath();
       const viewport = this.columnsViewportEl;
       const activeCard = this.columnsEl?.querySelector<HTMLElement>(".arbor-card.is-active");

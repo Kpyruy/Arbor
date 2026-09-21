@@ -12,6 +12,7 @@ import { ARBOR_THEME_VARIABLES } from "../../theme";
 import { createOutputProfileButton, getOutputProfileButtonPresentation } from "../OutputProfilesModal";
 import type { EditingSession, LoadingOverlayState, ViewReadPort } from "../state/viewTypes";
 import { useCompactLayout } from "../../mobile";
+import { ViewWorkScope } from "../runtime/ViewWorkScope";
 
 export interface ShellElements {
   readonly root: HTMLElement;
@@ -79,6 +80,7 @@ export class ViewShell {
   private loadingOverlayEl: HTMLElement | null = null;
   private disposeBranchViewport: (() => void) | null = null;
   private compactLayout = false;
+  private readonly work = new ViewWorkScope();
 
   constructor(private readonly contentEl: HTMLElement, private readonly port: ShellPort) {
     this.elements = this.emptyElements();
@@ -226,7 +228,7 @@ export class ViewShell {
     });
     this.touchDockEl = dock;
     this.contentEl.toggleClass("is-touch-editing", Boolean(this.port.getSession()));
-    window.requestAnimationFrame(() => this.handleMobileResize());
+    this.work.frame(window, () => this.handleMobileResize());
     dock.empty();
     const button = (
       label: string,
@@ -378,6 +380,7 @@ export class ViewShell {
   }
 
   teardownShell(): void {
+    this.work.reset();
     this.disposeBranchViewport?.();
     this.disposeBranchViewport = null;
     this.contentEl.empty();

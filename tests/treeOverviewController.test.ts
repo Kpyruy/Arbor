@@ -1,9 +1,39 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { TreeOverviewController } from "../src/view/overview/TreeOverviewController";
+import { TreeOverviewController, type TreeOverviewPort } from "../src/view/overview/TreeOverviewController";
 import { readSource, sourceClass, sourceMethod } from "./helpers/viewSource";
 
 describe("TreeOverviewController", () => {
+  it("retains a pending keyboard-focus request across a cancelled render frame", () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let nextId = 0;
+    let cleared = 0;
+    // This scheduling test deliberately has no DOM: only the focus command's
+    // consumption is observed. Geometry/focus placement belongs to host checks.
+    const controller = new TreeOverviewController({ clearPendingFocus: () => { cleared += 1; } } as TreeOverviewPort);
+    const scheduler = controller as unknown as { restoreOverviewKeyboardFocusAfterMutation(): void };
+    vi.stubGlobal("window", {
+      requestAnimationFrame: (callback: FrameRequestCallback) => { frames.set(++nextId, callback); return nextId; },
+      cancelAnimationFrame: (id: number) => frames.delete(id)
+    });
+    try {
+      controller.requestKeyboardFocusAfterMutation();
+      scheduler.restoreOverviewKeyboardFocusAfterMutation();
+      controller.invalidate();
+      expect(frames.size).toBe(0);
+      expect(cleared).toBe(0);
+      scheduler.restoreOverviewKeyboardFocusAfterMutation();
+      expect(frames.size).toBe(1);
+      frames.get(nextId)?.(1);
+      expect(cleared).toBe(1);
+      frames.clear();
+      scheduler.restoreOverviewKeyboardFocusAfterMutation();
+      expect(frames.size).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("owns published overview surfaces and invalidates a stale staged render", () => {
     const source = sourceClass("src/view/overview/TreeOverviewController.ts", "TreeOverviewController");
 

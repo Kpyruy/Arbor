@@ -1,5 +1,29 @@
 # Manual QA Checklist
 
+## Modularization Acceptance
+
+Run against disposable copies in a test vault, on desktop and a physical phone.
+These checks have not been completed merely by passing the automated suite.
+
+- Use two different notes in separate Arbor leaves. Edit, save, switch files and
+  close/reopen; drafts, selections and output profiles must not cross leaves.
+- Switch Branch Editor → Tree Overview → Output Preview → Branch Editor ten
+  times. Repeat while Markdown/images are still loading. Old content must not
+  reappear and all toolbar controls must remain clickable.
+- Repeat open/close twenty times, including closing with a draft. Confirm saved
+  content after reopening. In the host harness, compare Arbor-owned pending
+  timers/listeners after settling; do not count Obsidian's global callbacks.
+- Test rapid arrows, numeric navigation, Ctrl/Cmd+arrow, Delete, Enter, Escape,
+  drag-and-drop and links. Repeat LTR/RTL with long breadcrumbs and long blocks.
+- Check zoom at 25%, 100% and 160%, two-finger pinch and the phone keyboard;
+  selection must remain visible without jumps or changed card spacing.
+- Switch profiles in both editors before a save finishes. Check inherited
+  exclusions, undo/redo, raw invalid metadata, clean export and one-page PNG/PDF.
+- On the same 500-block fixture, compare baseline/refactor in three runs:
+  median open/render time, peak DOM nodes and Markdown-render call counts.
+  Overview selection/zoom must not render all Markdown; investigate consistent
+  regressions above 10% before release.
+
 ## Core Rendering
 
 - Open a note with an Arbor structure footer.

@@ -1,5 +1,6 @@
 import type { BranchBlockId } from "../../types";
 import type { BranchViewContext, SelectionOptions } from "../state/viewTypes";
+import { ViewWorkScope } from "../runtime/ViewWorkScope";
 
 export interface SearchPort {
   getFrame(): HTMLElement | null;
@@ -18,6 +19,7 @@ export class SearchController {
   private query = "";
   private searchOpen = false;
   private shouldFocusSearchInput = false;
+  private readonly work = new ViewWorkScope();
 
   constructor(private readonly port: SearchPort) {}
 
@@ -129,7 +131,9 @@ export class SearchController {
     }
     if (this.shouldFocusSearchInput) {
       this.shouldFocusSearchInput = false;
-      window.requestAnimationFrame(() => {
+      const input = this.searchInputEl;
+      this.work.frame(window, () => {
+        if (this.searchInputEl !== input || !input?.isConnected) return;
         this.searchInputEl?.focus();
         this.searchInputEl?.select();
       });
@@ -141,6 +145,7 @@ export class SearchController {
   }
 
   reset(): void {
+    this.work.reset();
     this.searchOpen = false;
     this.shouldFocusSearchInput = false;
     this.query = "";

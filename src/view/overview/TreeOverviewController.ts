@@ -4,6 +4,7 @@ import { resolveOverviewCardSelectionState, startOverviewSelectionAnimation } fr
 import { extractSnippet } from "../../utils";
 import type { BranchBlock, BranchBlockId } from "../../types";
 import { applyOverviewLayout } from "./overviewDom";
+import { ViewWorkScope } from "../runtime/ViewWorkScope";
 import type { BranchViewContext, EditorPort, MarkdownPort, SelectionPort, ViewReadPort } from "../state/viewTypes";
 
 export interface TreeOverviewPort {
@@ -37,11 +38,13 @@ export class TreeOverviewController {
   private shouldCenterOverviewOnNextRender = false;
   private shouldRestoreOverviewKeyboardFocusAfterMutation = false;
   private viewportDisposer: (() => void) | null = null;
+  private readonly work = new ViewWorkScope();
 
   constructor(private readonly port: TreeOverviewPort) {}
 
   invalidate(): void {
     this.overviewRenderVersion += 1;
+    this.work.reset();
   }
 
   getElements(): { stage: HTMLElement | null; viewport: HTMLElement | null; scene: HTMLElement | null; surface: HTMLElement | null } {
@@ -59,6 +62,8 @@ export class TreeOverviewController {
     if (!body || !state) {
       return;
     }
+    const workToken = this.work.token();
+    const filePath = this.port.read.getFilePath();
 
     if (!this.overviewStageEl || !this.overviewViewportEl || !this.overviewSceneEl || !this.overviewSurfaceEl) {
       this.overviewStageEl = body.createDiv({ cls: "arbor-overview-stage" });
@@ -115,7 +120,7 @@ export class TreeOverviewController {
         editor.value = session.value;
         this.port.editor.resizeEditor(editor);
         if (session.autofocus) {
-          window.requestAnimationFrame(() => {
+          this.work.frame(window, () => {
             if (this.port.editor.getSession() !== session) {
               return;
             }
@@ -128,11 +133,18 @@ export class TreeOverviewController {
       } else {
         const content = card.createDiv({ cls: "arbor-overview-card-content markdown-rendered" });
         await this.port.markdown.render(block.content, content, this.port.read.getFilePath());
+        if (!this.work.isCurrent(workToken) || overviewRenderVersion !== this.overviewRenderVersion
+          || this.port.read.getState() !== state || this.port.read.getFilePath() !== filePath) {
+          surface.remove();
+          return;
+        }
         if (content.innerText.trim().length === 0) {
           content.setText(extractSnippet(block.content, settings.previewSnippetLength));
         }
         content.querySelectorAll("img").forEach((image) => {
-          image.addEventListener("load", () => this.port.requestRender(), { once: true });
+          image.addEventListener("load", () => {
+            if (card.isConnected && this.overviewSurfaceEl?.contains(card)) this.port.requestRender();
+          }, { once: true });
         });
       }
       this.port.syncOutputCardPresentation(card, block.id, this.port.getContext());
@@ -164,6 +176,10 @@ export class TreeOverviewController {
       surface.remove();
       return;
     }
+    if (!this.work.isCurrent(workToken) || this.port.read.getState() !== state || this.port.read.getFilePath() !== filePath) {
+      surface.remove();
+      return;
+    }
     cardsById.forEach((card, blockId) => {
       measuredHeights.set(blockId, card.scrollHeight);
       card.removeClass("is-measuring");
@@ -188,8 +204,11 @@ export class TreeOverviewController {
     viewport.toggleClass("is-zoomed-out", currentSettings.zoomLevel < 0.78);
     this.port.restoreViewport();
     if (this.shouldCenterOverviewOnNextRender) {
-      this.shouldCenterOverviewOnNextRender = false;
-      window.requestAnimationFrame(() => this.port.centerSelected());
+      this.work.frame(window, () => {
+        if (!this.shouldCenterOverviewOnNextRender) return;
+        this.shouldCenterOverviewOnNextRender = false;
+        this.port.centerSelected();
+      });
     }
     this.restoreOverviewKeyboardFocusAfterMutation();
     this.port.syncTouchDock();
@@ -247,7 +266,7 @@ export class TreeOverviewController {
     editor.value = session.value;
     this.port.editor.resizeEditor(editor);
     this.port.syncOutputCardPresentation(card, block.id, this.port.getContext());
-    window.requestAnimationFrame(() => {
+    this.work.frame(window, () => {
       if (this.port.editor.getSession() !== session) {
         return;
       }
@@ -263,6 +282,8 @@ export class TreeOverviewController {
   async restoreOverviewCardContentInPlace(blockId: BranchBlockId): Promise<void> {
     const card = this.overviewSurfaceEl?.querySelector<HTMLElement>(`.arbor-overview-card[data-block-id="${blockId}"]`);
     const state = this.port.read.getState();
+    const workToken = this.work.token();
+    const filePath = this.port.read.getFilePath();
     const block = state ? getBlock(state.metadata, blockId) : null;
     if (!card || !block) {
       return;
@@ -272,6 +293,9 @@ export class TreeOverviewController {
     card.removeClass("is-editing");
     const content = card.createDiv({ cls: "arbor-overview-card-content markdown-rendered" });
     await this.port.markdown.render(block.content, content, this.port.read.getFilePath());
+    if (!this.work.isCurrent(workToken) || this.port.read.getState() !== state || this.port.read.getFilePath() !== filePath || !this.overviewSurfaceEl?.contains(card)) {
+      return;
+    }
     if (content.innerText.trim().length === 0) {
       content.setText(extractSnippet(block.content, this.port.read.getSettings().previewSnippetLength));
     }
@@ -325,9 +349,10 @@ export class TreeOverviewController {
     if (!this.shouldRestoreOverviewKeyboardFocusAfterMutation) {
       return;
     }
-    this.shouldRestoreOverviewKeyboardFocusAfterMutation = false;
-    this.port.clearPendingFocus();
-    window.requestAnimationFrame(() => {
+    this.work.frame(window, () => {
+      if (!this.shouldRestoreOverviewKeyboardFocusAfterMutation) return;
+      this.shouldRestoreOverviewKeyboardFocusAfterMutation = false;
+      this.port.clearPendingFocus();
       this.overviewViewportEl?.focus({ preventScroll: true });
     });
   }

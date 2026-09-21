@@ -8,6 +8,7 @@ import { deepClone, extractPathLabel } from "../../utils";
 import type { OutputProfilesController } from "../OutputProfilesModal";
 import { getBlockOutputMenuActions } from "../output/outputPresentation";
 import type { EditorPort, SelectionPort, ViewReadPort } from "../state/viewTypes";
+import { ViewWorkScope } from "../runtime/ViewWorkScope";
 
 export interface MenuCommands {
   createChild(): Promise<void>;
@@ -58,7 +59,12 @@ export interface ViewMenusPort {
 }
 
 export class ViewMenus {
+  private readonly work = new ViewWorkScope();
   constructor(private readonly port: ViewMenusPort) {}
+
+  reset(): void {
+    this.work.reset();
+  }
 
   openViewMenu(event?: MouseEvent): void {
     event?.preventDefault();
@@ -296,7 +302,7 @@ export class ViewMenus {
 
   private applyDangerMenuItemStyles(menu: Menu): void {
     const menuWithDom = menu as Menu & { dom?: HTMLElement };
-    window.requestAnimationFrame(() => {
+    this.work.frame(window, () => {
       const menuEl = menuWithDom.dom;
       if (!menuEl) {
         return;

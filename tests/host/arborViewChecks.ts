@@ -190,6 +190,7 @@ export async function checkTreeOverviewControllerHost(fixture: TreeOverviewHostF
   const overview = fixture.createOverview(markdown, () => { revealCount += 1; });
   assertHost(overview instanceof TreeOverviewController, "Fixture did not create the real TreeOverviewController");
 
+  let outsideFocus: HTMLButtonElement | null = null;
   try {
 
   const first = overview.syncTreeOverview();
@@ -243,7 +244,7 @@ export async function checkTreeOverviewControllerHost(fixture: TreeOverviewHostF
     assertHost(editorCard.querySelector(".arbor-overview-card-content.markdown-rendered"), "Overview card did not restore Markdown content in place");
     assertHost(JSON.stringify(fixture.getCamera()) === JSON.stringify(cameraBeforeEditor), "Overview editor changed the camera");
 
-    const outsideFocus = fixture.body.ownerDocument.createElement("button");
+    outsideFocus = fixture.body.ownerDocument.createElement("button");
     fixture.body.append(outsideFocus);
     outsideFocus.focus();
     overview.requestKeyboardFocusAfterMutation(true);
@@ -259,7 +260,49 @@ export async function checkTreeOverviewControllerHost(fixture: TreeOverviewHostF
     assertHost(fixture.body.ownerDocument.activeElement === outsideFocus, "False focus request still focused the overview viewport");
     assertHost(JSON.stringify(fixture.getCamera()) === JSON.stringify(cameraBeforeNoopRequests), "False center request moved the overview camera");
   } finally {
+    outsideFocus?.remove();
     overview.reset();
+  }
+}
+
+export interface PendingMarkdownResetHostFixture {
+  body: HTMLElement;
+  syncBranch(): Promise<void>;
+  resetBranch(): void;
+  syncLinear(): Promise<void>;
+  resetLinear(): void;
+  settlePendingMarkdown(): Promise<void>;
+}
+
+export async function checkPendingBranchAndLinearMarkdownResetHost(fixture: PendingMarkdownResetHostFixture): Promise<void> {
+  const branch = fixture.syncBranch();
+  fixture.resetBranch();
+  await fixture.settlePendingMarkdown();
+  await branch;
+  assertHost(fixture.body.querySelector(".arbor-column") === null, "Reset branch Markdown published after its owner reset");
+
+  const linear = fixture.syncLinear();
+  fixture.resetLinear();
+  await fixture.settlePendingMarkdown();
+  await linear;
+  assertHost(fixture.body.querySelector(".arbor-preview-pane") === null, "Reset linear Markdown published after its owner reset");
+}
+
+export interface RepeatedLifecycleHostFixture {
+  body: HTMLElement;
+  open(): Promise<void>;
+  close(): Promise<void>;
+  setMode(mode: ArborPresentationMode): Promise<void>;
+}
+
+export async function checkRepeatedArborLifecycleHost(fixture: RepeatedLifecycleHostFixture): Promise<void> {
+  for (let index = 0; index < 20; index += 1) {
+    await fixture.open();
+    for (let cycle = 0; cycle < 10; cycle += 1) {
+      for (const mode of ["editor", "overview", "output"] as const) await fixture.setMode(mode);
+    }
+    await fixture.close();
+    assertHost(fixture.body.querySelector(".arbor-frame") === null, "Closed Arbor leaf retained its shell DOM");
   }
 }
 

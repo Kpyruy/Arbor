@@ -1,11 +1,12 @@
 import { build } from "esbuild";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { ViewWorkScope } from "../src/view/runtime/ViewWorkScope";
 import type { TFile } from "obsidian";
 import { buildBranchDocument } from "../src/storage/document";
 import { linearizeTree } from "../src/storage/serializer";
 import type { DocumentPort } from "../src/view/state/DocumentController";
 import type { LoadingOverlayState } from "../src/view/state/viewTypes";
-import { fixtureTree } from "./helpers/arborFixtures";
+import { fixtureSettings, fixtureTree } from "./helpers/arborFixtures";
 
 type LifecycleModule = typeof import("../src/view/ArborView") & {
   DocumentController: typeof import("../src/view/state/DocumentController").DocumentController;
@@ -196,6 +197,8 @@ function createHarness(options: { legacyA?: boolean; legacyB?: boolean; manualPa
   const view = Object.create(lifecycle.ArborView.prototype) as TestView;
   Object.assign(view, {
     loadGeneration: 0,
+    work: new ViewWorkScope(),
+    renderGeneration: 0,
     file: currentFile,
     documentController: new lifecycle.DocumentController(port),
     plugin: {
@@ -269,6 +272,55 @@ function content(view: TestView): string | undefined {
 }
 
 describe("ArborView load lifecycle", () => {
+  it("stops an older render pipeline as soon as a newer render is requested", async () => {
+    const harness = createHarness();
+    await harness.view.onLoadFile(harness.files.a);
+    const branch = deferred<void>();
+    let requestedFrame: FrameRequestCallback | undefined;
+    let previews = 0;
+    let reveals = 0;
+    Object.assign(harness.view.plugin, { settings: fixtureSettings() });
+    Object.assign(harness.view, {
+      render: () => lifecycle.ArborView.prototype.render.call(harness.view),
+      contentEl: { addClass: () => undefined },
+      applyCssVars: () => undefined,
+      applyViewClasses: () => undefined,
+      syncOutputProfileButton: () => undefined,
+      syncOverviewModeButton: () => undefined,
+      syncTouchDock: () => undefined,
+      syncViewportEdgeFades: () => undefined,
+      syncBreadcrumbs: () => undefined,
+      syncBanner: () => undefined,
+      shell: { showMode: () => undefined, isCompact: () => false },
+      search: { getQuery: () => "", syncSearchOverlay: () => undefined },
+      overview: { invalidate: () => undefined, hide: () => undefined },
+      output: { invalidate: () => undefined },
+      branchRenderer: { invalidate: () => undefined, syncColumns: () => branch.promise },
+      preview: { invalidate: () => undefined, syncPreview: async () => { previews += 1; } },
+      armSceneWidthForPendingScroll: () => 0,
+      applyPendingFocusAndScroll: () => { reveals += 1; },
+      syncHoverLinkedState: () => undefined
+    });
+    vi.stubGlobal("window", {
+      requestAnimationFrame: (callback: FrameRequestCallback) => { requestedFrame = callback; return 1; },
+      cancelAnimationFrame: () => undefined
+    });
+    try {
+      const view = harness.view as TestView & { renderNow(): Promise<void> };
+      const oldRender = view.renderNow();
+      view.render();
+      branch.resolve(undefined);
+      await oldRender;
+      expect(previews).toBe(0);
+      expect(reveals).toBe(0);
+      requestedFrame?.(1);
+      await waitUntil(() => reveals === 1);
+      expect(previews).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("does not clear a newer loaded document when an old unload finishes saving", async () => {
     const harness = createHarness();
     await harness.view.onLoadFile(harness.files.a);
@@ -280,6 +332,36 @@ describe("ArborView load lifecycle", () => {
     saving.resolve(undefined);
     await unloading;
     expect(content(harness.view)).toBe("Content B");
+  });
+
+  it("cancels queued render work on close and rejects later render requests", async () => {
+    const harness = createHarness();
+    const frames = new Map<number, FrameRequestCallback>();
+    let nextId = 0;
+    vi.stubGlobal("window", {
+      requestAnimationFrame: (callback: FrameRequestCallback) => {
+        frames.set(++nextId, callback);
+        return nextId;
+      },
+      cancelAnimationFrame: (id: number) => frames.delete(id)
+    });
+    Object.assign(harness.view, {
+      render: () => lifecycle.ArborView.prototype.render.call(harness.view),
+      overview: { invalidate: () => undefined, reset: () => undefined },
+      output: { invalidate: () => undefined, reset: () => undefined },
+      branchRenderer: { invalidate: () => undefined },
+      preview: { invalidate: () => undefined, reset: () => undefined }
+    });
+    try {
+      harness.view.render();
+      expect(frames.size).toBe(1);
+      await harness.view.onClose();
+      expect(frames.size).toBe(0);
+      harness.view.render();
+      expect(frames.size).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it.each([
@@ -379,6 +461,36 @@ describe("ArborView load lifecycle", () => {
     await loading;
 
     expect(harness.opened).toEqual([]);
+  });
+
+  it("awaits a pending draft save before close cleans up UI controllers", async () => {
+    const harness = createHarness();
+    const order: string[] = [];
+    const saving = deferred<void>();
+    Object.assign(harness.view, {
+      commitEditIfNeeded: async () => {
+        order.push("save-start");
+        await saving.promise;
+        order.push("save-finish");
+      },
+      zoomController: { reset: () => order.push("zoom-reset") },
+      touchController: { reset: () => order.push("touch-reset") },
+      branchViewport: { reset: () => order.push("branch-reset") },
+      overviewViewport: { reset: () => order.push("overview-viewport-reset") },
+      dragDropController: { reset: () => order.push("drag-reset") },
+      overview: { reset: () => order.push("overview-reset") }
+    });
+
+    const closing = harness.view.onClose();
+    await flush();
+    expect(order).toEqual(["save-start"]);
+
+    saving.resolve(undefined);
+    await closing;
+    expect(order).toContain("save-finish");
+    expect(order.indexOf("zoom-reset")).toBeGreaterThan(order.indexOf("save-finish"));
+    expect(order.indexOf("touch-reset")).toBeGreaterThan(order.indexOf("save-finish"));
+    expect(order.indexOf("overview-reset")).toBeGreaterThan(order.indexOf("save-finish"));
   });
 
   it("does not persist a migration after it pauses at the next paint and the file switches", async () => {
