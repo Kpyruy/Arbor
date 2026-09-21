@@ -269,6 +269,19 @@ function content(view: TestView): string | undefined {
 }
 
 describe("ArborView load lifecycle", () => {
+  it("does not clear a newer loaded document when an old unload finishes saving", async () => {
+    const harness = createHarness();
+    await harness.view.onLoadFile(harness.files.a);
+    const saving = deferred<void>();
+    Object.assign(harness.view, { commitEditIfNeeded: () => saving.promise });
+    const unloading = harness.view.onUnloadFile();
+    harness.setFile(harness.files.b);
+    await harness.view.onLoadFile(harness.files.b);
+    saving.resolve(undefined);
+    await unloading;
+    expect(content(harness.view)).toBe("Content B");
+  });
+
   it.each([
     { label: "canonical", legacy: false },
     { label: "legacy", legacy: true }

@@ -648,7 +648,9 @@ export class ArborView extends FileView {
 
   async onUnloadFile(): Promise<void> {
     this.invalidatePendingLoads();
+    const generation = this.loadGeneration;
     await this.commitEditIfNeeded();
+    if (generation !== this.loadGeneration) return;
     this.resetViewState();
   }
 
