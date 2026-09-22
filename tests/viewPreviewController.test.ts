@@ -40,7 +40,7 @@ describe("view preview controllers", () => {
     expect(searchSource).toContain("getContext(): BranchViewContext | null");
     expect(searchSource).toContain("selectBlock(id: BranchBlockId, options?: SelectionOptions): void");
     expect(searchSource).toContain("handleSearchShortcut(event: KeyboardEvent): boolean");
-    expect(search).toContain("const firstMatch = this.port.getContext()?.overviewNodes.find");
+    expect(search).toContain("context.searchResults");
   });
 
   it("keeps output rendering and search state out of the facade", () => {

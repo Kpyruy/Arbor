@@ -340,20 +340,20 @@ export function checkSearchControllerContextHost(fixture: SearchControllerHostFi
     context = fixture.contextB;
     search.syncSearchOverlay(fixture.contextB);
     const input = fixture.frame.querySelector<HTMLInputElement>(".arbor-search-input");
-    const go = Array.from(fixture.frame.querySelectorAll<HTMLButtonElement>("button"))
-      .find((button) => button.textContent === "Go to match");
-    assertHost(input && go, "Search overlay controls were not mounted in the injected host frame");
+    assertHost(input, "Search overlay input was not mounted in the injected host frame");
 
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     assertHost(selected[0]?.id === firstMatchB.id, "Enter used stale search context");
     assertHost(selected[0]?.focus === true, "Enter did not focus the current match");
-    assertHost(search.isOpen(), "Enter unexpectedly closed the search overlay");
+    assertHost(!search.isOpen(), "Enter did not close the search overlay");
+    search.openSearchOverlay();
+    search.syncSearchOverlay(fixture.contextB);
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true }));
     assertHost(shortcutCalls.length === 1 && shortcutCalls[0]?.key === "k", "Only the search shortcut should be consumed");
-    go.click();
-    assertHost(selected[1]?.id === firstMatchB.id, "Go to match used stale search context");
-    assertHost(selected[1]?.focus === true, "Go to match did not focus the current match");
-    assertHost(!search.isOpen(), "Go to match did not close the search overlay");
+    fixture.frame.querySelector<HTMLButtonElement>(".arbor-search-result")?.click();
+    assertHost(selected[1]?.id === firstMatchB.id, "Click used stale search context");
+    assertHost(selected[1]?.focus === true, "Click did not focus the current match");
+    assertHost(!search.isOpen(), "Click did not close the search overlay");
   } finally {
     search.reset();
   }

@@ -396,7 +396,11 @@ export class ArborView extends FileView {
     });
     this.search = new SearchController({
       getFrame: () => this.frameEl,
-      getContext: () => this.viewContext,
+      // Input can arrive before the scheduled render updates viewContext.
+      getContext: () => this.state ? buildViewContext(
+        this.state.metadata, this.state.selectedBlockId, this.state.outputState,
+        this.search.getQuery(), this.plugin.settings
+      ) : null,
       selectBlock: (id, options) => this.selectBlock(id, options),
       handleSearchShortcut: (event) => this.navigationController.handleSearchShortcut(event),
       requestRender: () => this.render()
@@ -1014,7 +1018,7 @@ export class ArborView extends FileView {
     if (options?.focus) {
       this.pendingFocusBlockId = this.state.selectedBlockId;
     }
-    if (selectionChanged) {
+    if (selectionChanged || options?.reveal === true) {
       this.stopHorizontalScrollMotion(false);
       this.pendingScrollBlockId = this.state.selectedBlockId;
     }
@@ -1031,15 +1035,16 @@ export class ArborView extends FileView {
         this.plugin.settings
       );
       this.search.syncSearchOverlay(this.viewContext);
-      this.overview.syncOverviewSelection(selectionChanged && options?.reveal !== false);
+      this.overview.syncOverviewSelection((selectionChanged || options?.reveal === true) && options?.reveal !== false);
+      if (options?.focus) this.overview.getElements().viewport?.focus({ preventScroll: true });
       return;
     }
 
-    if (!selectionChanged && !options?.focus) {
+    if (!selectionChanged && !options?.focus && options?.reveal !== true) {
       return;
     }
 
-    if (!selectionChanged && options?.focus && this.state.selectedBlockId) {
+    if (!selectionChanged && options?.focus && options?.reveal !== true && this.state.selectedBlockId) {
       const card = this.contentEl.querySelector<HTMLElement>(`.arbor-card[data-block-id="${this.state.selectedBlockId}"]`);
       card?.focus({ preventScroll: true });
       return;

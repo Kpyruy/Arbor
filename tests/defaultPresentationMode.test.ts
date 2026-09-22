@@ -214,7 +214,7 @@ describe("default presentation mode", () => {
   it("cancels an in-flight editor scroll before arrow navigation renders the next selection", () => {
     const selectBlock = sourceMethod("src/view/ArborView.ts", "ArborView", "selectBlock");
 
-    expect(selectBlock).toContain("if (selectionChanged) {\n      this.stopHorizontalScrollMotion(false);");
+    expect(selectBlock).toContain("if (selectionChanged || options?.reveal === true) {\n      this.stopHorizontalScrollMotion(false);");
     expect(selectBlock.indexOf("this.stopHorizontalScrollMotion(false);")).toBeLessThan(
       selectBlock.indexOf("this.pendingScrollBlockId = this.state.selectedBlockId;")
     );

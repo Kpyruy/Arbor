@@ -191,6 +191,42 @@ function createProfileView(pendingSave: Promise<unknown>) {
 }
 
 describe("Output Profiles manager UI", () => {
+  it.each(["editor", "overview"])("explicitly reveals an already-selected search result in %s", (mode) => {
+    const state = fixtureLoaded();
+    const reveals: boolean[] = [];
+    let overviewFocus = 0;
+    let renders = 0;
+    const view = {
+      state,
+      editingSession: null,
+      presentationMode: mode,
+      documentController: { setSelection: (id: string) => { state.selectedBlockId = id; } },
+      syncTouchDock: () => undefined,
+      syncBreadcrumbs: () => undefined,
+      stopHorizontalScrollMotion: () => undefined,
+      plugin: { settings: { breadcrumbLabelPreferredPrefix: "#", breadcrumbLabelFallback: "firstLine" } },
+      search: { getQuery: () => "", syncSearchOverlay: () => undefined },
+      overview: {
+        syncOverviewSelection: (reveal: boolean) => reveals.push(reveal),
+        getElements: () => ({ viewport: { focus: () => { overviewFocus += 1; } } })
+      },
+      contentEl: { querySelector: () => null },
+      pendingScrollBlockId: null,
+      render: () => { renders += 1; }
+    };
+    arborViewUi.ArborView.prototype.selectBlock.call(
+      view as unknown as InstanceType<ArborViewUiModule["ArborView"]>,
+      "first", { focus: true, reveal: true }
+    );
+    if (mode === "overview") {
+      expect(reveals).toEqual([true]);
+      expect(overviewFocus).toBe(1);
+    } else {
+      expect(view.pendingScrollBlockId).toBe("first");
+      expect(renders).toBe(1);
+    }
+  });
+
   it("ignores owned and in-flight writes, then reloads an external modification", async () => {
     const pending = deferred();
     const view = createProfileView(pending.promise);

@@ -10,10 +10,12 @@ import {
   getChildren
 } from "../../model/tree";
 import { getActiveOutputProfile, resolveOutputStates } from "../../outputProfiles";
-import { extractPathLabel } from "../../utils";
-import type { BranchViewContext } from "./viewTypes";
+import { extractPathLabel, extractSnippet } from "../../utils";
+import type { BranchSearchResult, BranchViewContext } from "./viewTypes";
 
 export type LabelSettings = Pick<ArborSettings, "breadcrumbLabelPreferredPrefix" | "breadcrumbLabelFallback">;
+
+const SEARCH_SNIPPET_LENGTH = 160;
 
 export function buildPreviewPathLabels(
   metadata: BranchTreeMetadata,
@@ -30,6 +32,18 @@ export function buildPreviewPathLabels(
   );
 }
 
+function buildSearchSnippet(markdown: string, searchQuery: string): string {
+  const content = extractSnippet(markdown, Number.MAX_SAFE_INTEGER);
+  const matchIndex = content.toLocaleLowerCase().indexOf(searchQuery);
+  if (matchIndex < 0 || content.length <= SEARCH_SNIPPET_LENGTH) {
+    return extractSnippet(content, SEARCH_SNIPPET_LENGTH);
+  }
+
+  const start = Math.max(0, matchIndex - 48);
+  const end = Math.min(content.length, matchIndex + searchQuery.length + 96);
+  return `${start > 0 ? "..." : ""}${content.slice(start, end).trim()}${end < content.length ? "..." : ""}`;
+}
+
 export function buildViewContext(
   metadata: BranchTreeMetadata,
   selectedBlockId: BranchBlockId | null,
@@ -44,12 +58,14 @@ export function buildViewContext(
   const searchQuery = query.trim().toLocaleLowerCase();
   const searchMatchedIds = new Set<BranchBlockId>();
   const searchRelatedIds = new Set<BranchBlockId>();
+  const searchResults: BranchSearchResult[] = [];
   const outputProfile = getActiveOutputProfile(outputState);
   const outputResolutions = resolveOutputStates(metadata, outputProfile);
 
   if (searchQuery.length > 0) {
-    for (const block of metadata.blocks) {
-      const pathLabel = buildPreviewPathLabels(metadata, block.id, labelSettings).join(" ");
+    for (const block of buildLinearOrder(metadata)) {
+      const pathLabels = buildPreviewPathLabels(metadata, block.id, labelSettings);
+      const pathLabel = pathLabels.join(" ");
       const haystack = `${block.content}\n${pathLabel}`.toLocaleLowerCase();
       if (!haystack.includes(searchQuery)) {
         continue;
@@ -57,6 +73,17 @@ export function buildViewContext(
 
       searchMatchedIds.add(block.id);
       getActivePath(metadata, block.id).forEach((pathBlock) => searchRelatedIds.add(pathBlock.id));
+      searchResults.push({
+        id: block.id,
+        title: extractPathLabel(block.content, {
+          preferredPrefix: labelSettings.breadcrumbLabelPreferredPrefix,
+          fallback: labelSettings.breadcrumbLabelFallback,
+          maxWords: 5,
+          maxLength: 52
+        }),
+        snippet: buildSearchSnippet(block.content, searchQuery),
+        path: pathLabels.join(" / ") || "Root"
+      });
     }
   }
 
@@ -93,6 +120,7 @@ export function buildViewContext(
     searchQuery,
     searchMatchedIds,
     searchRelatedIds,
+    searchResults,
     previewVisibleIds,
     overviewNodes,
     outputProfile,

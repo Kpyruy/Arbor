@@ -139,7 +139,7 @@ describe("overview arrow navigation", () => {
     const revealSelectedCard = sourceMethod("src/view/overview/OverviewViewportController.ts", "OverviewViewportController", "revealOverviewSelectedCard");
 
     expect(selectBlock).toContain('this.presentationMode === "overview"');
-    expect(selectBlock).toContain("this.overview.syncOverviewSelection(selectionChanged && options?.reveal !== false)");
+    expect(selectBlock).toContain("this.overview.syncOverviewSelection((selectionChanged || options?.reveal === true) && options?.reveal !== false)");
     expect(selection).not.toContain("markdown.render");
     expect(revealSelectedCard).toContain('behavior: "smooth"');
     expect(revealSelectedCard).toContain("viewport.scrollTo");

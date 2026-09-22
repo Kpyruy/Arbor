@@ -25,6 +25,13 @@ export interface BranchOverviewNode {
   isSearchRelated: boolean;
 }
 
+export interface BranchSearchResult {
+  id: BranchBlockId;
+  title: string;
+  snippet: string;
+  path: string;
+}
+
 export type EditingOrigin = "card" | "preview" | "overview";
 
 export interface EditingSession {
@@ -58,6 +65,7 @@ export interface BranchViewContext {
   searchQuery: string;
   searchMatchedIds: Set<BranchBlockId>;
   searchRelatedIds: Set<BranchBlockId>;
+  searchResults: BranchSearchResult[];
   previewVisibleIds: Set<BranchBlockId> | null;
   overviewNodes: BranchOverviewNode[];
   outputProfile: ArborOutputProfile;

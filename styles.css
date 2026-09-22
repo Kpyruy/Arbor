@@ -397,6 +397,11 @@
 
 .arbor-search-dialog {
   width: min(640px, calc(100vw - 48px));
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border: 1px solid color-mix(in srgb, var(--interactive-accent) 22%, var(--background-modifier-border));
   background: color-mix(in srgb, var(--background-secondary) 96%, black 4%);
   border-radius: 16px;
@@ -420,6 +425,60 @@
   outline-offset: 0;
 }
 
+.arbor-search-results {
+  display: grid;
+  gap: 6px;
+  max-height: min(360px, calc(100dvh - 250px));
+  margin-top: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.arbor-search-result {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  height: auto;
+  min-height: 44px;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-normal);
+  cursor: pointer;
+  padding: 10px 11px;
+  text-align: start;
+}
+
+.arbor-search-result:hover,
+.arbor-search-result:focus-visible,
+.arbor-search-result.is-selected {
+  border-color: color-mix(in srgb, var(--interactive-accent) 36%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+}
+
+.arbor-search-result-title { font-weight: 600; }
+.arbor-search-result-snippet { color: var(--text-muted); font-size: 0.9em; }
+.arbor-search-result-path { color: var(--text-faint); font-size: 0.78em; }
+
+.arbor-search-match {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--interactive-accent) 30%, transparent);
+  color: var(--text-normal);
+}
+
+.arbor-search-empty {
+  color: var(--text-muted);
+  padding: 16px 10px;
+  text-align: center;
+}
+
 .arbor-search-meta {
   color: var(--text-faint);
   font-size: 0.78rem;
@@ -432,6 +491,8 @@
   justify-content: space-between;
   gap: 12px;
   margin-top: 12px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
 }
 
 .arbor-search-clear {
@@ -2690,6 +2751,7 @@
 .arbor-view.has-touch-controls .arbor-overview-card.is-editing { max-height: none; }
 .arbor-view.is-compact .arbor-search-dialog { width: 100%; max-width: 100%; padding: 16px; }
 .arbor-view.is-compact .arbor-search-input { width: 100%; min-width: 0; font-size: 16px; }
+.arbor-view.is-compact .arbor-search-results { max-height: min(42dvh, 320px); }
 .arbor-view.is-compact .arbor-search-footer { flex-wrap: wrap; }
 .arbor-search-footer button { min-height: 36px; }
 
