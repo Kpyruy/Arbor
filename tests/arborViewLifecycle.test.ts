@@ -84,6 +84,7 @@ beforeAll(async () => {
             "export class Menu {}",
             "export class Modal {}",
             "export const MarkdownRenderer = {};",
+            "export const Keymap = { isModEvent: () => false };",
             "export const Platform = {};",
             "export class Notice {}",
             "export class TFile {}",

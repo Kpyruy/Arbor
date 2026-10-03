@@ -66,6 +66,7 @@ beforeAll(async () => {
             "export class TFile {}",
             "export class WorkspaceLeaf {}",
             "export const MarkdownRenderer = {};",
+            "export const Keymap = { isModEvent: () => false };",
             "export const Platform = {};",
             "export const setIcon = () => undefined;"
           ].join("\n"),
