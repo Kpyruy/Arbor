@@ -23,6 +23,16 @@
     var(--background-primary);
 }
 
+.arbor-card-content,
+.arbor-overview-card-content,
+.arbor-preview-content,
+.arbor-preview-block-body,
+.arbor-output-preview-content,
+.arbor-output-preview-prefix,
+.arbor-output-preview-block {
+  font-family: var(--font-text);
+}
+
 .arbor-loading-view-panel {
   width: min(420px, calc(100vw - 64px));
   border: 1px solid color-mix(in srgb, var(--interactive-accent) 18%, var(--background-modifier-border));
@@ -1985,6 +1995,7 @@
   background: transparent;
   color: var(--text-normal);
   font: inherit;
+  font-family: var(--font-text);
   line-height: 1.65;
   padding: 2px 0 0;
   caret-color: var(--interactive-accent);

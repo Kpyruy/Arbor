@@ -11,6 +11,7 @@ All notable changes to Arbor should be documented in this file.
 
 ### Fixed
 
+- respected Obsidian's text font in rendered cards, previews, editors and Tree Overview exports without changing interface, code or custom heading fonts
 - opened internal links in Branch Editor and Tree Overview cards with the correct source path, heading/block/PDF subpath, and Obsidian new-pane shortcuts
 - kept link clicks, keyboard activation, double-clicks and plugin-handled links separate from card selection and editing
 - kept dragging a rendered link separate from moving its entire card
