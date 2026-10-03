@@ -4,6 +4,12 @@ All notable changes to Arbor should be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- opened internal links in Branch Editor and Tree Overview cards with the correct source path, heading/block/PDF subpath, and Obsidian new-pane shortcuts
+- kept link clicks, keyboard activation, double-clicks and plugin-handled links separate from card selection and editing
+- kept dragging a rendered link separate from moving its entire card
+
 ## 0.2.9 - 2026-09-15
 
 ### Added

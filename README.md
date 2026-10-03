@@ -111,6 +111,8 @@ If you want to install Arbor before it appears in the community catalog:
 6. Use the right-click menu to duplicate, move, delete, or continue a branch.
 7. Turn on `Selected block panel` from the Arbor menu if you want a focused preview/editor panel.
 
+Rendered links in Branch Editor and Tree Overview are clickable: internal links open their note, heading, block, or PDF destination. Ctrl/Cmd-click or middle-click opens a new tab. A link click stays separate from card selection and editing; double-click the card's ordinary text to edit it.
+
 ## Mobile controls
 
 On a phone, Arbor keeps the selected block's sibling column on screen and puts navigation in a bottom action bar. Tap a card to select it; double-tap a card or use **Edit** to edit it. **Save** and **Cancel** are always visible while editing. Plain `Enter` makes a new line, while `Ctrl/Cmd + Enter` on a hardware keyboard saves. Pinch with two fingers in the branch editor to adjust card and text density without leaving the active sibling column.
