@@ -27,6 +27,7 @@ function createController() {
     getSourcePath: () => "Folder/Source.md",
     paneForEvent: () => false,
     openInternal,
+    selectLocalBlock: (id) => { state.selectedBlockId = id; return true; },
     reportOpenError: vi.fn()
   });
   const actions = {

@@ -4,6 +4,7 @@ export interface CardLinkPort {
   getSourcePath(): string;
   paneForEvent(event: MouseEvent): PaneType | boolean;
   openInternal(linktext: string, sourcePath: string, pane: PaneType | boolean): Promise<void>;
+  selectLocalBlock(blockId: string): boolean;
   reportOpenError(error: unknown): void;
 }
 
@@ -24,8 +25,11 @@ export class CardLinkController {
     const anchor = findRenderedCardLink(event.target, card);
     if (!anchor) return false;
     if (event.defaultPrevented) return true;
-    if (!anchor.classList.contains("internal-link")) return true;
     if (anchor.closest(".internal-embed")) return true;
+    if (!anchor.classList.contains("internal-link")) {
+      this.handleLocalBlockLink(event, anchor);
+      return true;
+    }
     const primary = event.type === "click" && event.button === 0;
     const middle = event.type === "auxclick" && event.button === 1;
     if (!primary && !middle) return true;
@@ -47,6 +51,32 @@ export class CardLinkController {
       this.reportError(error);
     }
     return true;
+  }
+
+  private handleLocalBlockLink(event: MouseEvent, anchor: HTMLAnchorElement): void {
+    if (event.type !== "click" || event.button !== 0) return;
+    const href = anchor.getAttribute("href");
+    if (!href?.startsWith("obsidian://arbor?")) return;
+    let url: URL;
+    try {
+      url = new URL(href);
+    } catch {
+      return;
+    }
+    const blockId = url.searchParams.get("block");
+    if (!blockId || url.hash || url.searchParams.has("vault")
+      || url.searchParams.get("file") !== this.port.getSourcePath()
+      || this.port.paneForEvent(event) !== false) return;
+
+    try {
+      if (event.detail <= 1 && !this.port.selectLocalBlock(blockId)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    } catch (error) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.reportError(error);
+    }
   }
 
   private reportError(error: unknown): void {

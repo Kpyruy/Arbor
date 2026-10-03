@@ -34,6 +34,7 @@ function makeController(overrides: Partial<{
   paneForEvent: (event: MouseEvent) => "tab" | "split" | "window" | false;
   openInternal: (linktext: string, sourcePath: string, pane: "tab" | "split" | "window" | false) => Promise<void>;
   reportOpenError: (error: unknown) => void;
+  selectLocalBlock: (blockId: string) => boolean;
 }> = {}) {
   const openInternal = vi.fn(async () => undefined);
   const reportOpenError = overrides.reportOpenError ?? vi.fn();
@@ -42,6 +43,7 @@ function makeController(overrides: Partial<{
       getSourcePath: overrides.getSourcePath ?? (() => "Folder/Source.md"),
       paneForEvent: overrides.paneForEvent ?? (() => false),
       openInternal: overrides.openInternal ?? openInternal,
+      selectLocalBlock: overrides.selectLocalBlock ?? (() => false),
       reportOpenError
     }),
     openInternal,
@@ -50,6 +52,118 @@ function makeController(overrides: Partial<{
 }
 
 describe("CardLinkController", () => {
+  it("selects a copied same-note block link synchronously without native protocol navigation", () => {
+    let selected = "parent";
+    const { controller, openInternal } = makeController({
+      selectLocalBlock: (id) => { selected = id; return true; }
+    });
+    const { card, event } = makeLinkEvent({
+      internal: false,
+      href: "obsidian://arbor?file=Folder%2FSource.md&block=other-branch-child"
+    });
+    expect(controller.handleActivation(event, card)).toBe(true);
+    expect(selected).toBe("other-branch-child");
+    expect(Reflect.get(event, "preventDefault")).toHaveBeenCalledOnce();
+    expect(Reflect.get(event, "stopPropagation")).toHaveBeenCalledOnce();
+    expect(openInternal).not.toHaveBeenCalled();
+  });
+
+  it("consumes the second click without selecting a local block twice", () => {
+    let selections = 0;
+    const { controller } = makeController({ selectLocalBlock: () => { selections++; return true; } });
+    const href = "obsidian://arbor?file=Folder%2FSource.md&block=child";
+    const first = makeLinkEvent({ internal: false, href });
+    const second = makeLinkEvent({ internal: false, href, detail: 2 });
+    controller.handleActivation(first.event, first.card);
+    controller.handleActivation(second.event, second.card);
+    expect(selections).toBe(1);
+    expect(Reflect.get(second.event, "preventDefault")).toHaveBeenCalledOnce();
+  });
+
+  it("handles a keyboard-generated local click using the current source path", () => {
+    let path = "Before.md";
+    let selected = "parent";
+    const { controller } = makeController({
+      getSourcePath: () => path,
+      selectLocalBlock: (id) => { selected = id; return true; }
+    });
+    path = "Папка/Нотатка.md";
+    const { card, event } = makeLinkEvent({
+      internal: false, detail: 0,
+      href: "obsidian://arbor?file=%D0%9F%D0%B0%D0%BF%D0%BA%D0%B0%2F%D0%9D%D0%BE%D1%82%D0%B0%D1%82%D0%BA%D0%B0.md&block=child"
+    });
+    controller.handleActivation(event, card);
+    expect(selected).toBe("child");
+    expect(Reflect.get(event, "preventDefault")).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { type: "click" as const, button: 0, defaultPrevented: true },
+    { type: "auxclick" as const, button: 1, defaultPrevented: false }
+  ])("preserves owned or middle-click local links: %j", (activation) => {
+    let selected = "parent";
+    const { controller } = makeController({ selectLocalBlock: (id) => { selected = id; return true; } });
+    const { card, event } = makeLinkEvent({
+      internal: false, href: "obsidian://arbor?file=Folder%2FSource.md&block=child", ...activation
+    });
+    controller.handleActivation(event, card);
+    expect(selected).toBe("parent");
+    expect(Reflect.get(event, "preventDefault")).not.toHaveBeenCalled();
+  });
+
+  it("reports a local selection error without starting a second native navigation", () => {
+    const error = new Error("selection failed");
+    const reportOpenError = vi.fn();
+    const { controller } = makeController({
+      selectLocalBlock: () => { throw error; }, reportOpenError
+    });
+    const { card, event } = makeLinkEvent({
+      internal: false, href: "obsidian://arbor?file=Folder%2FSource.md&block=child"
+    });
+    expect(() => controller.handleActivation(event, card)).not.toThrow();
+    expect(reportOpenError).toHaveBeenCalledExactlyOnceWith(error);
+    expect(Reflect.get(event, "preventDefault")).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    "obsidian://arbor?file=Folder%2FOther.md&block=child",
+    "obsidian://arbor?file=Folder%2FSource.md&block=child&vault=Other",
+    "obsidian://arbor?file=Folder%2FSource.md",
+    "obsidian://arbor?file=Folder%2FSource.md&block=",
+    "obsidian://open?file=Folder%2FSource.md&block=child",
+    "https://arbor?file=Folder%2FSource.md&block=child"
+  ])("leaves a non-local or incomplete protocol URL native: %s", (href) => {
+    let selected = "parent";
+    const { controller } = makeController({ selectLocalBlock: (id) => { selected = id; return true; } });
+    const { card, event } = makeLinkEvent({ internal: false, href });
+    controller.handleActivation(event, card);
+    expect(selected).toBe("parent");
+    expect(Reflect.get(event, "preventDefault")).not.toHaveBeenCalled();
+  });
+
+  it("leaves a missing local block to the normal protocol error handler", () => {
+    const { controller } = makeController({ selectLocalBlock: () => false });
+    const { card, event } = makeLinkEvent({
+      internal: false, href: "obsidian://arbor?file=Folder%2FSource.md&block=missing"
+    });
+    controller.handleActivation(event, card);
+    expect(Reflect.get(event, "preventDefault")).not.toHaveBeenCalled();
+  });
+
+  it.each(["tab", "split", "window"] as const)("does not intercept local protocol links with pane modifier %s", (pane) => {
+    let selected = "parent";
+    const { controller } = makeController({
+      paneForEvent: () => pane,
+      selectLocalBlock: (id) => { selected = id; return true; }
+    });
+    const { card, event } = makeLinkEvent({
+      internal: false, href: "obsidian://arbor?file=Folder%2FSource.md&block=child"
+    });
+    controller.handleActivation(event, card);
+    expect(selected).toBe("parent");
+    expect(Reflect.get(event, "preventDefault")).not.toHaveBeenCalled();
+  });
+
   it("opens an internal destination once with source context and its full subpath", () => {
     const { controller, openInternal } = makeController();
     const { card, event } = makeLinkEvent({
@@ -146,6 +260,7 @@ describe("CardLinkController", () => {
     const error = new Error("open failed");
     const asyncReporter = vi.fn();
     const asyncController = new CardLinkController({
+      selectLocalBlock: () => false,
       getSourcePath: () => "Folder/Source.md", paneForEvent: () => false,
       openInternal: () => Promise.reject(error), reportOpenError: asyncReporter
     });
@@ -155,6 +270,7 @@ describe("CardLinkController", () => {
 
     const syncReporter = vi.fn();
     const syncController = new CardLinkController({
+      selectLocalBlock: () => false,
       getSourcePath: () => "Folder/Source.md", paneForEvent: () => false,
       openInternal: (() => { throw error; }) as unknown as () => Promise<void>,
       reportOpenError: syncReporter

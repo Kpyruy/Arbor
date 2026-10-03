@@ -232,6 +232,11 @@ export class ArborView extends FileView {
       getSourcePath: () => this.file?.path ?? "",
       paneForEvent: (event) => Keymap.isModEvent(event),
       openInternal: (linktext, sourcePath, pane) => this.app.workspace.openLinkText(linktext, sourcePath, pane),
+      selectLocalBlock: (blockId) => {
+        if (!this.state || !getBlock(this.state.metadata, blockId)) return false;
+        this.selectBlock(blockId, { focus: true, reveal: true });
+        return true;
+      },
       reportOpenError: () => { new Notice("Could not open this link."); }
     });
     this.navigationController = new NavigationController({
