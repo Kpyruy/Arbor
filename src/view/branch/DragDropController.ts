@@ -1,5 +1,6 @@
 import { canStartCardDrag } from "../../cardViewport";
 import { moveBlockToParentAtIndex } from "../../model/tree";
+import { findRenderedCardLink } from "../navigation/CardLinkController";
 import type { BranchBlockId, BranchColumnModel, BranchTreeMetadata, BranchTreeMutationResult } from "../../types";
 import type { SelectionOptions, ViewReadPort } from "../state/viewTypes";
 
@@ -82,6 +83,7 @@ export class DragDropController {
 
   handleCardDragStart(event: DragEvent): void {
     const card = event.currentTarget as HTMLElement;
+    if (findRenderedCardLink(event.target, card)) return;
     const blockId = card.dataset.blockId;
     if (!canStartCardDrag(this.port.read.getSettings().dragAndDrop, this.port.isEditing(blockId ?? "") ? blockId ?? null : null, blockId)) {
       event.preventDefault();

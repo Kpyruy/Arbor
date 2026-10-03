@@ -31,6 +31,27 @@ function controllerForTree() {
 }
 
 describe("DragDropController", () => {
+  it("leaves link dragging native without starting a card move", () => {
+    const { controller } = controllerForTree();
+    const content = {};
+    const anchor = {
+      nodeType: 1,
+      closest: (selector: string): unknown => selector === "a" ? anchor
+        : selector.includes(".arbor-card-content") ? content : null
+    };
+    const addClass = vi.fn();
+    const preventDefault = vi.fn();
+    const card = {
+      dataset: { blockId: "first", columnKey: "depth-1", blockIndex: "0" },
+      contains: (node: unknown) => node === content,
+      addClass
+    };
+    controller.handleCardDragStart({ currentTarget: card, target: anchor, preventDefault } as unknown as DragEvent);
+    expect(controller.getDragState()).toBeNull();
+    expect(addClass).not.toHaveBeenCalled();
+    expect(preventDefault).not.toHaveBeenCalled();
+  });
+
   it("moves a leaf to root children at index 1 through the real move mutation callback", async () => {
     const { controller, state } = controllerForTree();
     controller.handleCardDragOver({
