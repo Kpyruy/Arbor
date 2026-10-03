@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { setBlockColor } from "../src/model/blockAppearance";
 import { addChild, deleteBlockAndLiftChildren, deleteSubtree, duplicateSubtree, getDescendantIds } from "../src/model/tree";
 import { buildBranchDocument } from "../src/storage/document";
 import { resolveOutputStates } from "../src/outputProfiles";
@@ -48,6 +49,30 @@ function createFixturePort(document = "") {
 }
 
 describe("DocumentController", () => {
+  it.each(["state", "file"])("ignores a colour mutation when its %s changes while committing an editor", async (change) => {
+    const fixture = createFixturePort();
+    const controller = new DocumentController(fixture.port);
+    const original = fixtureLoaded();
+    controller.replaceLoadedState(original);
+    const pending = deferred<void>();
+    fixture.port.commitEditIfNeeded = () => pending.promise;
+    const mutation = controller.applyMutation("Set card color", metadata => ({
+      metadata: setBlockColor(metadata, "root", "card", "#44aa88"),
+      selectedBlockId: "root"
+    }));
+    if (change === "state") controller.replaceLoadedState(fixtureLoaded("draft"));
+    else {
+      const replacementFile = createFixturePort().port.getFile();
+      fixture.port.getFile = () => replacementFile;
+    }
+    pending.resolve();
+    await mutation;
+    expect(controller.getState()!.metadata.blocks[0].appearance).toBeUndefined();
+    expect(fixture.source).toBe("");
+    expect(fixture.order).not.toContain("persist");
+    await controller.undo();
+    expect(fixture.order).not.toContain("persist");
+  });
   it("commits a real pending editor before mutation and restores the two history steps in order", async () => {
     const fixture = createFixturePort();
     const controller = new DocumentController(fixture.port);

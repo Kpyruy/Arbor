@@ -158,7 +158,10 @@ export class DocumentController {
       return;
     }
 
+    const sourceState = this.state;
+    const sourceFile = this.port.getFile();
     await this.port.commitEditIfNeeded();
+    if (this.state !== sourceState || this.port.getFile() !== sourceFile) return;
 
     const beforeMetadata = cloneMetadata(this.state.metadata);
     this.history.push(label, beforeMetadata, this.state.outputState, this.state.selectedBlockId);
