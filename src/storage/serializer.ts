@@ -8,6 +8,7 @@ import {
 } from "../types";
 import { hashString, normalizeNewlines } from "../utils";
 import { buildLinearOrder } from "../model/tree";
+import { normalizeBlockAppearance } from "../model/blockAppearance";
 
 const VISIBLE_BLOCK_MARKER_PATTERN = VISIBLE_BLOCK_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const VISIBLE_BLOCK_LINE_PATTERN = new RegExp(
@@ -19,10 +20,15 @@ export function normalizeMetadata(metadata: BranchTreeMetadata): BranchTreeMetad
     ...metadata,
     version: 1,
     prefix: metadata.prefix ?? "",
-    blocks: metadata.blocks.map((block) => ({
-      ...block,
-      after: block.after ?? DEFAULT_BLOCK_SEPARATOR
-    }))
+    blocks: metadata.blocks.map((block) => {
+      const { appearance: rawAppearance, ...rest } = block;
+      const appearance = normalizeBlockAppearance(rawAppearance);
+      return {
+        ...rest,
+        after: block.after ?? DEFAULT_BLOCK_SEPARATOR,
+        ...(appearance ? { appearance } : {})
+      };
+    })
   };
 }
 
@@ -226,7 +232,8 @@ export function buildStructureBlock(metadata: BranchTreeMetadata): string {
     blocks: normalizeMetadata(metadata).blocks.map((block) => ({
       id: block.id,
       parent: block.parentId,
-      order: block.order
+      order: block.order,
+      ...(block.appearance ? { appearance: block.appearance } : {})
     }))
   };
 
@@ -256,14 +263,22 @@ export function parseStructureBlock(raw: string): BranchTreeMetadata | null {
       if (!entry || typeof entry !== "object") {
         return null;
       }
-      const { id, parent, order } = entry as Record<string, unknown>;
+      const { id, parent, order, appearance: rawAppearance } = entry as Record<string, unknown>;
       if (typeof id !== "string" || id.length === 0 || seen.has(id) || (parent !== null && typeof parent !== "string") || !Number.isInteger(order) || (order as number) < 0) {
         return null;
       }
       seen.add(id);
       const parentId = typeof parent === "string" ? parent : null;
       const blockOrder = Number(order);
-      blocks.push({ id, parentId, order: blockOrder, content: "", after: "" });
+      const appearance = normalizeBlockAppearance(rawAppearance);
+      blocks.push({
+        id,
+        parentId,
+        order: blockOrder,
+        content: "",
+        after: "",
+        ...(appearance ? { appearance } : {})
+      });
     }
 
     return normalizeMetadata({ version: 1, prefix: "", blocks });

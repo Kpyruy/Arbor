@@ -25,6 +25,19 @@ export interface ArborOutputResolution {
   ruleBlockId: BranchBlockId | null;
 }
 
+export interface ArborBlockAppearance {
+  cardColor?: string;
+  branchColor?: string;
+}
+
+export type ArborBlockColorScope = "card" | "branch";
+
+export interface ArborBlockColorResolution {
+  color: string | null;
+  source: "card" | "branch" | "inherited" | "theme";
+  ruleBlockId: string | null;
+}
+
 export interface ArborOutputProjectionEntry {
   readonly block: Readonly<BranchBlock>;
   readonly resolution: Readonly<ArborOutputResolution>;
@@ -49,6 +62,7 @@ export interface BranchBlock {
   createdAt?: string;
   updatedAt?: string;
   collapsed?: boolean;
+  appearance?: ArborBlockAppearance;
 }
 
 export interface BranchTreeMetadata {

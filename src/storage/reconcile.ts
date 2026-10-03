@@ -175,28 +175,43 @@ function translateLegacyBodyToMetadata(body: string, storedMetadata: BranchTreeM
 
 function mergeMarkerMetadataWithStoredExtras(
   markerMetadata: BranchTreeMetadata,
-  storedMetadata: BranchTreeMetadata | null
+  storedMetadata: BranchTreeMetadata | null,
+  preserveStoredBlockOrder = false
 ): BranchTreeMetadata {
   if (!storedMetadata) {
     return markerMetadata;
   }
 
   const storedById = new Map(storedMetadata.blocks.map((block) => [block.id, block]));
+  const mergedBlocks = markerMetadata.blocks.map((block) => {
+    const stored = storedById.get(block.id);
+    if (!stored) {
+      return block;
+    }
+
+    return {
+      ...block,
+      createdAt: stored.createdAt ?? block.createdAt,
+      updatedAt: stored.updatedAt ?? block.updatedAt,
+      collapsed: stored.collapsed,
+      ...(stored.appearance ? { appearance: stored.appearance } : {})
+    };
+  });
+  if (!preserveStoredBlockOrder) {
+    return { ...markerMetadata, blocks: mergedBlocks };
+  }
+
+  const mergedById = new Map(mergedBlocks.map((block) => [block.id, block]));
+  const storedIds = new Set(storedMetadata.blocks.map((block) => block.id));
   return {
     ...markerMetadata,
-    blocks: markerMetadata.blocks.map((block) => {
-      const stored = storedById.get(block.id);
-      if (!stored) {
-        return block;
-      }
-
-      return {
-        ...block,
-        createdAt: stored.createdAt ?? block.createdAt,
-        updatedAt: stored.updatedAt ?? block.updatedAt,
-        collapsed: stored.collapsed
-      };
-    })
+    blocks: [
+      ...storedMetadata.blocks.flatMap((block) => {
+        const merged = mergedById.get(block.id);
+        return merged ? [merged] : [];
+      }),
+      ...mergedBlocks.filter((block) => !storedIds.has(block.id))
+    ]
   };
 }
 
@@ -208,7 +223,7 @@ export function loadImportedBranchDocument(text: string): ImportedBranchDocument
   if (hasStoredMetadataBlock && visibleMarkerMetadata) {
     if (parsed.storageFormat === "structure-v2") {
       return withOutputState({
-        metadata: normalizeMetadata(visibleMarkerMetadata),
+        metadata: normalizeMetadata(mergeMarkerMetadataWithStoredExtras(visibleMarkerMetadata, parsed.metadata, true)),
         origin: "metadata",
         staleMetadata: null,
         needsVisibleMarkerMigration: false
