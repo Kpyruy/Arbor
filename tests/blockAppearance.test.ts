@@ -77,6 +77,47 @@ describe("block appearance", () => {
     expect(resolveBlockColors(resetBranch).get("root")?.color).toBeNull();
   });
 
+  it.each(["#2255CC", "#44AA88"])("applying branch colour %s replaces only its parent's card override", (color) => {
+    let tree = setBlockColor(fixtureTree(), "root", "branch", "#44AA88");
+    tree = setBlockColor(tree, "root", "card", "#9966DD");
+    tree = setBlockColor(tree, "first", "card", "#AA3377");
+    tree = setBlockColor(tree, "leaf", "branch", "#113355");
+    const before = structuredClone(tree);
+
+    const changed = setBlockColor(tree, "root", "branch", color);
+
+    expect(changed.blocks[0].appearance).toEqual({ branchColor: color.toLowerCase() });
+    const resolved = resolveBlockColors(changed);
+    expect(resolved.get("root")?.color).toBe(color.toLowerCase());
+    expect(resolved.get("second")?.color).toBe(color.toLowerCase());
+    expect(resolved.get("first")?.color).toBe("#aa3377");
+    expect(resolved.get("leaf")?.color).toBe("#113355");
+    expect(tree).toEqual(before);
+  });
+
+  it("resetting branch colour leaves its parent's explicit card colour intact", () => {
+    let tree = setBlockColor(fixtureTree(), "root", "branch", "#44AA88");
+    tree = setBlockColor(tree, "root", "card", "#9966DD");
+
+    const reset = setBlockColor(tree, "root", "branch", null);
+
+    expect(reset.blocks[0].appearance).toEqual({ cardColor: "#9966dd" });
+    expect(resolveBlockColors(reset).get("root")?.color).toBe("#9966dd");
+    expect(resolveBlockColors(reset).get("second")?.color).toBeNull();
+  });
+
+  it("undo restores the card override replaced by a branch colour and redo removes it again", () => {
+    const history = new BranchHistory();
+    const before = setBlockColor(fixtureTree(), "root", "card", "#9966DD");
+    history.push("Before branch colour", before, fixtureOutput(), "root");
+    const after = setBlockColor(before, "root", "branch", "#44AA88");
+
+    const undone = history.undo(snapshot(after));
+    expect(undone!.metadata.blocks[0].appearance).toEqual({ cardColor: "#9966dd" });
+    const redone = history.redo(undone!);
+    expect(redone!.metadata.blocks[0].appearance).toEqual({ branchColor: "#44aa88" });
+  });
+
   it("keeps descendant overrides and colours newly added children from the branch rule", () => {
     let tree = setBlockColor(fixtureTree(), "root", "branch", "#44AA88");
     tree = setBlockColor(tree, "first", "card", "#9966DD");

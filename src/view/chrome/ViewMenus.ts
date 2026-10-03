@@ -277,7 +277,8 @@ export class ViewMenus {
       const choice = await this.port.chooseBlockColor({ scope, title: extractPathLabel(block.content), initialColor, inheritedColor });
       if (!choice || !this.work.isCurrent(token) || this.port.read.getState() !== state || this.port.read.getFilePath() !== path || !getBlock(state.metadata, id)) return;
       const colour = choice.color === null ? null : normalizeBlockColor(choice.color);
-      if ((choice.color !== null && colour === null) || colour === initialColor) return;
+      const replacesCardOverride = scope === "branch" && colour !== null && normalizeBlockColor(block.appearance?.cardColor) !== null;
+      if ((choice.color !== null && colour === null) || (colour === initialColor && !replacesCardOverride)) return;
       await this.port.applyBlockColor(id, scope, colour);
     } catch (error) {
       this.port.reportError("Arbor could not change this block color.", error);

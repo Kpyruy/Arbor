@@ -97,6 +97,10 @@ export function setBlockColor(
   const key = scope === "card" ? "cardColor" : "branchColor";
   if (normalizedColor) {
     appearance[key] = normalizedColor;
+    // A branch action includes its parent; leave descendant overrides untouched.
+    if (scope === "branch") {
+      delete appearance.cardColor;
+    }
   } else {
     delete appearance[key];
   }

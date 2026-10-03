@@ -157,3 +157,37 @@ export async function checkBlockColourDialogHost(input: {
         }
     }
 }
+
+/** Run on an isolated QA document through the installed menu and document ports. */
+export async function checkBranchColourParentHost(input: {
+    document: Document;
+    parentId: string;
+    childId: string;
+    readMetadata(): BranchTreeMetadata;
+    applyColour(id: string, scope: "card" | "branch", colour: string | null): Promise<void>;
+    openBranchColour(id: string): Promise<void>;
+    undo(): Promise<void>;
+    redo(): Promise<void>;
+}): Promise<{ checks: number }> {
+    let checks = 0;
+    const check = (ok: boolean, label: string) => { checks += 1; if (!ok) throw Error(label); };
+    const appearance = (id: string) => input.readMetadata().blocks.find(b => b.id === id)?.appearance;
+    await input.applyColour(input.parentId, "branch", "#44aa88");
+    await input.applyColour(input.parentId, "card", "#9966dd");
+    await input.applyColour(input.childId, "card", "#aa3377");
+    // Reapplying the existing branch colour is still meaningful when it replaces a card override.
+    const pending = input.openBranchColour(input.parentId);
+    const modal = input.document.querySelector(".arbor-block-colour-modal");
+    const apply = Array.from(modal?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(b => b.textContent === "Apply");
+    if (!apply) throw Error("Missing native Apply");
+    apply.click();
+    await pending;
+    check(appearance(input.parentId)?.cardColor === undefined, "Native branch Apply replaces parent card override even for the same branch colour");
+    check(appearance(input.parentId)?.branchColor === "#44aa88", "Parent stores the chosen branch colour");
+    check(appearance(input.childId)?.cardColor === "#aa3377", "Child explicit card colour survives");
+    await input.undo();
+    check(appearance(input.parentId)?.cardColor === "#9966dd", "Undo restores replaced parent override");
+    await input.redo();
+    check(appearance(input.parentId)?.cardColor === undefined, "Redo removes parent override again");
+    return { checks };
+}
