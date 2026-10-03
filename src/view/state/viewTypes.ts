@@ -1,4 +1,5 @@
 import type {
+  ArborBlockColorResolution,
   ArborOutputProfile,
   ArborOutputResolution,
   ArborOutputState,
@@ -60,6 +61,7 @@ export interface LoadingOverlayState {
 }
 
 export interface BranchViewContext {
+  blockColours: Map<BranchBlockId, ArborBlockColorResolution>;
   activePathIds: Set<BranchBlockId>;
   selectableChildIds: Set<BranchBlockId>;
   searchQuery: string;

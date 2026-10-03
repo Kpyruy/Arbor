@@ -2,8 +2,10 @@ import { Menu } from "obsidian";
 import { buildArborBlockLink } from "../../blockLinks";
 import { getChildArrowIcon, getParentArrowIcon } from "../../layoutDirection";
 import { cloneMetadata, getBlock, getChildren, getParentBlock } from "../../model/tree";
+import { normalizeBlockColor, resolveBlockColors, setBlockColor } from "../../model/blockAppearance";
 import { FULL_OUTPUT_PROFILE_ID, setBlockOnlyState, setSubtreeState } from "../../outputProfiles";
-import type { ArborOutputProfile, ArborOutputState, ArborSettings, BranchBlockId } from "../../types";
+import type { ArborBlockColorScope, ArborOutputProfile, ArborOutputState, ArborSettings, BranchBlockId } from "../../types";
+import type { BlockColorChoice, BlockColorDialogOptions } from "../modals/BlockColorModal";
 import { deepClone, extractPathLabel } from "../../utils";
 import type { OutputProfilesController } from "../OutputProfilesModal";
 import { getBlockOutputMenuActions } from "../output/outputPresentation";
@@ -53,6 +55,8 @@ export interface ViewMenusPort {
   resetInvalidOutputProfiles(): Promise<ArborOutputState>;
   applyOutputMutation(label: string, mutate: (profile: ArborOutputProfile) => ArborOutputProfile): Promise<void>;
   openProfiles(controller: OutputProfilesController): void;
+  chooseBlockColor(options: BlockColorDialogOptions): Promise<BlockColorChoice | null>;
+  applyBlockColor(id: BranchBlockId, scope: ArborBlockColorScope, color: string | null): Promise<void>;
   writeClipboard(text: string): Promise<void>;
   showCopyLinkFallback(text: string): void;
   reportError(message: string, error: unknown): void;
@@ -225,6 +229,8 @@ export class ViewMenus {
       );
     }
     menu.addSeparator();
+    this.addBlockColourMenuItems(menu, blockId);
+    menu.addSeparator();
     this.addBlockOutputMenuItems(menu, blockId);
     menu.addSeparator()
       .addItem((item) => item.setTitle("Copy block link").setIcon("link").onClick(() => void this.copyBlockLink(blockId)))
@@ -235,6 +241,47 @@ export class ViewMenus {
       .addItem((item) => item.setTitle("Delete subtree").setIcon("trash-2").setWarning(true).onClick(() => void this.port.runWithSelectedBlock(blockId, () => this.port.commands.deleteSelectedSubtree())));
     this.applyDangerMenuItemStyles(menu);
     return menu;
+  }
+
+  private addBlockColourMenuItems(menu: Menu, id: BranchBlockId): void {
+    const state = this.port.read.getState();
+    if (!state) return;
+    const path = this.port.read.getFilePath();
+    const current = () => this.port.read.getState() === state && this.port.read.getFilePath() === path;
+    const block = getBlock(state.metadata, id);
+    for (const scope of ["card", "branch"] as const) {
+      const title = scope === "card" ? "Card" : "Branch";
+      menu.addItem(item => item.setTitle(`${title} color…`).setIcon("palette").onClick(() => {
+        if (current()) void this.openBlockColour(id, scope);
+      }));
+      const own = scope === "card" ? block?.appearance?.cardColor : block?.appearance?.branchColor;
+      menu.addItem(item => item.setTitle(`Reset ${title.toLowerCase()} color`).setIcon("rotate-ccw").setDisabled(!own).onClick(() => {
+        if (current() && own) void this.port.applyBlockColor(id, scope, null);
+      }));
+    }
+  }
+
+  private async openBlockColour(id: BranchBlockId, scope: ArborBlockColorScope): Promise<void> {
+    const state = this.port.read.getState();
+    const path = this.port.read.getFilePath();
+    const token = this.work.token();
+    const block = state && getBlock(state.metadata, id);
+    if (!state || !block) return;
+    const key = scope === "card" ? "cardColor" : "branchColor";
+    const initialColor = normalizeBlockColor(block.appearance?.[key]);
+    const resetTree = setBlockColor(state.metadata, id, scope, null);
+    // For branch preview, a card-only override should not mask its inherited branch.
+    const previewTree = scope === "branch" ? setBlockColor(resetTree, id, "card", null) : resetTree;
+    const inheritedColor = resolveBlockColors(previewTree).get(id)?.color ?? null;
+    try {
+      const choice = await this.port.chooseBlockColor({ scope, title: extractPathLabel(block.content), initialColor, inheritedColor });
+      if (!choice || !this.work.isCurrent(token) || this.port.read.getState() !== state || this.port.read.getFilePath() !== path || !getBlock(state.metadata, id)) return;
+      const colour = choice.color === null ? null : normalizeBlockColor(choice.color);
+      if ((choice.color !== null && colour === null) || colour === initialColor) return;
+      await this.port.applyBlockColor(id, scope, colour);
+    } catch (error) {
+      this.port.reportError("Arbor could not change this block color.", error);
+    }
   }
 
   private openOutputProfilesManager(): void {

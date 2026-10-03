@@ -5,6 +5,7 @@ import { resolveColumnWheelTarget } from "../../columnWheelNavigation";
 import { extractSnippet, hashString } from "../../utils";
 import { getOutputCardPresentation, syncOutputCardPresentation } from "../output/outputPresentation";
 import { ViewWorkScope } from "../runtime/ViewWorkScope";
+import { syncCardColour } from "../appearance/cardColours";
 import type { BranchBlock, BranchBlockId, BranchColumnModel } from "../../types";
 import type { DragState } from "./DragDropController";
 import type { BranchViewContext, EditorPort, MarkdownPort, SelectionOptions, ViewReadPort } from "../state/viewTypes";
@@ -487,6 +488,7 @@ export class BranchRenderer {
   }
 
   private syncOutputCardPresentation(card: HTMLElement, id: BranchBlockId, context: BranchViewContext): void {
+    syncCardColour(card, context.blockColours.get(id) ?? null);
     const state = this.port.read.getState();
     syncOutputCardPresentation(
       card,

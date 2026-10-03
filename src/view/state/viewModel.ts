@@ -10,6 +10,7 @@ import {
   getChildren
 } from "../../model/tree";
 import { getActiveOutputProfile, resolveOutputStates } from "../../outputProfiles";
+import { resolveBlockColors } from "../../model/blockAppearance";
 import { extractPathLabel, extractSnippet } from "../../utils";
 import type { BranchSearchResult, BranchViewContext } from "./viewTypes";
 
@@ -115,6 +116,7 @@ export function buildViewContext(
   });
 
   return {
+    blockColours: resolveBlockColors(metadata),
     activePathIds,
     selectableChildIds,
     searchQuery,

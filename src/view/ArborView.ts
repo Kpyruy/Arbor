@@ -15,6 +15,9 @@ import {
   WorkspaceLeaf
 } from "obsidian";
 import type ArborPlugin from "../main";
+import { setBlockColor } from "../model/blockAppearance";
+import { syncCardColour } from "./appearance/cardColours";
+import { BlockColorModal } from "./modals/BlockColorModal";
 import {
   addChild,
   addRootBlock,
@@ -546,6 +549,11 @@ export class ArborView extends FileView {
       resetInvalidOutputProfiles: () => this.resetInvalidOutputProfiles(),
       applyOutputMutation: (label, mutate) => this.applyOutputMutation(label, mutate),
       openProfiles: (controller) => this.openOutputProfilesManager(controller),
+      chooseBlockColor: (options) => new BlockColorModal(this.app, options).waitForChoice(),
+      applyBlockColor: (id, scope, color) => this.applyMutation("Change block color", metadata => ({
+        metadata: setBlockColor(metadata, id, scope, color),
+        selectedBlockId: this.state?.selectedBlockId ?? null
+      })),
       writeClipboard: (text) => navigator.clipboard.writeText(text),
       showCopyLinkFallback: (text) => this.showCopyLinkFallback(text),
       reportError: (message, error) => console.error(message, error)
@@ -1813,6 +1821,7 @@ export class ArborView extends FileView {
     blockId: BranchBlockId,
     context: BranchViewContext | null = this.viewContext
   ): void {
+    syncCardColour(card, context?.blockColours.get(blockId) ?? null);
     if (!this.state) {
       syncOutputCardPresentation(card, null);
       return;

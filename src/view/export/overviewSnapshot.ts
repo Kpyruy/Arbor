@@ -6,6 +6,8 @@ import { extractSnippet } from "../../utils";
 import type { OverviewSnapshot } from "./ExportController";
 import { applyOverviewLayout } from "../overview/overviewDom";
 import type { MarkdownPort } from "../state/viewTypes";
+import { resolveBlockColors } from "../../model/blockAppearance";
+import { syncCardColour } from "../appearance/cardColours";
 
 export interface OverviewSnapshotInput {
   document: Document;
@@ -23,6 +25,7 @@ export interface OverviewSnapshotInput {
 
 export async function createOverviewSnapshot(input: OverviewSnapshotInput): Promise<OverviewSnapshot> {
   const metadata = cloneMetadata(input.metadata);
+  const colours = resolveBlockColors(metadata);
   const selectedBlockId = input.selectedBlockId;
   const sourcePath = input.sourcePath;
   const cardWidth = input.cardWidth;
@@ -56,6 +59,7 @@ export async function createOverviewSnapshot(input: OverviewSnapshotInput): Prom
 
       const card = surface.createDiv({ cls: "arbor-overview-card arbor-tree-overview-export-card" });
       card.dataset.blockId = node.id;
+      syncCardColour(card, colours.get(node.id) ?? null);
       card.toggleClass("is-active", node.id === selectedBlockId);
       card.toggleClass("is-on-path", node.id !== selectedBlockId && activePathIds.has(node.id));
       card.setCssProps({

@@ -6,6 +6,8 @@ All notable changes to Arbor should be documented in this file.
 
 ### Added
 
+- added per-card colors and inherited branch colors with swatches, HEX input, isolated preview and reset controls in both editor modes
+- preserved block colors through note reloads, move/duplicate, undo/redo and Tree Overview exports while keeping clean Markdown undecorated
 - integrated Heading Linker's public index to automatically link terms and aliases to headings in other cards of the same Arbor note, without changing its Markdown
 - respected Heading Linker's Reading highlighting, folder scope, exclusions and per-note opt-out; ambiguous local targets remain unlinked
 

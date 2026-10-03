@@ -547,6 +547,8 @@ describe("Output Profiles manager UI", () => {
     const badge = { dataset: {} };
     const card = {
       dataset: { blockId: "root" },
+      toggleClass: (name: string, enabled: boolean) => enabled ? classNames.add(name) : classNames.delete(name),
+      setCssProps: () => undefined,
       addClass: (...names: string[]) => names.forEach((name) => classNames.add(name)),
       removeClass: (...names: string[]) => names.forEach((name) => classNames.delete(name)),
       querySelector: () => null,
@@ -621,6 +623,9 @@ describe("Output Profiles manager UI", () => {
     let badgeRemoved = false;
     const badge = { remove: () => { badgeRemoved = true; } };
     const card = {
+      dataset: {},
+      toggleClass: (name: string, enabled: boolean) => enabled ? classNames.add(name) : classNames.delete(name),
+      setCssProps: () => undefined,
       addClass: (...names: string[]) => names.forEach((name) => classNames.add(name)),
       removeClass: (...names: string[]) => names.forEach((name) => classNames.delete(name)),
       querySelector: () => badge,
