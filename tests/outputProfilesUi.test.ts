@@ -67,6 +67,8 @@ beforeAll(async () => {
             "export class WorkspaceLeaf {}",
             "export const MarkdownRenderer = {};",
             "export const Keymap = { isModEvent: () => false };",
+            "export const parseLinktext = (text) => { const index = text.indexOf('#'); return { path: index < 0 ? text : text.slice(0, index), subpath: index < 0 ? '' : text.slice(index) }; };",
+            "export const resolveSubpath = () => null;",
             "export const Platform = {};",
             "export const setIcon = () => undefined;"
           ].join("\n"),
@@ -215,6 +217,7 @@ describe("Output Profiles manager UI", () => {
       pendingScrollBlockId: null,
       render: () => { renders += 1; }
     };
+    Object.setPrototypeOf(view, arborViewUi.ArborView.prototype);
     arborViewUi.ArborView.prototype.selectBlock.call(
       view as unknown as InstanceType<ArborViewUiModule["ArborView"]>,
       "first", { focus: true, reveal: true }

@@ -9,6 +9,8 @@ import {
   Modal,
   Notice,
   Platform,
+  parseLinktext,
+  resolveSubpath,
   TFile,
   WorkspaceLeaf
 } from "obsidian";
@@ -81,6 +83,8 @@ import { BlockEditorController } from "./editor/BlockEditorController";
 import { EditorAttachments } from "./editor/EditorAttachments";
 import { NavigationController } from "./navigation/NavigationController";
 import { CardLinkController } from "./navigation/CardLinkController";
+import { HeadingLinkController } from "./navigation/HeadingLinkController";
+import { LocalHeadingLinks, readHeadingLinker, readHeadingLinkerObserver, type HeadingProviderSnapshot } from "./navigation/LocalHeadingLinks";
 import { BranchViewportController } from "./branch/BranchViewportController";
 import { OverviewViewportController } from "./overview/OverviewViewportController";
 import { ZoomController } from "./interaction/ZoomController";
@@ -113,6 +117,11 @@ export class ArborView extends FileView {
   private readonly attachments: EditorAttachments;
   private readonly navigationController: NavigationController;
   private readonly cardLinks: CardLinkController;
+  private readonly headingLinks: HeadingLinkController;
+  private readonly localHeadingLinks: LocalHeadingLinks;
+  private headingSnapshotCache: { path: string; snapshot: HeadingProviderSnapshot | null } | null = null;
+  private headingProviderIdentity: object | null = null;
+  private disposeHeadingSubscription: (() => void) | null = null;
   private readonly branchViewport: BranchViewportController;
   private readonly overviewViewport: OverviewViewportController;
   private readonly overview: TreeOverviewController;
@@ -228,15 +237,38 @@ export class ArborView extends FileView {
       paste: (event, textarea) => this.attachments.handleEditorPaste(event, textarea),
       drop: (event, textarea) => this.attachments.handleEditorDrop(event, textarea)
     });
+    this.localHeadingLinks = new LocalHeadingLinks((path) => this.getLocalHeadingProvider(path));
+    const selectLinkTarget = (blockId: string): boolean => {
+      if (!this.state || !getBlock(this.state.metadata, blockId)) return false;
+      this.selectBlock(blockId, { focus: true, reveal: true });
+      return true;
+    };
+    this.headingLinks = new HeadingLinkController({
+      getState: () => this.state,
+      getSourcePath: () => this.file?.path ?? "",
+      resolveLocalHeading: (linktext, sourcePath) => {
+        const parsed = parseLinktext(linktext);
+        if (!parsed.subpath || !this.file || this.file.path !== sourcePath) return null;
+        const target = parsed.path ? this.app.metadataCache.getFirstLinkpathDest(parsed.path, sourcePath) : this.file;
+        if (target?.path !== sourcePath) return null;
+        const cache = this.app.metadataCache.getFileCache(target);
+        const resolved = cache ? resolveSubpath(cache, parsed.subpath) : null;
+        return cache && resolved?.type === "heading" ? { cache, heading: resolved.current } : null;
+      },
+      readSource: (sourcePath) => {
+        const file = this.file;
+        if (!file || file.path !== sourcePath) throw new Error("Arbor link source is no longer open");
+        return this.app.vault.cachedRead(file);
+      },
+      selectLocalBlock: selectLinkTarget,
+      openInternal: (linktext, sourcePath, pane) => this.app.workspace.openLinkText(linktext, sourcePath, pane)
+    });
+    this.register(() => this.clearHeadingSubscription());
     this.cardLinks = new CardLinkController({
       getSourcePath: () => this.file?.path ?? "",
       paneForEvent: (event) => Keymap.isModEvent(event),
-      openInternal: (linktext, sourcePath, pane) => this.app.workspace.openLinkText(linktext, sourcePath, pane),
-      selectLocalBlock: (blockId) => {
-        if (!this.state || !getBlock(this.state.metadata, blockId)) return false;
-        this.selectBlock(blockId, { focus: true, reveal: true });
-        return true;
-      },
+      openInternal: (linktext, sourcePath, pane) => this.headingLinks.open(linktext, sourcePath, pane),
+      selectLocalBlock: selectLinkTarget,
       reportOpenError: () => { new Notice("Could not open this link."); }
     });
     this.navigationController = new NavigationController({
@@ -327,7 +359,7 @@ export class ArborView extends FileView {
         getFilePath: () => this.file?.path ?? ""
       },
       editor: this.editor,
-      markdown: { render: (markdown, target, sourcePath) => MarkdownRenderer.render(this.app, markdown, target, sourcePath, this) },
+      markdown: { render: (markdown, target, sourcePath) => this.renderCardMarkdown(markdown, target, sourcePath) },
       events: {
         click: (event) => this.handleCardClick(event),
         auxClick: (event) => this.navigationController.handleCardAuxClick(event),
@@ -362,7 +394,7 @@ export class ArborView extends FileView {
         getFilePath: () => this.file?.path ?? ""
       },
       editor: this.editor,
-      markdown: { render: (markdown, target, sourcePath) => MarkdownRenderer.render(this.app, markdown, target, sourcePath, this) },
+      markdown: { render: (markdown, target, sourcePath) => this.renderCardMarkdown(markdown, target, sourcePath) },
       selection: { selectBlock: (id, options) => this.selectBlock(id, options) },
       getBody: () => this.bodyEl,
       getContext: () => this.viewContext,
@@ -672,6 +704,8 @@ export class ArborView extends FileView {
   }
 
   async onUnloadFile(): Promise<void> {
+    this.headingLinks?.cancelPending();
+    this.clearHeadingSubscription();
     this.invalidatePendingLoads();
     const generation = this.loadGeneration;
     await this.commitEditIfNeeded();
@@ -703,6 +737,8 @@ export class ArborView extends FileView {
   }
 
   async onClose(): Promise<void> {
+    this.headingLinks?.cancelPending();
+    this.clearHeadingSubscription();
     this.invalidatePendingLoads();
     await this.commitEditIfNeeded();
     this.work.dispose();
@@ -1013,6 +1049,8 @@ export class ArborView extends FileView {
   }
 
   selectBlock(blockId: BranchBlockId | null, options?: { focus?: boolean; reveal?: boolean }): void {
+    this.headingLinks?.cancelPending();
+    this.syncLocalHeadingLinks();
     if (!this.state) {
       return;
     }
@@ -1336,7 +1374,49 @@ export class ArborView extends FileView {
     });
   }
 
+  private getLocalHeadingProvider(path: string): HeadingProviderSnapshot | null {
+    if (this.headingSnapshotCache?.path === path) return this.headingSnapshotCache.snapshot;
+    const plugins = (this.app as App & { plugins?: { plugins?: Record<string, unknown> } }).plugins?.plugins;
+    const loaded = plugins?.["heading-linker"];
+    const file = loaded ? this.app.vault.getAbstractFileByPath(path) : null;
+    const frontmatter = file instanceof TFile ? this.app.metadataCache.getFileCache(file)?.frontmatter : undefined;
+    const snapshot = readHeadingLinker(loaded, path, frontmatter);
+    this.headingSnapshotCache = { path, snapshot };
+    const observer = readHeadingLinkerObserver(loaded);
+    if (observer && this.headingProviderIdentity !== observer.identity) {
+      this.disposeHeadingSubscription?.();
+      this.headingProviderIdentity = observer.identity;
+      this.disposeHeadingSubscription = observer.subscribe(() => this.syncLocalHeadingLinks());
+    } else if (!observer) {
+      this.clearHeadingSubscription();
+    }
+    return snapshot;
+  }
+
+  private async renderCardMarkdown(markdown: string, target: HTMLElement, sourcePath: string): Promise<void> {
+    await MarkdownRenderer.render(this.app, markdown, target, sourcePath, this);
+    if (this.file?.path === sourcePath) this.localHeadingLinks.decorate(target, sourcePath);
+  }
+
+  private syncLocalHeadingLinks(): void {
+    this.headingSnapshotCache = null;
+    if (!this.localHeadingLinks || !this.state || !this.file) return;
+    const path = this.file.path;
+    const snapshot = this.getLocalHeadingProvider(path);
+    for (const content of Array.from(this.contentEl.querySelectorAll<HTMLElement>(".arbor-card-content.markdown-rendered, .arbor-overview-card-content.markdown-rendered"))) {
+      this.localHeadingLinks.decorate(content, path, snapshot);
+    }
+  }
+
+  private clearHeadingSubscription(): void {
+    this.disposeHeadingSubscription?.();
+    this.disposeHeadingSubscription = null;
+    this.headingProviderIdentity = null;
+    this.headingSnapshotCache = null;
+  }
+
   private async renderNow(): Promise<void> {
+    this.headingSnapshotCache = null;
     const workToken = this.work.token();
     if (!this.work.isCurrent(workToken)) return;
     const renderGeneration = this.renderGeneration;

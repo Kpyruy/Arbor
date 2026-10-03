@@ -113,6 +113,8 @@ If you want to install Arbor before it appears in the community catalog:
 
 Rendered links in Branch Editor and Tree Overview are clickable: internal links open their note, heading, block, or PDF destination. Ctrl/Cmd-click or middle-click opens a new tab. A link click stays separate from card selection and editing; double-click the card's ordinary text to edit it.
 
+When [Heading Linker](https://github.com/max-fluff/obsidian-heading-linker) is enabled, Arbor can also turn indexed terms and aliases into links to headings in other cards of the **same note**. Include that note in Heading Linker's glossary sources and highlighting scope, and enable Reading highlighting. Arbor preserves your Markdown, skips headings, code, math and existing links, and leaves ambiguous local targets unlinked. An ordinary click reveals the target card in the current view; Ctrl/Cmd-click and middle-click retain Obsidian's normal new-pane behavior.
+
 ## Mobile controls
 
 On a phone, Arbor keeps the selected block's sibling column on screen and puts navigation in a bottom action bar. Tap a card to select it; double-tap a card or use **Edit** to edit it. **Save** and **Cancel** are always visible while editing. Plain `Enter` makes a new line, while `Ctrl/Cmd + Enter` on a hardware keyboard saves. Pinch with two fingers in the branch editor to adjust card and text density without leaving the active sibling column.

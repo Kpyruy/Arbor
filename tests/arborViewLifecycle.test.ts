@@ -85,6 +85,8 @@ beforeAll(async () => {
             "export class Modal {}",
             "export const MarkdownRenderer = {};",
             "export const Keymap = { isModEvent: () => false };",
+            "export const parseLinktext = (text) => { const index = text.indexOf('#'); return { path: index < 0 ? text : text.slice(0, index), subpath: index < 0 ? '' : text.slice(index) }; };",
+            "export const resolveSubpath = () => null;",
             "export const Platform = {};",
             "export class Notice {}",
             "export class TFile {}",
@@ -112,6 +114,44 @@ function deferred<T>(): Deferred<T> {
   const promise = new Promise<T>((resolve) => { resolvePromise = resolve; });
   return { promise, resolve: (value) => resolvePromise(value) };
 }
+
+describe("Heading Linker subscription lifecycle", () => {
+  it("observes index changes even when Reading highlighting is initially disabled", () => {
+    const callbacks: Array<() => void> = [];
+    const decorated: unknown[] = [];
+    const provider = {
+      settings: { highlightInReading: false },
+      api: {
+        getTerms: () => [{ path: "QA.md", linktext: "QA#Target" }],
+        findMatches: () => [],
+        onChange: (callback: () => void) => {
+          callbacks.push(callback);
+          return () => { callbacks.splice(callbacks.indexOf(callback), 1); };
+        }
+      }
+    };
+    const view = Object.create(lifecycle.ArborView.prototype) as {
+      syncLocalHeadingLinks(): void;
+      clearHeadingSubscription(): void;
+    };
+    Object.assign(view, {
+      file: { path: "QA.md" },
+      app: { plugins: { plugins: { "heading-linker": provider } }, vault: { getAbstractFileByPath: () => null } },
+      documentController: { getState: () => fixtureTree() },
+      contentEl: { querySelectorAll: () => [{}] },
+      localHeadingLinks: { decorate: (_content: unknown, _path: string, snapshot: unknown) => { decorated.push(snapshot); } }
+    });
+    view.syncLocalHeadingLinks();
+    expect(decorated).toEqual([null]);
+    expect(callbacks).toHaveLength(1);
+    provider.settings.highlightInReading = true;
+    callbacks[0]();
+    expect(decorated[1]).toMatchObject({ targets: new Set(["QA#Target"]) });
+    expect(callbacks).toHaveLength(1);
+    view.clearHeadingSubscription();
+    expect(callbacks).toHaveLength(0);
+  });
+});
 
 function documentFor(label: string, legacy: boolean): string {
   const metadata = {
