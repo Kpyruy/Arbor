@@ -2,6 +2,7 @@ import {
   App,
   ButtonComponent,
   FileView,
+  Keymap,
   MarkdownRenderer,
   MarkdownView,
   Menu,
@@ -79,6 +80,7 @@ import { createOverviewSnapshot } from "./export/overviewSnapshot";
 import { BlockEditorController } from "./editor/BlockEditorController";
 import { EditorAttachments } from "./editor/EditorAttachments";
 import { NavigationController } from "./navigation/NavigationController";
+import { CardLinkController } from "./navigation/CardLinkController";
 import { BranchViewportController } from "./branch/BranchViewportController";
 import { OverviewViewportController } from "./overview/OverviewViewportController";
 import { ZoomController } from "./interaction/ZoomController";
@@ -110,6 +112,7 @@ export class ArborView extends FileView {
   private readonly editor: BlockEditorController;
   private readonly attachments: EditorAttachments;
   private readonly navigationController: NavigationController;
+  private readonly cardLinks: CardLinkController;
   private readonly branchViewport: BranchViewportController;
   private readonly overviewViewport: OverviewViewportController;
   private readonly overview: TreeOverviewController;
@@ -225,6 +228,12 @@ export class ArborView extends FileView {
       paste: (event, textarea) => this.attachments.handleEditorPaste(event, textarea),
       drop: (event, textarea) => this.attachments.handleEditorDrop(event, textarea)
     });
+    this.cardLinks = new CardLinkController({
+      getSourcePath: () => this.file?.path ?? "",
+      paneForEvent: (event) => Keymap.isModEvent(event),
+      openInternal: (linktext, sourcePath, pane) => this.app.workspace.openLinkText(linktext, sourcePath, pane),
+      reportOpenError: () => { new Notice("Could not open this link."); }
+    });
     this.navigationController = new NavigationController({
       getState: () => this.state,
       getSettings: () => this.plugin.settings,
@@ -244,7 +253,8 @@ export class ArborView extends FileView {
       closeSearchOverlay: () => this.closeSearchOverlay(),
       isSearchOpen: () => this.search.isOpen(),
       setKeyboardSelection: (id) => this.documentController.setSelection(id),
-      openBlockMenu: (id, event) => this.buildBlockMenu(id).showAtMouseEvent(event)
+      openBlockMenu: (id, event) => this.buildBlockMenu(id).showAtMouseEvent(event),
+      tryHandleCardLink: (event, card) => this.cardLinks.handleActivation(event, card)
     });
     this.branchViewport = new BranchViewportController({
       read: {
@@ -315,6 +325,7 @@ export class ArborView extends FileView {
       markdown: { render: (markdown, target, sourcePath) => MarkdownRenderer.render(this.app, markdown, target, sourcePath, this) },
       events: {
         click: (event) => this.handleCardClick(event),
+        auxClick: (event) => this.navigationController.handleCardAuxClick(event),
         doubleClick: (event) => this.handleCardDoubleClick(event),
         contextMenu: (event) => this.handleCardContextMenu(event),
         keyDown: (event) => this.handleCardKeyDown(event),
@@ -361,7 +372,8 @@ export class ArborView extends FileView {
       waitForNextPaint: () => this.waitForNextPaint(),
       syncOutputCardPresentation: (card, id, context) => this.syncOutputCardPresentation(card, id, context),
       consumeAutofocus: (session) => this.editor.consumeAutofocus(session),
-      clearPendingFocus: () => { this.pendingFocusBlockId = null; }
+      clearPendingFocus: () => { this.pendingFocusBlockId = null; },
+      tryHandleCardLink: (event, card) => this.cardLinks.handleActivation(event, card)
     });
     this.output = new OutputPreviewController({
       read: {

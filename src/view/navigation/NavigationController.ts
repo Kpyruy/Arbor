@@ -1,5 +1,6 @@
 import { getBlock, getChildren, getFirstChildBlock, getNextSibling, getParentBlock, getPreferredChildBlock, getPreviousSibling } from "../../model/tree";
 import { resolveBranchCardInteraction } from "../../cardInteraction";
+import { findRenderedCardLink } from "./CardLinkController";
 import { getChildArrowKey, getParentArrowKey } from "../../layoutDirection";
 import { resolveNumericChildTarget } from "../../numericNavigation";
 import { resolveOverviewArrowTarget } from "../../overviewNavigation";
@@ -21,6 +22,7 @@ export interface NavigationActions {
   isSearchOpen(): boolean;
   setKeyboardSelection(id: BranchBlockId): void;
   openBlockMenu(id: BranchBlockId, event: MouseEvent): void;
+  tryHandleCardLink(event: MouseEvent, card: HTMLElement): boolean;
 }
 
 export class NavigationController {
@@ -106,6 +108,8 @@ export class NavigationController {
   }
 
   handleCardClick(event: MouseEvent): void {
+    const card = event.currentTarget as HTMLElement;
+    if (this.actions.tryHandleCardLink(event, card)) return;
     const blockId = (event.currentTarget as HTMLElement).dataset.blockId;
     if (!blockId) return;
     const interaction = resolveBranchCardInteraction({
@@ -122,7 +126,12 @@ export class NavigationController {
     if (interaction.select) this.selection.selectBlock(blockId, { focus: true });
   }
 
+  handleCardAuxClick(event: MouseEvent): void {
+    this.actions.tryHandleCardLink(event, event.currentTarget as HTMLElement);
+  }
+
   handleCardDoubleClick(event: MouseEvent): void {
+    if (findRenderedCardLink(event.target, event.currentTarget as HTMLElement)) return;
     const blockId = (event.currentTarget as HTMLElement).dataset.blockId;
     const interaction = resolveBranchCardInteraction({
       target: event.target,
@@ -133,6 +142,7 @@ export class NavigationController {
   }
 
   handleCardContextMenu(event: MouseEvent): void {
+    if (findRenderedCardLink(event.target, event.currentTarget as HTMLElement)) return;
     event.preventDefault();
     const blockId = (event.currentTarget as HTMLElement).dataset.blockId;
     if (!blockId) return;
@@ -141,6 +151,7 @@ export class NavigationController {
   }
 
   handleCardKeyDown(event: KeyboardEvent): void {
+    if ((event.target as HTMLElement | null)?.closest?.("a")) return;
     event.stopPropagation();
     if (this.handleSearchShortcut(event) || this.handleHistoryShortcut(event) || event.altKey) return;
     const blockId = (event.currentTarget as HTMLElement).dataset.blockId;
@@ -157,6 +168,7 @@ export class NavigationController {
   }
 
   handleViewportKeyDown(event: KeyboardEvent): void {
+    if ((event.target as HTMLElement | null)?.closest?.("a")) return;
     if (this.handleSearchShortcut(event) || this.handleHistoryShortcut(event) || event.altKey) return;
     if ((event.target as HTMLElement | null)?.closest("input, textarea")) return;
     const selectedBlockId = this.read.getState()?.selectedBlockId;
@@ -172,6 +184,7 @@ export class NavigationController {
   }
 
   handleOverviewKeyDown(event: KeyboardEvent): void {
+    if ((event.target as HTMLElement | null)?.closest?.("a")) return;
     const state = this.read.getState();
     if (!state?.selectedBlockId) return;
     if ((event.target as HTMLElement | null)?.closest("textarea, input, [contenteditable='true']")) return;

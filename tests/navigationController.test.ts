@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NavigationController, type NavigationActions } from "../src/view/navigation/NavigationController";
+import { CardLinkController } from "../src/view/navigation/CardLinkController";
 import { fixtureLoaded, fixtureSettings } from "./helpers/arborFixtures";
 
 function keyEvent(key: string, options: Partial<KeyboardEvent> = {}): KeyboardEvent {
@@ -12,7 +13,7 @@ function keyEvent(key: string, options: Partial<KeyboardEvent> = {}): KeyboardEv
     shiftKey: options.shiftKey ?? false,
     target: options.target ?? null,
     currentTarget: options.currentTarget ?? null,
-    preventDefault: vi.fn(),
+    preventDefault: options.preventDefault ?? vi.fn(),
     stopPropagation: vi.fn()
   } as unknown as KeyboardEvent;
 }
@@ -21,6 +22,13 @@ function createController() {
   const state = fixtureLoaded();
   const settings = fixtureSettings();
   const selectBlock = vi.fn((id: string | null) => { state.selectedBlockId = id; });
+  const openInternal = vi.fn(async () => undefined);
+  const links = new CardLinkController({
+    getSourcePath: () => "Folder/Source.md",
+    paneForEvent: () => false,
+    openInternal,
+    reportOpenError: vi.fn()
+  });
   const actions = {
     beginEditingBlock: vi.fn(),
     createChild: vi.fn(async () => undefined),
@@ -35,7 +43,8 @@ function createController() {
     closeSearchOverlay: vi.fn(),
     isSearchOpen: () => false,
     setKeyboardSelection: (id) => { state.selectedBlockId = id; },
-    openBlockMenu: vi.fn()
+    openBlockMenu: vi.fn(),
+    tryHandleCardLink: (event: MouseEvent, card: HTMLElement) => links.handleActivation(event, card)
   } satisfies NavigationActions;
   const controller = new NavigationController({
     getState: () => state,
@@ -44,7 +53,25 @@ function createController() {
     getFilePath: () => "fixture.md"
   }, { selectBlock }, actions);
 
-  return { actions, controller, selectBlock, settings, state };
+  return { actions, controller, selectBlock, settings, state, openInternal };
+}
+
+function renderedLinkEvent(type = "click", button = 0) {
+  const content = {};
+  const anchor = {
+    nodeType: 1,
+    closest: (selector: string): unknown => selector === "a" ? anchor
+      : selector.includes(".arbor-card-content") ? content : null,
+    classList: { contains: (name: string) => name === "internal-link" },
+    getAttribute: () => "Target#Heading"
+  };
+  const card = { dataset: { blockId: "second" }, contains: (node: unknown) => node === content };
+  const preventDefault = vi.fn();
+  const event = {
+    type, button, detail: 1, currentTarget: card, target: anchor,
+    defaultPrevented: false, preventDefault, stopPropagation: vi.fn()
+  } as unknown as MouseEvent;
+  return { anchor: anchor as unknown as EventTarget, card: card as unknown as EventTarget, event, preventDefault };
 }
 
 describe("NavigationController", () => {
@@ -178,4 +205,49 @@ describe("NavigationController", () => {
     expect(fixture.selectBlock).toHaveBeenCalledWith("second");
     expect(fixture.actions.openBlockMenu).toHaveBeenCalledWith("second", menuEvent);
   });
+
+  it("opens an internal card link without selecting or editing the card", () => {
+    const fixture = createController();
+    const { event } = renderedLinkEvent();
+    fixture.controller.handleCardClick(event);
+    expect(fixture.openInternal).toHaveBeenCalledExactlyOnceWith("Target#Heading", "Folder/Source.md", false);
+    expect(fixture.selectBlock).not.toHaveBeenCalled();
+    expect(fixture.actions.beginEditingBlock).not.toHaveBeenCalled();
+  });
+
+  it("routes middle activation to the link without a card action", () => {
+    const fixture = createController();
+    const { event } = renderedLinkEvent("auxclick", 1);
+    fixture.controller.handleCardAuxClick(event);
+    expect(fixture.openInternal).toHaveBeenCalledOnce();
+    expect(fixture.selectBlock).not.toHaveBeenCalled();
+    expect(fixture.actions.beginEditingBlock).not.toHaveBeenCalled();
+  });
+
+  it("leaves a link context menu and double-click separate from card actions", () => {
+    const fixture = createController();
+    const { event, preventDefault } = renderedLinkEvent("contextmenu", 2);
+    fixture.controller.handleCardContextMenu(event);
+    fixture.controller.handleCardDoubleClick(event);
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(fixture.selectBlock).not.toHaveBeenCalled();
+    expect(fixture.actions.openBlockMenu).not.toHaveBeenCalled();
+    expect(fixture.actions.beginEditingBlock).not.toHaveBeenCalled();
+  });
+
+  it.each(["handleCardKeyDown", "handleViewportKeyDown", "handleOverviewKeyDown"] as const)(
+    "%s preserves native link Enter without changing selection", (method) => {
+      const fixture = createController();
+      const { anchor, card } = renderedLinkEvent();
+      const before = fixture.state.selectedBlockId;
+      const preventDefault = vi.fn();
+      const event = keyEvent("Enter", { target: anchor, currentTarget: card, preventDefault });
+      fixture.controller[method](event);
+      expect(fixture.state.selectedBlockId).toBe(before);
+      expect(preventDefault).not.toHaveBeenCalled();
+      expect(fixture.selectBlock).not.toHaveBeenCalled();
+      expect(fixture.actions.beginEditingBlock).not.toHaveBeenCalled();
+      expect(fixture.openInternal).not.toHaveBeenCalled();
+    }
+  );
 });

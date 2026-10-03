@@ -5,6 +5,7 @@ import { extractSnippet } from "../../utils";
 import type { BranchBlock, BranchBlockId } from "../../types";
 import { applyOverviewLayout } from "./overviewDom";
 import { ViewWorkScope } from "../runtime/ViewWorkScope";
+import { findRenderedCardLink } from "../navigation/CardLinkController";
 import type { BranchViewContext, EditorPort, MarkdownPort, SelectionPort, ViewReadPort } from "../state/viewTypes";
 
 export interface TreeOverviewPort {
@@ -26,6 +27,7 @@ export interface TreeOverviewPort {
   syncOutputCardPresentation(card: HTMLElement, blockId: BranchBlockId, context: BranchViewContext | null): void;
   consumeAutofocus(session: NonNullable<ReturnType<EditorPort["getSession"]>>): void;
   clearPendingFocus(): void;
+  tryHandleCardLink(event: MouseEvent, card: HTMLElement): boolean;
 }
 
 export class TreeOverviewController {
@@ -150,17 +152,23 @@ export class TreeOverviewController {
       this.port.syncOutputCardPresentation(card, block.id, this.port.getContext());
       card.addEventListener("pointerdown", (event) => event.stopPropagation());
       card.addEventListener("click", (event) => {
+        if (this.port.tryHandleCardLink(event, card)) return;
         event.stopPropagation();
         if ((event.target as HTMLElement).closest("a, button, input, textarea")) {
           return;
         }
         this.port.selection.selectBlock(node.id, { focus: false, reveal: false });
       });
+      card.addEventListener("auxclick", (event) => {
+        this.port.tryHandleCardLink(event, card);
+      });
       card.addEventListener("dblclick", (event) => {
+        if (findRenderedCardLink(event.target, card)) return;
         event.stopPropagation();
         this.port.editor.beginEditingBlock(node.id, "overview");
       });
       card.addEventListener("contextmenu", (event) => {
+        if (findRenderedCardLink(event.target, card)) return;
         event.preventDefault();
         event.stopPropagation();
         this.port.selection.selectBlock(node.id, { focus: false });

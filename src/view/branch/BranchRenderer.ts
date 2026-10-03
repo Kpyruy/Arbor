@@ -11,6 +11,7 @@ import type { BranchViewContext, EditorPort, MarkdownPort, SelectionOptions, Vie
 
 export interface CardEvents {
   click(event: MouseEvent): void;
+  auxClick(event: MouseEvent): void;
   doubleClick(event: MouseEvent): void;
   contextMenu(event: MouseEvent): void;
   keyDown(event: KeyboardEvent): void;
@@ -346,6 +347,7 @@ export class BranchRenderer {
     card.addEventListener("pointerdown", (event) => this.port.events.pointer(blockId, event.clientX, event.clientY));
     card.addEventListener("mousedown", (event) => this.port.events.pointer(blockId, event.clientX, event.clientY));
     card.addEventListener("click", (event) => this.port.events.click(event));
+    card.addEventListener("auxclick", (event) => this.port.events.auxClick(event));
     card.addEventListener("dblclick", (event) => this.port.events.doubleClick(event));
     card.addEventListener("contextmenu", (event) => this.port.events.contextMenu(event));
     card.addEventListener("keydown", (event) => this.port.events.keyDown(event));
