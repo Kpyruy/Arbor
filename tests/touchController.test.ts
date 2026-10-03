@@ -24,6 +24,7 @@ class GestureViewport extends EventTarget {
   hasPointerCapture(pointerId: number): boolean { return this.captured.has(pointerId); }
   getBoundingClientRect(): DOMRect { return { left: 10, top: 20 } as DOMRect; }
   closest(): null { return null; }
+  contains(target: Node | null): boolean { return target !== null; }
   addClass(name: string): void { this.classes.add(name); }
   removeClass(name: string): void { this.classes.delete(name); }
 }
@@ -42,6 +43,7 @@ function pointer(type: string, pointerId: number, x: number, y: number, target?:
 
 describe("TouchController", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -334,5 +336,129 @@ describe("TouchController", () => {
     expect(viewport.classes.has("is-touch-pinching")).toBe(false);
     expect(requestedFrames).toEqual([]);
     expect(cancelAnimationFrame).not.toHaveBeenCalled();
+  });
+
+  describe.each(["branch", "overview"] as const)("%s link taps after a gesture", (mode) => {
+    function setup() {
+      class Link extends EventTarget {
+        nodeType = 1;
+        closest(selector: string): Link | null { return selector === "a" ? this : null; }
+      }
+      vi.stubGlobal("Element", Link);
+      vi.stubGlobal("window", { requestAnimationFrame: vi.fn(() => 1), cancelAnimationFrame: vi.fn() });
+      const now = vi.spyOn(Date, "now").mockReturnValue(1000);
+      const viewport = new GestureViewport();
+      const controller = new TouchController({
+        getZoom: () => 1, scheduleZoom: vi.fn(), hasEditingSession: () => false,
+        usesTouchControls: () => true, getOverviewSceneOffset: () => ({ left: 0, top: 0 }),
+        revealCompactSelection: vi.fn()
+      });
+      const dispose = mode === "branch"
+        ? controller.bindBranchTouch(viewport as unknown as HTMLElement)
+        : controller.bindOverviewTouch(viewport as unknown as HTMLElement);
+      viewport.dispatchEvent(pointer("pointerdown", 1, 20, 20));
+      viewport.dispatchEvent(pointer("pointerdown", 2, 120, 20));
+      viewport.dispatchEvent(pointer("pointermove", 2, 170, 20));
+      viewport.dispatchEvent(pointer("pointerup", 2, 170, 20));
+      viewport.dispatchEvent(pointer("pointerup", 1, 20, 20));
+      now.mockReturnValue(1100);
+      const anchor = new Link();
+      const click = (target: EventTarget = anchor, fields: Record<string, string | number> = {}) => {
+        const event = new Event("click", { cancelable: true });
+        Object.defineProperties(event, {
+          target: { value: target }, ...Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, { value }]))
+        });
+        viewport.dispatchEvent(event);
+        return event;
+      };
+      return { viewport, controller, dispose, anchor, now, click };
+    }
+
+    it("blocks a ghost link click without a new pointerdown", () => {
+      const f = setup();
+      expect(f.click().defaultPrevented).toBe(true);
+      f.dispose();
+    });
+
+    it("allows one fresh tap immediately, not a second compatibility click", () => {
+      const f = setup();
+      f.viewport.dispatchEvent(pointer("pointerdown", 20, 30, 30, f.anchor));
+      f.viewport.dispatchEvent(pointer("pointerup", 20, 30, 30, f.anchor));
+      expect(f.click().defaultPrevented).toBe(false);
+      expect(f.click().defaultPrevented).toBe(true);
+      f.dispose();
+    });
+
+    it.each(["move", "cancel", "second-pointer", "other-link"])("invalidates a fresh tap after %s", (reason) => {
+      const f = setup();
+      f.viewport.dispatchEvent(pointer("pointerdown", 20, 30, 30, f.anchor));
+      if (reason === "move") f.viewport.dispatchEvent(pointer("pointermove", 20, 39, 30, f.anchor));
+      if (reason === "cancel") f.viewport.dispatchEvent(pointer("pointercancel", 20, 30, 30, f.anchor));
+      if (reason === "second-pointer") {
+        f.viewport.dispatchEvent(pointer("pointerdown", 21, 40, 30, f.anchor));
+        f.viewport.dispatchEvent(pointer("pointerup", 21, 40, 30, f.anchor));
+      }
+      const target = reason === "other-link" ? new EventTarget() : f.anchor;
+      f.viewport.dispatchEvent(pointer("pointerup", 20, 30, 30, target));
+      expect(f.click().defaultPrevented).toBe(true);
+      f.dispose();
+    });
+
+    it("keeps a valid token scoped to its link", () => {
+      const f = setup();
+      f.viewport.dispatchEvent(pointer("pointerdown", 20, 30, 30, f.anchor));
+      f.viewport.dispatchEvent(pointer("pointerup", 20, 30, 30, f.anchor));
+      expect(f.click(new EventTarget()).defaultPrevented).toBe(true);
+      f.dispose();
+    });
+
+    it("does not suppress explicit mouse or keyboard activation", () => {
+      const f = setup();
+      expect(f.click(f.anchor, { pointerType: "mouse", detail: 1 }).defaultPrevented).toBe(false);
+      expect(f.click(f.anchor, { detail: 0 }).defaultPrevented).toBe(false);
+      f.dispose();
+    });
+
+    it("discards a fresh token when disposed and rebound", () => {
+      const f = setup();
+      f.viewport.dispatchEvent(pointer("pointerdown", 20, 30, 30, f.anchor));
+      f.viewport.dispatchEvent(pointer("pointerup", 20, 30, 30, f.anchor));
+      f.dispose();
+      const dispose = mode === "branch"
+        ? f.controller.bindBranchTouch(f.viewport as unknown as HTMLElement)
+        : f.controller.bindOverviewTouch(f.viewport as unknown as HTMLElement);
+      expect(f.click().defaultPrevented).toBe(true);
+      dispose();
+    });
+
+    it("does not reuse an expired tap during a later gesture suppression window", () => {
+      const f = setup();
+      f.viewport.dispatchEvent(pointer("pointerdown", 20, 30, 30, f.anchor));
+      f.viewport.dispatchEvent(pointer("pointerup", 20, 30, 30, f.anchor));
+      const other = new GestureViewport();
+      const disposeOther = f.controller.bindOverviewTouch(other as unknown as HTMLElement);
+      f.now.mockReturnValue(1300);
+      other.dispatchEvent(pointer("pointerdown", 30, 20, 20));
+      other.dispatchEvent(pointer("pointermove", 30, 50, 20));
+      other.dispatchEvent(pointer("pointerup", 30, 50, 20));
+      f.now.mockReturnValue(1700);
+      expect(f.click().defaultPrevented).toBe(true);
+      disposeOther();
+      f.dispose();
+    });
+
+    it("does not mistake an explicitly touch-origin click for keyboard activation", () => {
+      const f = setup();
+      expect(f.click(f.anchor, { pointerType: "touch", detail: 0 }).defaultPrevented).toBe(true);
+      f.dispose();
+    });
+
+    it("rejects a moved pointerup even when no pointermove was delivered", () => {
+      const f = setup();
+      f.viewport.dispatchEvent(pointer("pointerdown", 20, 30, 30, f.anchor));
+      f.viewport.dispatchEvent(pointer("pointerup", 20, 40, 30, f.anchor));
+      expect(f.click().defaultPrevented).toBe(true);
+      f.dispose();
+    });
   });
 });

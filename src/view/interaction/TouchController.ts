@@ -9,6 +9,21 @@ export interface TouchPort {
   revealCompactSelection(): void;
 }
 
+interface FreshLinkTap {
+  pointerId: number;
+  anchor: Element;
+  x: number;
+  y: number;
+  complete: boolean;
+  expiresAt: number;
+}
+
+function closestAnchor(target: EventTarget | null): Element | null {
+  const node = target as Node | null;
+  const element = node?.nodeType === 1 ? node as Element : node?.parentElement;
+  return element?.closest("a") ?? null;
+}
+
 export class TouchController {
   private readonly touchPoints = new Map<number, TouchPoint>();
   private touchStart: { zoom: number; left: number; top: number; midpoint: TouchPoint; distance: number } | null = null;
@@ -166,17 +181,65 @@ export class TouchController {
     end: (event: PointerEvent) => void,
     clearGesture: () => void
   ): () => void {
+    let freshLinkTap: FreshLinkTap | null = null;
+    const activeTouches = new Set<number>();
+    const trackDown = (event: PointerEvent) => {
+      freshLinkTap = null;
+      if (event.pointerType === "touch") {
+        activeTouches.add(event.pointerId);
+        const anchor = closestAnchor(event.target);
+        if (anchor && viewport.contains(anchor) && activeTouches.size === 1
+          && !this.port.hasEditingSession() && this.touchPoints.size === 0
+          && this.branchTouchPoints.size === 0 && !this.branchTouchPinching) {
+          freshLinkTap = {
+            pointerId: event.pointerId, anchor, x: event.clientX, y: event.clientY,
+            complete: false, expiresAt: Date.now() + 500
+          };
+        }
+      }
+      down(event);
+    };
+    const trackMove = (event: PointerEvent) => {
+      if (freshLinkTap?.pointerId === event.pointerId
+        && Math.hypot(event.clientX - freshLinkTap.x, event.clientY - freshLinkTap.y) >= 8) {
+        freshLinkTap = null;
+      }
+      move(event);
+    };
+    const trackEnd = (event: PointerEvent) => {
+      if (event.type !== "lostpointercapture" || event.target === viewport) {
+        activeTouches.delete(event.pointerId);
+        if (freshLinkTap?.pointerId === event.pointerId) {
+          if (event.type === "pointerup" && activeTouches.size === 0
+            && Math.hypot(event.clientX - freshLinkTap.x, event.clientY - freshLinkTap.y) < 8
+            && closestAnchor(event.target) === freshLinkTap.anchor) {
+            freshLinkTap.complete = true;
+            freshLinkTap.expiresAt = Date.now() + 500;
+          } else {
+            freshLinkTap = null;
+          }
+        }
+      }
+      end(event);
+    };
     const suppress = (event: Event) => {
-      if (Date.now() < this.suppressTouchClickUntil) {
+      const pointerType = (event as PointerEvent).pointerType;
+      const nonTouchClick = event.type === "click" && pointerType !== "touch"
+        && ((typeof pointerType === "string" && pointerType !== "" && pointerType !== "touch")
+          || (event as MouseEvent).detail === 0);
+      const fresh = event.type === "click" && freshLinkTap?.complete
+        && Date.now() < freshLinkTap.expiresAt && closestAnchor(event.target) === freshLinkTap.anchor;
+      freshLinkTap = null;
+      if (Date.now() < this.suppressTouchClickUntil && !fresh && !nonTouchClick) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }
     };
-    viewport.addEventListener("pointerdown", down, { capture: true });
-    viewport.addEventListener("pointermove", move, { capture: true, passive: false });
-    viewport.addEventListener("pointerup", end, true);
-    viewport.addEventListener("pointercancel", end, true);
-    viewport.addEventListener("lostpointercapture", end, true);
+    viewport.addEventListener("pointerdown", trackDown, { capture: true });
+    viewport.addEventListener("pointermove", trackMove, { capture: true, passive: false });
+    viewport.addEventListener("pointerup", trackEnd, true);
+    viewport.addEventListener("pointercancel", trackEnd, true);
+    viewport.addEventListener("lostpointercapture", trackEnd, true);
     for (const type of ["click", "dblclick", "contextmenu"]) {
       viewport.addEventListener(type, suppress, true);
     }
@@ -185,15 +248,17 @@ export class TouchController {
     const dispose = () => {
       if (disposed) return;
       disposed = true;
-      viewport.removeEventListener("pointerdown", down, true);
-      viewport.removeEventListener("pointermove", move, true);
-      viewport.removeEventListener("pointerup", end, true);
-      viewport.removeEventListener("pointercancel", end, true);
-      viewport.removeEventListener("lostpointercapture", end, true);
+      viewport.removeEventListener("pointerdown", trackDown, true);
+      viewport.removeEventListener("pointermove", trackMove, true);
+      viewport.removeEventListener("pointerup", trackEnd, true);
+      viewport.removeEventListener("pointercancel", trackEnd, true);
+      viewport.removeEventListener("lostpointercapture", trackEnd, true);
       for (const type of ["click", "dblclick", "contextmenu"]) {
         viewport.removeEventListener(type, suppress, true);
       }
       clearGesture();
+      freshLinkTap = null;
+      activeTouches.clear();
       this.boundViewports.delete(viewport);
       const index = this.disposers.indexOf(dispose);
       if (index >= 0) this.disposers.splice(index, 1);
