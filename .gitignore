@@ -5,5 +5,7 @@ main.js
 coverage/
 .DS_Store
 Thumbs.db
-docs/superpowers/
+/docs/
+/.agents/
+/AGENTS.md
 .worktrees/

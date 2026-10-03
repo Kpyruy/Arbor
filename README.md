@@ -363,9 +363,7 @@ npm test
 
 Arbor includes a local `eslint-plugin-obsidianmd` setup so the same reviewer-facing checks can be run before submission updates.
 
-Manual interaction checks live in:
-
-- `docs/manual-qa.md`
+Also check editing, keyboard navigation, links, drag-and-drop, zoom and exports in both views on desktop and mobile before a release.
 
 ## Repository Layout
 
@@ -373,7 +371,6 @@ Manual interaction checks live in:
 arbor/
   assets/
   demo/
-  docs/
   src/
     model/
     storage/
