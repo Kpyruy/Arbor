@@ -108,11 +108,26 @@ export function prepareTreeOverviewExportFrame(
 }
 
 export function applyTreeOverviewExportLinkStyle(surface: HTMLElement, textMuted: string): void {
-  if (!textMuted) return;
-  const style = resolveTreeOverviewExportLinkStyle(textMuted);
-  surface.setCssProps({
-    "--arbor-tree-export-link-stroke": style.stroke,
-    "--arbor-tree-export-link-opacity": style.opacity
+  if (textMuted) {
+    const style = resolveTreeOverviewExportLinkStyle(textMuted);
+    surface.setCssProps({
+      "--arbor-tree-export-link-stroke": style.stroke,
+      "--arbor-tree-export-link-opacity": style.opacity
+    });
+  }
+
+  // html-to-image clones SVG subtrees intact, without inlining their children's
+  // CSS. Capture resolved paint as SVG attributes on this export-only snapshot.
+  const view = surface.ownerDocument.defaultView;
+  if (!view) return;
+  const paintProperties = [
+    "opacity", "fill", "fill-opacity", "stroke", "stroke-width", "stroke-opacity",
+    "stroke-dasharray", "stroke-dashoffset", "stroke-linecap", "stroke-linejoin",
+    "stroke-miterlimit", "vector-effect"
+  ];
+  surface.querySelectorAll<SVGPathElement>(".arbor-overview-link").forEach((path) => {
+    const computed = view.getComputedStyle(path);
+    paintProperties.forEach((property) => path.setAttribute(property, computed.getPropertyValue(property)));
   });
 }
 
