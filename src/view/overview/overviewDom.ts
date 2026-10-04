@@ -1,4 +1,4 @@
-import { ArborLayoutDirection, ArborOverviewLayout, BranchBlockId } from "../../types";
+import { ArborLayoutDirection, ArborOverviewLayout, ArborOverviewOrientation, BranchBlockId } from "../../types";
 import { buildOverviewLinkPath } from "../../model/overviewLayout";
 
 export function applyOverviewLayout(
@@ -7,7 +7,8 @@ export function applyOverviewLayout(
   cardsById: ReadonlyMap<BranchBlockId, HTMLElement>,
   layout: ArborOverviewLayout,
   zoom: number,
-  direction: ArborLayoutDirection
+  direction: ArborLayoutDirection,
+  orientation: ArborOverviewOrientation = "horizontal"
 ): void {
   scene.setCssProps({
     "--arbor-overview-zoom": String(zoom),
@@ -29,13 +30,14 @@ export function applyOverviewLayout(
     });
   });
   surface.querySelector(".arbor-overview-links")?.remove();
-  renderOverviewLinks(surface, layout, direction);
+  renderOverviewLinks(surface, layout, direction, orientation);
 }
 
 export function renderOverviewLinks(
   surface: HTMLElement,
   layout: ArborOverviewLayout,
-  direction: ArborLayoutDirection
+  direction: ArborLayoutDirection,
+  orientation: ArborOverviewOrientation = "horizontal"
 ): void {
   const svg = surface.createSvg("svg", {
     cls: "arbor-overview-links",
@@ -55,7 +57,7 @@ export function renderOverviewLinks(
     }
     svg.createSvg("path", {
       cls: "arbor-overview-link",
-      attr: { d: buildOverviewLinkPath(parent, child, direction) }
+      attr: { d: buildOverviewLinkPath(parent, child, direction, orientation) }
     });
   });
 }

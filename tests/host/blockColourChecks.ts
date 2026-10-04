@@ -2,11 +2,12 @@ import { syncCardColour } from "../../src/view/appearance/cardColours";
 import { createOverviewSnapshot } from "../../src/view/export/overviewSnapshot";
 import type { MarkdownPort } from "../../src/view/state/viewTypes";
 import { resolveBlockColors } from "../../src/model/blockAppearance";
-import type { BranchTreeMetadata } from "../../src/types";
+import type { ArborOverviewOrientation, BranchTreeMetadata } from "../../src/types";
 export async function checkBlockColoursHost(input: {
     document: Document;
     markdown: MarkdownPort;
     waitForNextPaint(): Promise<void>;
+    orientation?: ArborOverviewOrientation;
 }): Promise<{
     checks: number;
 }> {
@@ -68,7 +69,7 @@ export async function checkBlockColoursHost(input: {
                         { id: "child", parentId: "root", order: 0, content: "Child", after: "", appearance: { cardColor: "#9966dd" } },
                         { id: "leaf", parentId: "child", order: 0, content: "Leaf", after: "" }
                     ] },
-                selectedBlockId: null, sourcePath: "", cardWidth: 200, direction, snippetLength: 100,
+                selectedBlockId: null, sourcePath: "", cardWidth: 200, direction, orientation: input.orientation, snippetLength: 100,
                 themeVariables: {}, textMuted: "#888888", markdown: input.markdown,
                 waitForNextPaint: () => input.waitForNextPaint()
             });

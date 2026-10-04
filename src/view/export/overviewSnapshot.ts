@@ -1,7 +1,7 @@
 import { getActivePath, getBlock, cloneMetadata } from "../../model/tree";
 import { buildOverviewLayout } from "../../model/overviewLayout";
 import { resolveTreeOverviewExportLinkStyle } from "../../treeOverviewExport";
-import type { ArborLayoutDirection, BranchBlockId, BranchTreeMetadata } from "../../types";
+import type { ArborLayoutDirection, ArborOverviewOrientation, BranchBlockId, BranchTreeMetadata } from "../../types";
 import { extractSnippet } from "../../utils";
 import type { OverviewSnapshot } from "./ExportController";
 import { applyOverviewLayout } from "../overview/overviewDom";
@@ -16,6 +16,7 @@ export interface OverviewSnapshotInput {
   sourcePath: string;
   cardWidth: number;
   direction: ArborLayoutDirection;
+  orientation?: ArborOverviewOrientation;
   snippetLength: number;
   themeVariables: Record<string, string>;
   textMuted: string;
@@ -30,12 +31,13 @@ export async function createOverviewSnapshot(input: OverviewSnapshotInput): Prom
   const sourcePath = input.sourcePath;
   const cardWidth = input.cardWidth;
   const direction = input.direction;
+  const orientation = input.orientation ?? "horizontal";
   const snippetLength = input.snippetLength;
   const themeVariables = { ...input.themeVariables };
   const textMuted = input.textMuted;
   const padding = 48;
   const activePathIds = new Set(getActivePath(metadata, selectedBlockId).map((block) => block.id));
-  const initialLayout = buildOverviewLayout(metadata, { cardWidth, direction });
+  const initialLayout = buildOverviewLayout(metadata, { cardWidth, direction, orientation });
   const root = input.document.body.createDiv({ cls: "arbor-tree-overview-export arbor-view" });
   let disposed = false;
   const dispose = () => {
@@ -80,9 +82,9 @@ export async function createOverviewSnapshot(input: OverviewSnapshotInput): Prom
     cardsById.forEach((card, blockId) => {
       cardHeights.set(blockId, Math.max(card.offsetHeight, card.scrollHeight));
     });
-    const layout = buildOverviewLayout(metadata, { cardWidth, cardHeights, direction });
+    const layout = buildOverviewLayout(metadata, { cardWidth, cardHeights, direction, orientation });
     prepareTreeOverviewExportFrame(frame, scene, surface, layout.width, layout.height, padding);
-    applyOverviewLayout(scene, surface, cardsById, layout, 1, direction);
+    applyOverviewLayout(scene, surface, cardsById, layout, 1, direction, orientation);
     applyTreeOverviewExportLinkStyle(surface, textMuted);
     await waitForTreeOverviewExportAssets(surface, () => input.waitForNextPaint());
 

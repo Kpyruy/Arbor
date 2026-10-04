@@ -2,7 +2,7 @@ import { getActivePath, getBlock } from "../../model/tree";
 import { buildOverviewLayout } from "../../model/overviewLayout";
 import { resolveOverviewCardSelectionState, startOverviewSelectionAnimation } from "../../overviewNavigation";
 import { extractSnippet } from "../../utils";
-import type { BranchBlock, BranchBlockId } from "../../types";
+import type { ArborOverviewOrientation, BranchBlock, BranchBlockId } from "../../types";
 import { applyOverviewLayout } from "./overviewDom";
 import { ViewWorkScope } from "../runtime/ViewWorkScope";
 import { findRenderedCardLink } from "../navigation/CardLinkController";
@@ -15,6 +15,7 @@ export interface TreeOverviewPort {
   selection: SelectionPort;
   getBody(): HTMLElement | null;
   getContext(): BranchViewContext | null;
+  getOverviewOrientation(): ArborOverviewOrientation;
   bindViewport(viewport: HTMLElement): () => void;
   openBlockMenu(id: BranchBlockId, event: MouseEvent): void;
   setHoveredBlock(id: BranchBlockId | null): void;
@@ -89,10 +90,13 @@ export class TreeOverviewController {
     stage.setCssStyles({ display: "" });
     const settings = this.port.read.getSettings();
     const zoom = settings.zoomLevel;
+    const direction = settings.layoutDirection;
+    const orientation = this.port.getOverviewOrientation();
 
     const initialLayout = buildOverviewLayout(state.metadata, {
       cardWidth: settings.cardWidth,
-      direction: settings.layoutDirection
+      direction,
+      orientation
     });
     const selectedBlockId = state.selectedBlockId;
     const activePathIds = new Set(getActivePath(state.metadata, selectedBlockId).map((block) => block.id));
@@ -136,7 +140,8 @@ export class TreeOverviewController {
         const content = card.createDiv({ cls: "arbor-overview-card-content markdown-rendered" });
         await this.port.markdown.render(block.content, content, this.port.read.getFilePath());
         if (!this.work.isCurrent(workToken) || overviewRenderVersion !== this.overviewRenderVersion
-          || this.port.read.getState() !== state || this.port.read.getFilePath() !== filePath) {
+          || this.port.read.getState() !== state || this.port.read.getFilePath() !== filePath
+          || this.port.getOverviewOrientation() !== orientation || this.port.read.getSettings().layoutDirection !== direction) {
           surface.remove();
           return;
         }
@@ -184,12 +189,13 @@ export class TreeOverviewController {
       surface.remove();
       return;
     }
-    if (!this.work.isCurrent(workToken) || this.port.read.getState() !== state || this.port.read.getFilePath() !== filePath) {
+    if (!this.work.isCurrent(workToken) || this.port.read.getState() !== state || this.port.read.getFilePath() !== filePath
+      || this.port.getOverviewOrientation() !== orientation || this.port.read.getSettings().layoutDirection !== direction) {
       surface.remove();
       return;
     }
     cardsById.forEach((card, blockId) => {
-      measuredHeights.set(blockId, card.scrollHeight);
+      measuredHeights.set(blockId, orientation === "horizontal" ? card.scrollHeight : Math.max(card.offsetHeight, card.scrollHeight));
       card.removeClass("is-measuring");
     });
 
@@ -202,9 +208,10 @@ export class TreeOverviewController {
     const layout = buildOverviewLayout(currentState.metadata, {
       cardWidth: currentSettings.cardWidth,
       cardHeights: measuredHeights,
-      direction: currentSettings.layoutDirection
+      direction,
+      orientation
     });
-    applyOverviewLayout(scene, surface, cardsById, layout, currentSettings.zoomLevel, currentSettings.layoutDirection);
+    applyOverviewLayout(scene, surface, cardsById, layout, currentSettings.zoomLevel, direction, orientation);
     previousSurface.remove();
     surface.removeClass("is-staging");
     this.overviewSurfaceEl = surface;

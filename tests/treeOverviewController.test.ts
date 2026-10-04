@@ -10,7 +10,18 @@ describe("TreeOverviewController", () => {
     let cleared = 0;
     // This scheduling test deliberately has no DOM: only the focus command's
     // consumption is observed. Geometry/focus placement belongs to host checks.
-    const controller = new TreeOverviewController({ clearPendingFocus: () => { cleared += 1; } } as TreeOverviewPort);
+    const unused = (): never => { throw Error("Scheduling test must not access rendering ports"); };
+    const port: TreeOverviewPort = {
+      read: { getState: unused, getSettings: unused, getMode: unused, getFilePath: unused },
+      editor: { getSession: unused, beginEditingBlock: unused, commitEditIfNeeded: unused, clearBlurCommitTimer: unused, wireEditorElement: unused, resizeEditor: unused },
+      markdown: { render: unused }, selection: { selectBlock: unused },
+      getBody: unused, getContext: unused, getOverviewOrientation: () => "horizontal",
+      bindViewport: unused, openBlockMenu: unused, setHoveredBlock: unused, restoreViewport: unused,
+      centerSelected: unused, revealSelected: unused, syncTouchDock: unused, requestRender: unused,
+      waitForNextPaint: unused, syncOutputCardPresentation: unused, consumeAutofocus: unused,
+      clearPendingFocus: () => { cleared += 1; }, tryHandleCardLink: unused
+    };
+    const controller = new TreeOverviewController(port);
     const scheduler = controller as unknown as { restoreOverviewKeyboardFocusAfterMutation(): void };
     vi.stubGlobal("window", {
       requestAnimationFrame: (callback: FrameRequestCallback) => { frames.set(++nextId, callback); return nextId; },

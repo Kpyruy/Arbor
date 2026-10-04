@@ -1,22 +1,25 @@
 import { toCanvas } from "html-to-image";
 import { createOverviewSnapshot } from "../../src/view/export/overviewSnapshot";
 import type { MarkdownPort } from "../../src/view/state/viewTypes";
+import type { ArborOverviewOrientation } from "../../src/types";
 
 /** Check real exported pixels, not the live SVG's stylesheet or a DOM mock. */
 export async function checkOverviewConnectorHost(input: {
   document: Document;
   markdown: MarkdownPort;
   waitForNextPaint(): Promise<void>;
+  orientations?: readonly ArborOverviewOrientation[];
 }): Promise<{ checks: number }> {
   const { document: doc } = input;
   const results: Array<{ direction: string; custom: boolean; backgroundRatio: number; connectorPixels: number; peakRed: number }> = [];
   const customPaint = new CSSStyleSheet();
   customPaint.replaceSync(".arbor-tree-overview-export .arbor-overview-link { stroke: #e00000; stroke-opacity: 0.5; stroke-width: 3px; opacity: 0.5; }");
-  for (const scenario of [
+  const scenarios = [
     { direction: "ltr", custom: false }, { direction: "rtl", custom: false },
     { direction: "ltr", custom: true }, { direction: "rtl", custom: true }
-  ] as const) {
-    const { direction, custom } = scenario;
+  ] as const;
+  for (const scenario of (input.orientations ?? ["horizontal"]).flatMap(orientation => scenarios.map(scenario => ({ ...scenario, orientation })))) {
+    const { direction, custom, orientation } = scenario;
     if (custom) doc.adoptedStyleSheets = [...doc.adoptedStyleSheets, customPaint];
     let snapshot: Awaited<ReturnType<typeof createOverviewSnapshot>> | null = null;
     try {
@@ -28,7 +31,7 @@ export async function checkOverviewConnectorHost(input: {
           { id: "lower", parentId: "root", order: 1, content: "Lower", after: "" }
         ] },
         selectedBlockId: null, sourcePath: "", cardWidth: 200,
-        direction, snippetLength: 100,
+        direction, orientation: input.orientations ? orientation : undefined, snippetLength: 100,
         themeVariables: { "--background-primary": "#202020", "--background-secondary": "#202020" },
         textMuted: "#b3b3b3", markdown: input.markdown,
         waitForNextPaint: () => input.waitForNextPaint()
@@ -41,10 +44,15 @@ export async function checkOverviewConnectorHost(input: {
       const childBox = child.getBoundingClientRect();
       // The central connector gap has no cards/text. With valid thin lines,
       // almost all its pixels remain background; filled curves occupy an area.
-      const x = Math.round((direction === "ltr" ? parentBox.right : childBox.right) - frameBox.left + 20);
-      const right = Math.round((direction === "ltr" ? childBox.left : parentBox.left) - frameBox.left - 20);
-      const y = Math.round(childBox.top - frameBox.top + 20);
-      const bottom = Math.round(parentBox.bottom - frameBox.top - 20);
+      const surfaceBox = snapshot.frame.querySelector(".arbor-overview-surface")!.getBoundingClientRect();
+      const horizontal = orientation === "horizontal";
+      const topDown = orientation === "vertical-top-down";
+      const x = Math.round((horizontal ? (direction === "ltr" ? parentBox.right : childBox.right) + 20 : surfaceBox.left) - frameBox.left);
+      const right = Math.round((horizontal ? (direction === "ltr" ? childBox.left : parentBox.left) - 20 : surfaceBox.right) - frameBox.left);
+      const gapStart = topDown ? parentBox.bottom : childBox.bottom;
+      const gapEnd = topDown ? childBox.top : parentBox.top;
+      const y = Math.round((horizontal ? childBox.top + 20 : gapStart + (gapEnd - gapStart) / 3) - frameBox.top);
+      const bottom = Math.round((horizontal ? parentBox.bottom - 20 : gapEnd - (gapEnd - gapStart) / 3) - frameBox.top);
       const canvas = await toCanvas(snapshot.frame, {
         width: snapshot.width, height: snapshot.height,
         pixelRatio: 1, backgroundColor: "#202020"

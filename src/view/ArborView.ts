@@ -47,6 +47,7 @@ import {
   BranchTreeMetadata,
   BranchTreeMutationResult,
   ArborPresentationMode,
+  ArborOverviewOrientation,
   ArborOutputProfile,
   ArborOutputState,
   ArborSettings
@@ -390,6 +391,7 @@ export class ArborView extends FileView {
       setCollapsedState: (id, collapsed) => this.setCollapsedState(id, collapsed)
     });
     this.overview = new TreeOverviewController({
+      getOverviewOrientation: () => this.getOverviewOrientation(),
       read: {
         getState: () => this.state,
         getSettings: () => this.plugin.settings,
@@ -980,6 +982,10 @@ export class ArborView extends FileView {
     await this.exportController.exportTreeOverview();
   }
 
+  getOverviewOrientation(): ArborOverviewOrientation {
+    return "horizontal";
+  }
+
   private createOverviewExportSnapshot(): Promise<OverviewSnapshot> {
     const state = this.state;
     const file = this.file;
@@ -1000,6 +1006,7 @@ export class ArborView extends FileView {
       sourcePath: file.path,
       cardWidth: this.plugin.settings.cardWidth,
       direction: this.plugin.settings.layoutDirection,
+      orientation: this.getOverviewOrientation(),
       snippetLength: this.plugin.settings.previewSnippetLength,
       themeVariables,
       textMuted,
