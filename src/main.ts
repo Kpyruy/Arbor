@@ -16,6 +16,7 @@ import { buildBranchDocument } from "./storage/document";
 import { normalizeMetadata } from "./storage/serializer";
 import { getReleaseNote, shouldShowReleaseNotice } from "./releaseNotice";
 import { ArborSettings } from "./types";
+import { normalizeOverviewOrientation } from "./overviewOrientation";
 import {
   ArborThemeState,
   applyThemeSelection,
@@ -130,6 +131,7 @@ export default class ArborPlugin extends Plugin {
     delete settings.themeMode;
     delete settings.customTheme;
     this.settings = settings;
+    this.settings.overviewOrientation = normalizeOverviewOrientation(settings.overviewOrientation) ?? "horizontal";
     this.settings.layoutDirection = resolveInitialLayoutDirection({
       hasStoredPluginData: !this.isFreshPluginInstall,
       savedDirection: this.getStoredLayoutDirection(raw),
@@ -205,6 +207,12 @@ export default class ArborPlugin extends Plugin {
       }
 
       void view.refreshView();
+    });
+  }
+
+  refreshOverviewOrientations(): void {
+    this.getBranchViews().forEach((view) => {
+      if (view.getOverviewOrientationOverride() === null) view.refreshOverviewOrientation();
     });
   }
 
@@ -301,12 +309,13 @@ export default class ArborPlugin extends Plugin {
     const beforeSwap = options?.beforeSwap;
     if (resolveLoadingViewTarget(inspection, explicitArborOpen) === "arbor") {
       await beforeSwap?.();
+      if (leaf.view.getViewType() !== VIEW_TYPE_ARBOR_LOADING) return;
+      const preserved = leaf.view.getState();
+      if (preserved.file !== file.path) return;
       await leaf.setViewState({
         type: VIEW_TYPE_ARBOR,
         active: true,
-        state: {
-          file: file.path
-        }
+        state: { ...preserved, file: file.path }
       }, options?.eState);
       await this.app.workspace.revealLeaf(leaf);
       return;
@@ -559,10 +568,12 @@ export default class ArborPlugin extends Plugin {
         ? this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf(false)
         : this.app.workspace.getLeaf("split", this.settings.splitDirection));
     this.expectExplicitArborOpen(file.path);
+    const previousState = leaf.getViewState().state;
     await leaf.setViewState({
       type: VIEW_TYPE_ARBOR,
       active: true,
       state: {
+        ...(previousState?.file === file.path ? previousState : {}),
         file: file.path
       }
     });

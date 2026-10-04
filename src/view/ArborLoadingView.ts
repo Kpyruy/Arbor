@@ -1,16 +1,36 @@
 import { FileView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import type { ViewStateResult } from "obsidian";
 import { VIEW_TYPE_ARBOR_LOADING } from "../constants";
 import type ArborPlugin from "../main";
 import { ARBOR_THEME_VARIABLES, resolveArborThemeVariables } from "../theme";
+import { normalizeOverviewOrientation } from "../overviewOrientation";
+import type { ArborOverviewOrientation } from "../types";
 
 export class ArborLoadingView extends FileView {
   navigation = true;
   private resolveStarted = false;
   private resolveRetryTimer: number | null = null;
+  private overviewOrientationOverride: ArborOverviewOrientation | null = null;
+  private overviewWorkspaceState: Record<string, unknown> = {};
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: ArborPlugin) {
     super(leaf);
     this.allowNoFile = false;
+  }
+
+  override getState(): Record<string, unknown> {
+    const state = { ...this.overviewWorkspaceState, ...super.getState() };
+    delete state.arborOverviewOrientation;
+    if (this.overviewOrientationOverride) state.arborOverviewOrientation = this.overviewOrientationOverride;
+    return state;
+  }
+
+  override async setState(state: unknown, result: ViewStateResult): Promise<void> {
+    const supplied = state && typeof state === "object" ? { ...state } as Record<string, unknown> : {};
+    this.overviewOrientationOverride = normalizeOverviewOrientation(supplied.arborOverviewOrientation);
+    delete supplied.arborOverviewOrientation;
+    this.overviewWorkspaceState = supplied;
+    await super.setState(supplied, result);
   }
 
   getViewType(): string {

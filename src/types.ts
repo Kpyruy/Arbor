@@ -176,6 +176,7 @@ export type BreadcrumbLabelFallbackMode = "firstLine" | "snippet" | "none";
 
 export interface ArborSettings {
   layoutDirection: ArborLayoutDirection;
+  overviewOrientation: ArborOverviewOrientation;
   activeThemeId: string;
   customThemes: ArborSavedTheme[];
   defaultPresentationMode: ArborPresentationMode;

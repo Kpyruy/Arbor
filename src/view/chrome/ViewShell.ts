@@ -1,5 +1,5 @@
 import { Menu, Platform, setIcon } from "obsidian";
-import type { ArborLayoutDirection, ArborPresentationMode } from "../../types";
+import type { ArborLayoutDirection, ArborOverviewOrientation, ArborPresentationMode } from "../../types";
 import { getChildArrowIcon, getParentArrowIcon } from "../../layoutDirection";
 import {
   getNextSibling,
@@ -59,6 +59,7 @@ export interface DockActions {
 
 export interface ShellPort {
   read: ViewReadPort;
+  getOverviewOrientation(): ArborOverviewOrientation;
   getSession(): EditingSession | null;
   getLoadingState(): LoadingOverlayState | null;
   getThemeVariables(): Record<string, string>;

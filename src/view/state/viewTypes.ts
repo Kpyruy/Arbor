@@ -43,6 +43,14 @@ export interface EditingSession {
   origin: EditingOrigin;
 }
 
+export interface OverviewEditorSelectionSnapshot {
+  session: EditingSession;
+  start: number;
+  end: number;
+  direction: "forward" | "backward" | "none";
+  focused: boolean;
+}
+
 export interface LoadedFileState {
   frontmatter: string;
   metadata: BranchTreeMetadata;

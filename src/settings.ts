@@ -6,6 +6,13 @@ import {
   BUILT_IN_THEMES
 } from "./theme";
 import { MIN_ZOOM_LEVEL } from "./mobile";
+import { normalizeOverviewOrientation } from "./overviewOrientation";
+
+const OVERVIEW_ORIENTATION_OPTIONS = {
+  horizontal: "Horizontal",
+  "vertical-bottom-up": "Vertical — root at bottom",
+  "vertical-top-down": "Vertical — root at top"
+};
 
 type ArborSettingControl =
   | { type: "dropdown"; key: keyof ArborSettings; options: Record<string, string>; defaultValue?: string }
@@ -21,6 +28,7 @@ interface ArborSettingDefinition {
 
 export const DEFAULT_SETTINGS: ArborSettings = {
   layoutDirection: "ltr",
+  overviewOrientation: "horizontal",
   activeThemeId: AUTOMATIC_THEME_ID,
   customThemes: [],
   defaultPresentationMode: "editor",
@@ -67,6 +75,16 @@ export class ArborSettingTab extends PluginSettingTab {
           key: "layoutDirection",
           options: { ltr: "Left to right", rtl: "Right to left" },
           defaultValue: DEFAULT_SETTINGS.layoutDirection
+        }
+      },
+      {
+        name: "Tree overview layout",
+        desc: "Choose the default tree overview layout. Individual tabs can override it.",
+        control: {
+          type: "dropdown",
+          key: "overviewOrientation",
+          options: OVERVIEW_ORIENTATION_OPTIONS,
+          defaultValue: DEFAULT_SETTINGS.overviewOrientation
         }
       },
       {
@@ -140,14 +158,18 @@ export class ArborSettingTab extends PluginSettingTab {
     }
 
     const settings = this.plugin.settings as unknown as Record<string, unknown>;
-    settings[key] = key === "zoomLevel" && typeof value === "number"
+    settings[key] = key === "overviewOrientation"
+      ? normalizeOverviewOrientation(value) ?? "horizontal"
+      : key === "zoomLevel" && typeof value === "number"
       ? value / 100
       : key === "breadcrumbLabelPreferredPrefix" && typeof value === "string"
         ? value.trim()
         : value;
     await this.plugin.saveSettings();
 
-    if (key === "layoutDirection") {
+    if (key === "overviewOrientation") {
+      this.plugin.refreshOverviewOrientations();
+    } else if (key === "layoutDirection") {
       this.plugin.refreshAllBranchViews({ layoutDirectionChanged: true });
     } else if (["activeThemeId", "cardWidth", "cardMinHeight", "horizontalSpacing", "verticalSpacing", "zoomLevel", "previewSnippetLength", "dragAndDrop", "showBreadcrumb", "showBreadcrumbFlow", "breadcrumbLabelPreferredPrefix", "breadcrumbLabelFallback", "liveLinearPreview"].includes(key)) {
       this.plugin.refreshAllBranchViews();
@@ -175,6 +197,15 @@ export class ArborSettingTab extends PluginSettingTab {
             this.plugin.refreshAllBranchViews({ layoutDirectionChanged: true });
           })
       );
+
+    new Setting(containerEl)
+      .setName("Tree overview layout")
+      .setDesc("Choose the default tree overview layout. Individual tabs can override it.")
+      .addDropdown((dropdown) => {
+        Object.entries(OVERVIEW_ORIENTATION_OPTIONS).forEach(([value, label]) => { dropdown.addOption(value, label); });
+        dropdown.setValue(this.plugin.settings.overviewOrientation)
+          .onChange((value) => { void this.setControlValue("overviewOrientation", value); });
+      });
 
     new Setting(containerEl)
       .setName("Default opening mode")

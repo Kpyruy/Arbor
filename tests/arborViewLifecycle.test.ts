@@ -7,6 +7,8 @@ import { linearizeTree } from "../src/storage/serializer";
 import type { DocumentPort } from "../src/view/state/DocumentController";
 import type { LoadingOverlayState } from "../src/view/state/viewTypes";
 import { fixtureSettings, fixtureTree } from "./helpers/arborFixtures";
+import type { BranchHistory } from "../src/history";
+import { TreeOverviewController } from "../src/view/overview/TreeOverviewController";
 
 type LifecycleModule = typeof import("../src/view/ArborView") & {
   DocumentController: typeof import("../src/view/state/DocumentController").DocumentController;
@@ -33,6 +35,8 @@ interface TestView {
   onClose(): Promise<void>;
   clear(): void;
   render(): void;
+  getOverviewOrientation(): string;
+  setOverviewOrientationOverride(value: "horizontal" | "vertical-top-down" | "vertical-bottom-up" | null): Promise<void>;
 }
 
 interface Deferred<T> {
@@ -153,6 +157,75 @@ describe("Heading Linker subscription lifecycle", () => {
   });
 });
 
+describe("orientation-only lifecycle", () => {
+  function pendingOverview(harness: LifecycleHarness): { work: ViewWorkScope; token: number } {
+    const overview = new TreeOverviewController({
+      read: { getState: () => harness.view.documentController.getState(), getSettings: fixtureSettings, getMode: () => "overview", getFilePath: () => harness.view.file.path },
+      editor: { getSession: () => null, beginEditingBlock() {}, commitEditIfNeeded: async () => {}, clearBlurCommitTimer() {}, wireEditorElement() {}, resizeEditor() {} },
+      markdown: { render: async () => {} }, selection: { selectBlock() {} }, getBody: () => null,
+      getContext: () => null, getOverviewOrientation: () => "horizontal", bindViewport: () => () => {},
+      openBlockMenu() {}, setHoveredBlock() {}, restoreViewport() {}, centerSelected() {}, revealSelected() {},
+      syncTouchDock() {}, requestRender() {}, waitForNextPaint: async () => {}, syncOutputCardPresentation() {},
+      consumeAutofocus() {}, clearPendingFocus() {}, tryHandleCardLink: () => false
+    });
+    Object.assign(harness.view, { overview });
+    const work = Reflect.get(overview, "work") as unknown as ViewWorkScope;
+    return { work, token: work.token() };
+  }
+
+  it("invalidates real overview work at same-source load start before the read completes", async () => {
+    const harness = createHarness();
+    await harness.view.onLoadFile(harness.files.a);
+    const previous = harness.view.documentController.getState();
+    const { work, token } = pendingOverview(harness);
+    const reading = deferred<string>();
+    harness.queueRead(harness.files.a, reading.promise);
+    const reload = harness.view.onLoadFile(harness.files.a);
+    try {
+      expect(harness.view.documentController.getState()).toBe(previous);
+      expect(work.isCurrent(token)).toBe(false);
+    } finally { reading.resolve(harness.disk.get("A.md")!); await reload; }
+  });
+
+  it.each(["onUnloadFile", "onClose"] as const)("invalidates overview work immediately on %s before the normal pending save finishes", async method => {
+    const harness = createHarness();
+    const { work, token } = pendingOverview(harness);
+    const saving = deferred<void>();
+    Object.assign(harness.view, { commitEditIfNeeded: () => saving.promise });
+    const closing = harness.view[method]();
+    try { expect(work.isCurrent(token)).toBe(false); }
+    finally { saving.resolve(); await closing; }
+  });
+
+  it("keeps loaded source, selected ID, output profiles, history and draft without saving", async () => {
+    const harness = createHarness();
+    await harness.view.onLoadFile(harness.files.a);
+    const source = harness.disk.get("A.md");
+    const state = harness.view.documentController.getState();
+    const history = Reflect.get(harness.view.documentController, "history") as unknown as BranchHistory;
+    if (!state) throw Error("Expected loaded source");
+    history.push("Prior edit", state.metadata, state.outputState, state.selectedBlockId);
+    const historyBefore = JSON.stringify(history);
+    const session = { blockId: "a-block", origin: "overview", value: "Unsaved draft", autofocus: false };
+    Object.assign(harness.view, {
+      overviewOrientationOverride: null, overviewOrientationChangeGeneration: 0,
+      app: { workspace: { requestSaveLayout() {} } },
+      overview: { invalidate() {}, requestCenterOnNextRender() {} },
+      overviewViewport: { discardPendingRestore() {} },
+      editor: { getSession: () => session },
+      commitEditIfNeeded: async () => { harness.disk.set("A.md", session.value); session.value = ""; }
+    });
+    await harness.view.setOverviewOrientationOverride("vertical-top-down");
+    await harness.view.setOverviewOrientationOverride("vertical-bottom-up");
+    expect(harness.view.getOverviewOrientation()).toBe("vertical-bottom-up");
+    expect(harness.disk.get("A.md")).toBe(source);
+    expect(session.value).toBe("Unsaved draft");
+    expect(harness.view.documentController.getState()).toBe(state);
+    expect(JSON.stringify(history)).toBe(historyBefore);
+    expect(harness.writes).toEqual([]);
+  });
+});
+
 function documentFor(label: string, legacy: boolean): string {
   const metadata = {
     ...fixtureTree(),
@@ -255,7 +328,7 @@ function createHarness(options: { legacyA?: boolean; legacyB?: boolean; manualPa
     navigationController: { clearNumericNavigation: () => undefined },
     branchViewport: { reset: () => undefined },
     overviewViewport: { reset: () => undefined },
-    overview: { reset: () => undefined },
+    overview: { reset: () => undefined, invalidate: () => undefined },
     dragDropController: { reset: () => undefined },
     search: { reset: () => undefined },
     preview: { reset: () => undefined },
@@ -519,7 +592,7 @@ describe("ArborView load lifecycle", () => {
       branchViewport: { reset: () => order.push("branch-reset") },
       overviewViewport: { reset: () => order.push("overview-viewport-reset") },
       dragDropController: { reset: () => order.push("drag-reset") },
-      overview: { reset: () => order.push("overview-reset") }
+      overview: { reset: () => order.push("overview-reset"), invalidate() {} }
     });
 
     const closing = harness.view.onClose();

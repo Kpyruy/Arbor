@@ -1,10 +1,10 @@
-import { Menu } from "obsidian";
+import { Menu, Notice } from "obsidian";
 import { buildArborBlockLink } from "../../blockLinks";
 import { getChildArrowIcon, getParentArrowIcon } from "../../layoutDirection";
 import { cloneMetadata, getBlock, getChildren, getParentBlock } from "../../model/tree";
 import { normalizeBlockColor, resolveBlockColors, setBlockColor } from "../../model/blockAppearance";
 import { FULL_OUTPUT_PROFILE_ID, setBlockOnlyState, setSubtreeState } from "../../outputProfiles";
-import type { ArborBlockColorScope, ArborOutputProfile, ArborOutputState, ArborSettings, BranchBlockId } from "../../types";
+import type { ArborBlockColorScope, ArborOverviewOrientation, ArborOutputProfile, ArborOutputState, ArborSettings, BranchBlockId } from "../../types";
 import type { BlockColorChoice, BlockColorDialogOptions } from "../modals/BlockColorModal";
 import { deepClone, extractPathLabel } from "../../utils";
 import type { OutputProfilesController } from "../OutputProfilesModal";
@@ -36,6 +36,9 @@ export interface MenuCommands {
 
 export interface ViewMenusPort {
   read: ViewReadPort;
+  getOverviewOrientation(): ArborOverviewOrientation;
+  getOverviewOrientationOverride(): ArborOverviewOrientation | null;
+  setOverviewOrientationOverride(value: ArborOverviewOrientation | null): Promise<void>;
   selection: SelectionPort;
   editor: EditorPort;
   commands: MenuCommands;
@@ -104,6 +107,24 @@ export class ViewMenus {
         ? item.setTitle("Return to branch editor").setIcon("git-fork").onClick(() => this.port.commands.closeTreeOverview())
         : item.setTitle("Tree overview").setIcon("map").onClick(() => this.port.commands.openTreeOverview())
     );
+    menu.addSeparator();
+    for (const [value, label] of [
+      ["horizontal", "Horizontal"],
+      ["vertical-bottom-up", "Vertical — root at bottom"],
+      ["vertical-top-down", "Vertical — root at top"],
+      [null, "Use plugin default"]
+    ] as const) {
+      menu.addItem((item) => item.setSection("Tree overview layout").setTitle(label)
+        .setChecked(value === null ? this.port.getOverviewOrientationOverride() === null : this.port.getOverviewOrientation() === value)
+        .onClick(async () => {
+          try { await this.port.setOverviewOrientationOverride(value); }
+          catch (error) {
+            const message = "Arbor could not change the tree overview layout.";
+            this.port.reportError(message, error);
+            new Notice(message);
+          }
+        }));
+    }
     menu.addSeparator();
     this.addViewToggleMenuItem(menu, "Selected block panel", settings.liveLinearPreview, () =>
       this.port.updateViewSetting("liveLinearPreview", !this.port.read.getSettings().liveLinearPreview)

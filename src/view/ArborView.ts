@@ -14,6 +14,7 @@ import {
   TFile,
   WorkspaceLeaf
 } from "obsidian";
+import type { ViewStateResult } from "obsidian";
 import type ArborPlugin from "../main";
 import { setBlockColor } from "../model/blockAppearance";
 import { syncCardColour } from "./appearance/cardColours";
@@ -71,7 +72,8 @@ import type {
   EditingOrigin,
   EditingSession,
   LoadedFileState,
-  LoadingOverlayState
+  LoadingOverlayState,
+  OverviewEditorSelectionSnapshot
 } from "./state/viewTypes";
 import {
   getOutputCardPresentation,
@@ -103,6 +105,7 @@ import { ViewShell } from "./chrome/ViewShell";
 import { ViewMenus } from "./chrome/ViewMenus";
 import { DocumentController } from "./state/DocumentController";
 import { ViewWorkScope } from "./runtime/ViewWorkScope";
+import { normalizeOverviewOrientation, resolveOverviewOrientation } from "../overviewOrientation";
 export {
   getBlockOutputMenuActions,
   getOutputCardPresentation
@@ -143,6 +146,16 @@ export class ArborView extends FileView {
   private renderGeneration = 0;
   private cancelRenderFrame: (() => void) | null = null;
   private loadGeneration = 0;
+  private overviewOrientationOverride: ArborOverviewOrientation | null = null;
+  private overviewOrientationChangeGeneration = 0;
+  private overviewWorkspaceState: Record<string, unknown> = {};
+  private overviewEditorSelectionContext: {
+    selection: OverviewEditorSelectionSnapshot;
+    file: TFile | null;
+    load: number;
+    requested: number;
+    token: number;
+  } | null = null;
   private pendingFocusBlockId: BranchBlockId | null = null;
   private pendingScrollBlockId: BranchBlockId | null = null;
   private lastViewportScroll = { left: 0, top: 0 };
@@ -392,6 +405,8 @@ export class ArborView extends FileView {
     });
     this.overview = new TreeOverviewController({
       getOverviewOrientation: () => this.getOverviewOrientation(),
+      captureOverviewEditorSelection: () => this.captureOverviewEditorSelection(),
+      restoreOverviewEditorSelection: (saved) => this.restoreOverviewEditorSelection(saved),
       read: {
         getState: () => this.state,
         getSettings: () => this.plugin.settings,
@@ -460,6 +475,7 @@ export class ArborView extends FileView {
       requestRender: () => this.render()
     });
     this.shell = new ViewShell(this.contentEl, {
+      getOverviewOrientation: () => this.getOverviewOrientation(),
       read: {
         getState: () => this.state,
         getSettings: () => this.plugin.settings,
@@ -521,6 +537,9 @@ export class ArborView extends FileView {
       () => this.file?.basename ?? ""
     );
     this.menus = new ViewMenus({
+      getOverviewOrientation: () => this.getOverviewOrientation(),
+      getOverviewOrientationOverride: () => this.getOverviewOrientationOverride(),
+      setOverviewOrientationOverride: (value) => this.setOverviewOrientationOverride(value),
       read: { getState: () => this.state, getSettings: () => this.plugin.settings, getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
       selection: { selectBlock: (id, options) => this.selectBlock(id, options) },
       editor: this.editor,
@@ -935,6 +954,7 @@ export class ArborView extends FileView {
 
   private beginLoad(): number {
     const generation = ++this.loadGeneration;
+    this.overview.invalidate();
     if (this.loadingState) {
       this.loadingState = null;
       this.syncLoadingOverlay();
@@ -944,6 +964,7 @@ export class ArborView extends FileView {
 
   private invalidatePendingLoads(): void {
     this.loadGeneration += 1;
+    this.overview.invalidate();
   }
 
   private isCurrentLoad(generation: number, file: TFile): boolean {
@@ -983,7 +1004,82 @@ export class ArborView extends FileView {
   }
 
   getOverviewOrientation(): ArborOverviewOrientation {
-    return "horizontal";
+    return resolveOverviewOrientation(this.plugin.settings.overviewOrientation, this.overviewOrientationOverride);
+  }
+
+  getOverviewOrientationOverride(): ArborOverviewOrientation | null {
+    return this.overviewOrientationOverride ?? null;
+  }
+
+  override getState(): Record<string, unknown> {
+    const state = { ...this.overviewWorkspaceState, ...super.getState() };
+    delete state.arborOverviewOrientation;
+    if (this.overviewOrientationOverride) state.arborOverviewOrientation = this.overviewOrientationOverride;
+    return state;
+  }
+
+  override async setState(state: unknown, result: ViewStateResult): Promise<void> {
+    const supplied = state && typeof state === "object" ? { ...state } as Record<string, unknown> : {};
+    const previous = this.getOverviewOrientation();
+    const requested = ++this.overviewOrientationChangeGeneration;
+    const token = this.work.token();
+    this.overviewOrientationOverride = normalizeOverviewOrientation(supplied.arborOverviewOrientation);
+    delete supplied.arborOverviewOrientation;
+    this.overviewWorkspaceState = supplied;
+    const loading = super.setState(supplied, result);
+    const load = this.loadGeneration;
+    await loading;
+    if (requested !== this.overviewOrientationChangeGeneration || load !== this.loadGeneration
+      || !this.work.isCurrent(token) || (this.file && this.file.path !== supplied.file)) return;
+    if (this.getOverviewOrientation() !== previous) this.refreshOverviewOrientation();
+  }
+
+  async setOverviewOrientationOverride(value: ArborOverviewOrientation | null): Promise<void> {
+    const previous = this.getOverviewOrientation();
+    this.overviewOrientationChangeGeneration += 1;
+    this.overviewOrientationOverride = normalizeOverviewOrientation(value);
+    this.app.workspace.requestSaveLayout();
+    if (this.getOverviewOrientation() !== previous) this.refreshOverviewOrientation();
+  }
+
+  refreshOverviewOrientation(): void {
+    this.overview.invalidate();
+    this.overviewViewport.discardPendingRestore();
+    this.overview.requestCenterOnNextRender();
+    this.render();
+  }
+
+  private captureOverviewEditorSelection(): OverviewEditorSelectionSnapshot | null {
+    this.overviewEditorSelectionContext = null;
+    const session = this.editor.getSession();
+    const textarea = this.overview.getElements().surface?.querySelector<HTMLTextAreaElement>("textarea.arbor-overview-editor-input");
+    if (!session || session.origin !== "overview" || !textarea
+      || textarea.closest<HTMLElement>("[data-block-id]")?.dataset.blockId !== session.blockId) return null;
+    const selection: OverviewEditorSelectionSnapshot = {
+      session, start: textarea.selectionStart, end: textarea.selectionEnd,
+      direction: textarea.selectionDirection, focused: textarea.ownerDocument.activeElement === textarea
+    };
+    this.overviewEditorSelectionContext = {
+      selection, file: this.file, load: this.loadGeneration,
+      requested: this.overviewOrientationChangeGeneration, token: this.work.token()
+    };
+    return selection;
+  }
+
+  private restoreOverviewEditorSelection(saved: OverviewEditorSelectionSnapshot): void {
+    const context = this.overviewEditorSelectionContext;
+    this.overviewEditorSelectionContext = null;
+    if (!context || context.selection !== saved || this.file !== context.file || this.loadGeneration !== context.load
+      || this.overviewOrientationChangeGeneration !== context.requested || !this.work.isCurrent(context.token)
+      || this.editor.getSession() !== saved.session) return;
+    const surface = this.overview.getElements().surface;
+    const textarea = surface?.querySelector<HTMLTextAreaElement>("textarea.arbor-overview-editor-input");
+    if (!textarea?.isConnected || textarea.closest<HTMLElement>("[data-block-id]")?.dataset.blockId !== saved.session.blockId) return;
+    this.editor.clearBlurCommitTimer();
+    if (saved.focused) textarea.focus({ preventScroll: true });
+    textarea.setSelectionRange(saved.start, saved.end, saved.direction);
+    const card = textarea.closest<HTMLElement>(".arbor-overview-card");
+    if (saved.focused && card) this.revealOverviewSelectedCard(card);
   }
 
   private createOverviewExportSnapshot(): Promise<OverviewSnapshot> {

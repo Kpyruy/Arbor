@@ -29,7 +29,7 @@ export function fixtureOutput(active = "draft"): ArborOutputState {
 
 export function fixtureSettings(): ArborSettings {
   return {
-    layoutDirection: "ltr", activeThemeId: "automatic", customThemes: [],
+    layoutDirection: "ltr", overviewOrientation: "horizontal", activeThemeId: "automatic", customThemes: [],
     defaultPresentationMode: "editor", splitDirection: "vertical", cardWidth: 300,
     cardMinHeight: 120, horizontalSpacing: 20, verticalSpacing: 12, zoomLevel: 1,
     previewSnippetLength: 220, dragAndDrop: true, dimNonPathBlocks: false,

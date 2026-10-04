@@ -7,6 +7,7 @@ import { syncCardColour } from "../../src/view/appearance/cardColours";
 import { createOverviewSnapshot, type OverviewSnapshotInput } from "../../src/view/export/overviewSnapshot";
 import { TreeOverviewController, type TreeOverviewPort } from "../../src/view/overview/TreeOverviewController";
 import type { MarkdownPort, ViewReadPort } from "../../src/view/state/viewTypes";
+import { BlockEditorController } from "../../src/view/editor/BlockEditorController";
 
 interface NativeInput {
   document: Document;
@@ -26,6 +27,131 @@ const variables = {
   "--text-normal": "#eeeeee", "--background-primary": "#202020", "--background-secondary": "#202020"
 };
 const orientations = ["vertical-top-down", "vertical-bottom-up"] as const;
+
+export async function checkOrientationEditorHost(input: NativeInput): Promise<{ checks: number }> {
+  const original = input.read.getState();
+  if (!original) throw Error("A loaded native state is required");
+  let checks = 0;
+  const failures: string[] = [];
+  for (const scenario of ["late draft", "measurement", "autofocus", "begin edit autofocus", "unfocused", "session", "source", "close", "latest orientation"] as const) {
+    const fixture = input.document.body.createDiv({ cls: "arbor-view" });
+    let state = { ...original, metadata, selectedBlockId: "root" };
+    let source = "isolated-A.md";
+    let orientation: ArborOverviewOrientation = "horizontal";
+    let pauseNext = false;
+    let resume: (() => void) | null = null;
+    let entered: (() => void) | null = null;
+    let pending: Promise<void> | null = null;
+    const lateDraft = scenario === "measurement" ? "Late line\n".repeat(18) : "Draft typed after Markdown started\n\nLate text";
+    const editor = new BlockEditorController({
+      getState: () => state, usesTouchControls: () => false, getViewportHeight: () => 800,
+      onBegin() {}, onCancel() {}, onUnchanged: async () => {}, saveEdit: async () => { throw Error("Orientation saved a draft"); },
+      onInput() {}, handleSearchShortcut: () => false, paste: async () => {}, drop: async () => {}
+    });
+    const port: TreeOverviewPort = {
+      read: { getState: () => state, getSettings: () => input.read.getSettings(), getMode: () => "overview", getFilePath: () => source },
+      editor, getOverviewOrientation: () => orientation,
+      markdown: { render: async (text, target, path) => {
+        await input.markdown.render(text, target, path);
+        if (pauseNext) { pauseNext = false; await new Promise<void>(resolve => { resume = resolve; entered?.(); }); }
+      } },
+      selection: { selectBlock() {} }, getBody: () => fixture, getContext: () => null,
+      bindViewport: () => () => {}, openBlockMenu() {}, setHoveredBlock() {}, restoreViewport() {}, centerSelected() {}, revealSelected() {}, syncTouchDock() {}, requestRender() {},
+      waitForNextPaint: () => input.waitForNextPaint(), syncOutputCardPresentation() {}, consumeAutofocus: session => editor.consumeAutofocus(session), clearPendingFocus() {}, tryHandleCardLink: () => false
+    };
+    const controller = new TreeOverviewController(port);
+    const focusTarget = fixture.createEl("input");
+    Object.assign(port, {
+      captureOverviewEditorSelection: () => {
+        const textarea = controller.getElements().surface?.querySelector<HTMLTextAreaElement>("textarea");
+        const session = editor.getSession();
+        return textarea && session ? { session, start: textarea.selectionStart, end: textarea.selectionEnd, direction: textarea.selectionDirection, focused: input.document.activeElement === textarea } : null;
+      },
+      restoreOverviewEditorSelection: (saved: { session: unknown; start: number; end: number; direction: "forward" | "backward" | "none"; focused: boolean }) => {
+        const textarea = controller.getElements().surface?.querySelector<HTMLTextAreaElement>("textarea");
+        if (!textarea || editor.getSession() !== saved.session) return;
+        if (saved.focused) textarea.focus({ preventScroll: true });
+        textarea.setSelectionRange(saved.start, saved.end, saved.direction);
+      }
+    });
+    try {
+      if (scenario !== "begin edit autofocus") editor.prepareCreatedBlock(metadata.blocks[0], "overview");
+      await controller.syncTreeOverview();
+      await input.waitForNextPaint();
+      if (scenario === "begin edit autofocus") {
+        focusTarget.focus();
+        editor.prepareCreatedBlock(metadata.blocks[0], "overview");
+        controller.openOverviewEditorInPlace(metadata.blocks[0]);
+      }
+      const oldSurface = controller.getElements().surface!;
+      const oldEditor = oldSurface.querySelector<HTMLTextAreaElement>("textarea")!;
+      if (scenario !== "begin edit autofocus") oldEditor.focus({ preventScroll: true });
+      oldEditor.value = "Draft before staging";
+      oldEditor.dispatchEvent(new Event("input"));
+      oldEditor.setSelectionRange(2, 7, "backward");
+      if (scenario === "autofocus") editor.getSession()!.autofocus = true;
+      orientation = "vertical-top-down";
+      controller.invalidate();
+      pauseNext = true;
+      const waiting = new Promise<void>(resolve => { entered = resolve; });
+      pending = controller.syncTreeOverview();
+      await waiting;
+      await input.waitForNextPaint();
+      if (input.document.activeElement !== (scenario === "begin edit autofocus" ? focusTarget : oldEditor) || !oldSurface.isConnected) failures.push(`${scenario}: staging stole focus or removed the usable published editor`);
+      if (scenario === "begin edit autofocus" && !editor.getSession()?.autofocus) failures.push("begin edit autofocus: staging consumed autofocus before publication");
+      oldEditor.value = lateDraft;
+      oldEditor.dispatchEvent(new Event("input"));
+      oldEditor.setSelectionRange(4, 19, "backward");
+      if (scenario === "unfocused") { focusTarget.focus(); editor.clearBlurCommitTimer(); }
+      if (scenario === "session") editor.prepareCreatedBlock(metadata.blocks[1], "overview");
+      if (scenario === "source") { source = "isolated-B.md"; state = { ...state }; }
+      if (scenario === "close") controller.reset();
+      if (scenario === "latest orientation") {
+        for (const choice of ["vertical-bottom-up", "horizontal"] as const) {
+          orientation = choice;
+          controller.invalidate();
+          await controller.syncTreeOverview();
+        }
+      }
+      const release = resume as (() => void) | null;
+      release?.();
+      await pending;
+      pending = null;
+      await input.waitForNextPaint();
+      const published = controller.getElements().surface;
+      if (scenario === "source" || scenario === "session") {
+        if (published !== oldSurface || fixture.querySelector(".is-staging")) failures.push("source: stale draft was published");
+      } else if (scenario === "close") {
+        if (published || fixture.querySelector(".arbor-overview-stage")) failures.push("close: stale draft reappeared");
+      } else {
+        const current = published?.querySelector<HTMLTextAreaElement>("textarea");
+        if (!current || current.value !== lateDraft) failures.push(`${scenario}: latest draft was lost`);
+        if (scenario === "measurement" && current && (current.clientHeight < 300 || current.clientHeight + 2 < current.scrollHeight)) failures.push("measurement: late draft was not resized before publication");
+        if (scenario === "begin edit autofocus") {
+          if (current && (input.document.activeElement !== current || current.selectionStart !== current.value.length || current.selectionEnd !== current.value.length || editor.getSession()?.autofocus)) failures.push("begin edit autofocus: normal focus was not consumed on the published editor");
+        } else if (current && (input.document.activeElement !== (scenario === "unfocused" ? focusTarget : current) || current.selectionStart !== 4 || current.selectionEnd !== 19 || current.selectionDirection !== "backward")) failures.push(`${scenario}: latest caret/focus was lost`);
+        if (scenario === "latest orientation" && published) {
+          const root = published.querySelector<HTMLElement>('[data-block-id="root"]')!;
+          const child = published.querySelector<HTMLElement>('[data-block-id="first"]')!;
+          const isHorizontal = input.read.getSettings().layoutDirection === "rtl"
+            ? child.offsetLeft + child.offsetWidth < root.offsetLeft
+            : root.offsetLeft + root.offsetWidth < child.offsetLeft;
+          if (!isHorizontal) failures.push("latest orientation: obsolete geometry won");
+        }
+      }
+      checks += 3;
+    } finally {
+      const release = resume as (() => void) | null;
+      release?.();
+      await pending;
+      editor.reset();
+      controller.reset();
+      fixture.remove();
+    }
+  }
+  if (failures.length) throw Error(failures.join("; "));
+  return { checks };
+}
 
 function inspectGeometry(surface: HTMLElement, orientation: ArborOverviewOrientation, direction: ArborLayoutDirection): number {
   const win = surface.ownerDocument.defaultView!;

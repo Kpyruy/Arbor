@@ -26,7 +26,8 @@ export class OverviewViewportController {
 
   centerOverviewOnSelectedBlock(): void {
     const { viewport, scene, surface } = this.port.getElements();
-    const selectedCard = surface?.querySelector<HTMLElement>(".arbor-overview-card.is-active");
+    const selectedCard = surface?.querySelector<HTMLElement>(".arbor-overview-card.is-active")
+      ?? surface?.querySelector<HTMLElement>(".arbor-overview-card");
     if (!viewport || !scene || !selectedCard) return;
     const zoom = this.port.getZoom();
     viewport.scrollTo({
@@ -70,6 +71,10 @@ export class OverviewViewportController {
 
     viewport.scrollTo({ left: viewport.scrollLeft, top: viewport.scrollTop, behavior: "auto" });
     this.pendingViewportPosition = { left: viewport.scrollLeft, top: viewport.scrollTop };
+  }
+
+  discardPendingRestore(): void {
+    this.pendingViewportPosition = null;
   }
 
   restore(): void {

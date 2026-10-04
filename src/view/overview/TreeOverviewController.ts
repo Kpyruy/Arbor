@@ -6,7 +6,7 @@ import type { ArborOverviewOrientation, BranchBlock, BranchBlockId } from "../..
 import { applyOverviewLayout } from "./overviewDom";
 import { ViewWorkScope } from "../runtime/ViewWorkScope";
 import { findRenderedCardLink } from "../navigation/CardLinkController";
-import type { BranchViewContext, EditorPort, MarkdownPort, SelectionPort, ViewReadPort } from "../state/viewTypes";
+import type { BranchViewContext, EditingSession, EditorPort, MarkdownPort, OverviewEditorSelectionSnapshot, SelectionPort, ViewReadPort } from "../state/viewTypes";
 
 export interface TreeOverviewPort {
   read: ViewReadPort;
@@ -16,6 +16,8 @@ export interface TreeOverviewPort {
   getBody(): HTMLElement | null;
   getContext(): BranchViewContext | null;
   getOverviewOrientation(): ArborOverviewOrientation;
+  captureOverviewEditorSelection?(): OverviewEditorSelectionSnapshot | null;
+  restoreOverviewEditorSelection?(saved: OverviewEditorSelectionSnapshot): void;
   bindViewport(viewport: HTMLElement): () => void;
   openBlockMenu(id: BranchBlockId, event: MouseEvent): void;
   setHoveredBlock(id: BranchBlockId | null): void;
@@ -67,6 +69,7 @@ export class TreeOverviewController {
     }
     const workToken = this.work.token();
     const filePath = this.port.read.getFilePath();
+    const renderSession = this.port.editor.getSession();
 
     if (!this.overviewStageEl || !this.overviewViewportEl || !this.overviewSceneEl || !this.overviewSurfaceEl) {
       this.overviewStageEl = body.createDiv({ cls: "arbor-overview-stage" });
@@ -102,6 +105,7 @@ export class TreeOverviewController {
     const activePathIds = new Set(getActivePath(state.metadata, selectedBlockId).map((block) => block.id));
     const cardsById = new Map<BranchBlockId, HTMLElement>();
     const measuredHeights = new Map<BranchBlockId, number>();
+    const stagedEditors = new Map<HTMLTextAreaElement, EditingSession>();
 
     for (const node of initialLayout.nodes) {
       const block = getBlock(state.metadata, node.id);
@@ -125,17 +129,7 @@ export class TreeOverviewController {
         this.port.editor.wireEditorElement(editor, block, "overview");
         editor.value = session.value;
         this.port.editor.resizeEditor(editor);
-        if (session.autofocus) {
-          this.work.frame(window, () => {
-            if (this.port.editor.getSession() !== session) {
-              return;
-            }
-            editor.focus({ preventScroll: true });
-            editor.setSelectionRange(editor.value.length, editor.value.length);
-            this.port.editor.resizeEditor(editor);
-            this.port.consumeAutofocus(session);
-          });
-        }
+        stagedEditors.set(editor, session);
       } else {
         const content = card.createDiv({ cls: "arbor-overview-card-content markdown-rendered" });
         await this.port.markdown.render(block.content, content, this.port.read.getFilePath());
@@ -194,6 +188,15 @@ export class TreeOverviewController {
       surface.remove();
       return;
     }
+    if (this.port.editor.getSession() !== renderSession) {
+      surface.remove();
+      this.port.requestRender();
+      return;
+    }
+    stagedEditors.forEach((session, editor) => {
+      editor.value = session.value;
+      this.port.editor.resizeEditor(editor);
+    });
     cardsById.forEach((card, blockId) => {
       measuredHeights.set(blockId, orientation === "horizontal" ? card.scrollHeight : Math.max(card.offsetHeight, card.scrollHeight));
       card.removeClass("is-measuring");
@@ -212,15 +215,36 @@ export class TreeOverviewController {
       orientation
     });
     applyOverviewLayout(scene, surface, cardsById, layout, currentSettings.zoomLevel, direction, orientation);
+    const savedSelection = this.port.captureOverviewEditorSelection?.() ?? null;
     previousSurface.remove();
     surface.removeClass("is-staging");
     this.overviewSurfaceEl = surface;
 
+    const isCurrentPublication = () => this.work.isCurrent(workToken) && overviewRenderVersion === this.overviewRenderVersion
+      && this.port.read.getState() === state && this.port.read.getFilePath() === filePath
+      && this.port.getOverviewOrientation() === orientation && this.port.read.getSettings().layoutDirection === direction
+      && this.overviewSurfaceEl === surface && surface.isConnected;
+    if (savedSelection && savedSelection.session === this.port.editor.getSession()) {
+      this.port.restoreOverviewEditorSelection?.(savedSelection);
+      if (savedSelection.focused || !savedSelection.session.autofocus) this.port.consumeAutofocus(savedSelection.session);
+    }
+    stagedEditors.forEach((session, editor) => {
+      if (!session.autofocus) return;
+      this.work.frame(window, () => {
+        if (!isCurrentPublication() || this.port.editor.getSession() !== session || !session.autofocus) return;
+        editor.focus({ preventScroll: true });
+        editor.setSelectionRange(editor.value.length, editor.value.length);
+        this.port.revealSelected(editor.closest<HTMLElement>(".arbor-overview-card")!);
+        this.port.consumeAutofocus(session);
+      });
+    });
+
     viewport.toggleClass("is-zoomed-out", currentSettings.zoomLevel < 0.78);
     this.port.restoreViewport();
+    if (savedSelection?.focused || renderSession?.autofocus) this.shouldCenterOverviewOnNextRender = false;
     if (this.shouldCenterOverviewOnNextRender) {
       this.work.frame(window, () => {
-        if (!this.shouldCenterOverviewOnNextRender) return;
+        if (!isCurrentPublication() || !this.shouldCenterOverviewOnNextRender) return;
         this.shouldCenterOverviewOnNextRender = false;
         this.port.centerSelected();
       });
@@ -281,8 +305,11 @@ export class TreeOverviewController {
     editor.value = session.value;
     this.port.editor.resizeEditor(editor);
     this.port.syncOutputCardPresentation(card, block.id, this.port.getContext());
+    const state = this.port.read.getState();
+    const filePath = this.port.read.getFilePath();
     this.work.frame(window, () => {
-      if (this.port.editor.getSession() !== session) {
+      if (this.port.editor.getSession() !== session || this.port.read.getState() !== state
+        || this.port.read.getFilePath() !== filePath || !card.isConnected || !this.overviewSurfaceEl?.contains(card)) {
         return;
       }
       editor.focus({ preventScroll: true });
