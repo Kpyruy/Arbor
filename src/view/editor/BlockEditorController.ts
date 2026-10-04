@@ -22,6 +22,7 @@ export interface BlockEditorPort {
 export class BlockEditorController implements EditorPort {
   private session: EditingSession | null = null;
   private blurCommitTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private readonly blurCommitSuspensions = new Map<symbol, EditingSession>();
 
   constructor(private readonly port: BlockEditorPort) {}
 
@@ -87,6 +88,7 @@ export class BlockEditorController implements EditorPort {
 
   scheduleEditingSessionCommit(session: EditingSession): void {
     this.clearBlurCommitTimer();
+    if ([...this.blurCommitSuspensions.values()].includes(session)) return;
     this.blurCommitTimer = globalThis.setTimeout(() => {
       if (this.session !== session) return;
       void this.commitEditingSession(session);
@@ -100,8 +102,16 @@ export class BlockEditorController implements EditorPort {
     }
   }
 
+  suspendBlurCommit(): () => void {
+    this.clearBlurCommitTimer();
+    const token = Symbol();
+    if (this.session) this.blurCommitSuspensions.set(token, this.session);
+    return () => { this.blurCommitSuspensions.delete(token); };
+  }
+
   reset(): void {
     this.clearBlurCommitTimer();
+    this.blurCommitSuspensions.clear();
     this.session = null;
   }
 

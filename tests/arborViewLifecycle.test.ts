@@ -207,7 +207,9 @@ describe("orientation-only lifecycle", () => {
     history.push("Prior edit", state.metadata, state.outputState, state.selectedBlockId);
     const historyBefore = JSON.stringify(history);
     const session = { blockId: "a-block", origin: "overview", value: "Unsaved draft", autofocus: false };
+    const render = vi.fn();
     Object.assign(harness.view, {
+      render,
       overviewOrientationOverride: null, overviewOrientationChangeGeneration: 0,
       app: { workspace: { requestSaveLayout() {} } },
       overview: { invalidate() {}, requestCenterOnNextRender() {} },
@@ -217,6 +219,9 @@ describe("orientation-only lifecycle", () => {
     });
     await harness.view.setOverviewOrientationOverride("vertical-top-down");
     await harness.view.setOverviewOrientationOverride("vertical-bottom-up");
+    const rendersAfterPublication = render.mock.calls.length;
+    await harness.view.setOverviewOrientationOverride("vertical-bottom-up");
+    expect(render.mock.calls.length).toBe(rendersAfterPublication);
     expect(harness.view.getOverviewOrientation()).toBe("vertical-bottom-up");
     expect(harness.disk.get("A.md")).toBe(source);
     expect(session.value).toBe("Unsaved draft");

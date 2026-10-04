@@ -77,6 +77,25 @@ export class ViewMenus {
     event?.preventDefault();
     event?.stopPropagation();
     const menu = new Menu();
+    const session = this.port.editor.getSession();
+    if (session?.origin === "overview") {
+      const root = this.port.getRoot();
+      const textarea = root.querySelector<HTMLTextAreaElement>(".arbor-overview-surface:not(.is-staging) textarea.arbor-overview-editor-input");
+      const start = textarea?.selectionStart ?? 0;
+      const end = textarea?.selectionEnd ?? 0;
+      const direction = textarea?.selectionDirection ?? "none";
+      const resumeBlurCommit = this.port.editor.suspendBlurCommit?.();
+      menu.onHide(() => {
+        if (this.port.editor.getSession() === session && root.isConnected) {
+          const current = root.querySelector<HTMLTextAreaElement>(".arbor-overview-surface:not(.is-staging) textarea.arbor-overview-editor-input");
+          if (current?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId === session.blockId) {
+            current.focus({ preventScroll: true });
+            current.setSelectionRange(start, end, direction);
+          }
+        }
+        resumeBlurCommit?.();
+      });
+    }
     const settings = this.port.read.getSettings();
     menu.addItem((item) =>
       item.setTitle("Search blocks").setIcon("search").onClick(() => this.port.openSearchOverlay())

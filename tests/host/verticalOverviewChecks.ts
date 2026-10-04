@@ -33,7 +33,7 @@ export async function checkOrientationEditorHost(input: NativeInput): Promise<{ 
   if (!original) throw Error("A loaded native state is required");
   let checks = 0;
   const failures: string[] = [];
-  for (const scenario of ["late draft", "measurement", "autofocus", "begin edit autofocus", "unfocused", "session", "source", "close", "latest orientation"] as const) {
+  for (const scenario of ["late draft", "measurement", "autofocus", "begin edit autofocus", "unfocused", "session", "source", "close", "latest orientation", "selection"] as const) {
     const fixture = input.document.body.createDiv({ cls: "arbor-view" });
     let state = { ...original, metadata, selectedBlockId: "root" };
     let source = "isolated-A.md";
@@ -59,7 +59,9 @@ export async function checkOrientationEditorHost(input: NativeInput): Promise<{ 
       bindViewport: () => () => {}, openBlockMenu() {}, setHoveredBlock() {}, restoreViewport() {}, centerSelected() {}, revealSelected() {}, syncTouchDock() {}, requestRender() {},
       waitForNextPaint: () => input.waitForNextPaint(), syncOutputCardPresentation() {}, consumeAutofocus: session => editor.consumeAutofocus(session), clearPendingFocus() {}, tryHandleCardLink: () => false
     };
+    let centeredId: string | undefined;
     const controller = new TreeOverviewController(port);
+    port.centerSelected = () => { centeredId = controller.getElements().surface?.querySelector<HTMLElement>(".is-active")?.dataset.blockId; };
     const focusTarget = fixture.createEl("input");
     Object.assign(port, {
       captureOverviewEditorSelection: () => {
@@ -106,6 +108,13 @@ export async function checkOrientationEditorHost(input: NativeInput): Promise<{ 
       if (scenario === "session") editor.prepareCreatedBlock(metadata.blocks[1], "overview");
       if (scenario === "source") { source = "isolated-B.md"; state = { ...state }; }
       if (scenario === "close") controller.reset();
+      if (scenario === "selection") {
+        state.selectedBlockId = "second";
+        controller.syncOverviewSelection(true);
+        focusTarget.focus();
+        editor.clearBlurCommitTimer();
+        controller.requestCenterOnNextRender();
+      }
       if (scenario === "latest orientation") {
         for (const choice of ["vertical-bottom-up", "horizontal"] as const) {
           orientation = choice;
@@ -129,7 +138,13 @@ export async function checkOrientationEditorHost(input: NativeInput): Promise<{ 
         if (scenario === "measurement" && current && (current.clientHeight < 300 || current.clientHeight + 2 < current.scrollHeight)) failures.push("measurement: late draft was not resized before publication");
         if (scenario === "begin edit autofocus") {
           if (current && (input.document.activeElement !== current || current.selectionStart !== current.value.length || current.selectionEnd !== current.value.length || editor.getSession()?.autofocus)) failures.push("begin edit autofocus: normal focus was not consumed on the published editor");
-        } else if (current && (input.document.activeElement !== (scenario === "unfocused" ? focusTarget : current) || current.selectionStart !== 4 || current.selectionEnd !== 19 || current.selectionDirection !== "backward")) failures.push(`${scenario}: latest caret/focus was lost`);
+        } else if (current && (input.document.activeElement !== (scenario === "unfocused" || scenario === "selection" ? focusTarget : current) || current.selectionStart !== 4 || current.selectionEnd !== 19 || current.selectionDirection !== "backward")) failures.push(`${scenario}: latest caret/focus was lost`);
+        if (scenario === "selection" && published) {
+          if (published.querySelector<HTMLElement>(".is-active")?.dataset.blockId !== "second") failures.push("selection: stale active card published");
+          const path = Array.from(published.querySelectorAll<HTMLElement>(".is-on-path")).map(card => card.dataset.blockId);
+          if (path.length !== 1 || path[0] !== "root") failures.push("selection: stale ancestor path published");
+          if (centeredId !== "second") failures.push("selection: centered stale card");
+        }
         if (scenario === "latest orientation" && published) {
           const root = published.querySelector<HTMLElement>('[data-block-id="root"]')!;
           const child = published.querySelector<HTMLElement>('[data-block-id="first"]')!;

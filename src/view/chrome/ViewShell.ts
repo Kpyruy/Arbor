@@ -143,7 +143,10 @@ export class ViewShell {
     });
     setIcon(viewMenuButtonEl, "sliders-horizontal");
     viewMenuButtonEl.addEventListener("click", (event) => this.port.toolbar.openViewMenu(event));
-    viewMenuButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
+    viewMenuButtonEl.addEventListener("mousedown", (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+    });
     this.bannerEl = frameEl.createDiv({ cls: "arbor-banner" });
     this.loadingOverlayEl = frameEl.createDiv({ cls: "arbor-loading-overlay" });
     const bodyEl = frameEl.createDiv({ cls: "arbor-body" });

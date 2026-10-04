@@ -106,6 +106,7 @@ export interface EditorPort {
   beginEditingBlock(id: BranchBlockId, origin?: EditingOrigin): void;
   commitEditIfNeeded(): Promise<void>;
   clearBlurCommitTimer(): void;
+  suspendBlurCommit?(): () => void;
   wireEditorElement(editor: HTMLTextAreaElement, block: BranchBlock, origin: EditingOrigin): void;
   resizeEditor(editor: HTMLTextAreaElement): void;
 }

@@ -4,7 +4,8 @@ import { runInNewContext } from "node:vm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { ViewWorkScope } from "../src/view/runtime/ViewWorkScope";
 import { OverviewViewportController } from "../src/view/overview/OverviewViewportController";
-import { deferred, fixtureSettings } from "./helpers/arborFixtures";
+import { deferred, fixtureSettings, fixtureTree } from "./helpers/arborFixtures";
+import { buildOverviewLayout } from "../src/model/overviewLayout";
 
 type Modules = typeof import("../src/view/ArborView") & typeof import("../src/settings") & typeof import("../src/view/ArborLoadingView") & {
   ArborPlugin: typeof import("../src/main").default;
@@ -42,6 +43,7 @@ beforeAll(() => {
 function viewFixture(settings = fixtureSettings()) {
   const view = Object.create(modules.ArborView.prototype) as InstanceType<Modules["ArborView"]>;
   let publication = "horizontal";
+  let geometry = buildOverviewLayout(fixtureTree());
   let savedState: unknown;
   Object.assign(view, {
     baseState: { file: "A.md", unknownHostField: 42 }, file: { path: "A.md" },
@@ -50,12 +52,36 @@ function viewFixture(settings = fixtureSettings()) {
     app: { workspace: { requestSaveLayout: () => { savedState = view.getState(); } } },
     overview: { invalidate() {}, requestCenterOnNextRender() {} },
     overviewViewport: { discardPendingRestore() {} },
-    render: () => { publication = view.getOverviewOrientation(); }
+    render: () => {
+      publication = view.getOverviewOrientation();
+      geometry = buildOverviewLayout(fixtureTree(), { orientation: view.getOverviewOrientation() });
+    }
   });
-  return { view, settings, get publication() { return publication; }, get savedState() { return savedState; } };
+  return { view, settings, get publication() { return publication; }, get geometry() { return geometry; }, get savedState() { return savedState; } };
 }
 
 describe("overview workspace state", () => {
+  it.each(["setState", "override"] as const)("publishes a pending same-file orientation when superseded by identical %s", async route => {
+    const fixture = viewFixture();
+    const pending = deferred<void>();
+    duringSetState = () => pending.promise;
+    const state = { file: "A.md", arborOverviewOrientation: "vertical-top-down" };
+    try {
+      const first = fixture.view.setState(state, { history: false });
+      const second = route === "setState"
+        ? fixture.view.setState(state, { history: false })
+        : fixture.view.setOverviewOrientationOverride("vertical-top-down");
+      pending.resolve();
+      await Promise.all([first, second]);
+      expect(fixture.view.getOverviewOrientation()).toBe("vertical-top-down");
+      expect(fixture.publication).toBe(fixture.view.getOverviewOrientation());
+      const root = fixture.geometry.nodes.find(node => node.id === "root")!;
+      const child = fixture.geometry.nodes.find(node => node.id === "first")!;
+      expect(root.y + root.height).toBeLessThan(child.y);
+      expect(fixture.view.getState()).toMatchObject(state);
+    } finally { pending.resolve(); duringSetState = null; }
+  });
+
   it("discards pending pixels from the old orientation before viewport restore", () => {
     const viewport = {
       scrollLeft: 80, scrollTop: 60, scrollWidth: 1200, scrollHeight: 900,

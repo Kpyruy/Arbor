@@ -148,6 +148,7 @@ export class ArborView extends FileView {
   private loadGeneration = 0;
   private overviewOrientationOverride: ArborOverviewOrientation | null = null;
   private overviewOrientationChangeGeneration = 0;
+  private overviewOrientationRefreshPending = false;
   private overviewWorkspaceState: Record<string, unknown> = {};
   private overviewEditorSelectionContext: {
     selection: OverviewEditorSelectionSnapshot;
@@ -1024,6 +1025,7 @@ export class ArborView extends FileView {
     const requested = ++this.overviewOrientationChangeGeneration;
     const token = this.work.token();
     this.overviewOrientationOverride = normalizeOverviewOrientation(supplied.arborOverviewOrientation);
+    this.overviewOrientationRefreshPending ||= this.getOverviewOrientation() !== previous;
     delete supplied.arborOverviewOrientation;
     this.overviewWorkspaceState = supplied;
     const loading = super.setState(supplied, result);
@@ -1031,18 +1033,20 @@ export class ArborView extends FileView {
     await loading;
     if (requested !== this.overviewOrientationChangeGeneration || load !== this.loadGeneration
       || !this.work.isCurrent(token) || (this.file && this.file.path !== supplied.file)) return;
-    if (this.getOverviewOrientation() !== previous) this.refreshOverviewOrientation();
+    if (this.overviewOrientationRefreshPending) this.refreshOverviewOrientation();
   }
 
   async setOverviewOrientationOverride(value: ArborOverviewOrientation | null): Promise<void> {
     const previous = this.getOverviewOrientation();
     this.overviewOrientationChangeGeneration += 1;
     this.overviewOrientationOverride = normalizeOverviewOrientation(value);
+    this.overviewOrientationRefreshPending ||= this.getOverviewOrientation() !== previous;
     this.app.workspace.requestSaveLayout();
-    if (this.getOverviewOrientation() !== previous) this.refreshOverviewOrientation();
+    if (this.overviewOrientationRefreshPending) this.refreshOverviewOrientation();
   }
 
   refreshOverviewOrientation(): void {
+    this.overviewOrientationRefreshPending = false;
     this.overview.invalidate();
     this.overviewViewport.discardPendingRestore();
     this.overview.requestCenterOnNextRender();

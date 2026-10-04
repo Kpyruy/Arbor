@@ -219,6 +219,7 @@ export class TreeOverviewController {
     previousSurface.remove();
     surface.removeClass("is-staging");
     this.overviewSurfaceEl = surface;
+    this.syncOverviewSelection(false);
 
     const isCurrentPublication = () => this.work.isCurrent(workToken) && overviewRenderVersion === this.overviewRenderVersion
       && this.port.read.getState() === state && this.port.read.getFilePath() === filePath
