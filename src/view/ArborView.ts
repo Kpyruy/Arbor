@@ -226,7 +226,10 @@ export class ArborView extends FileView {
         this.pendingFocusBlockId = selectedBlockId;
         this.pendingScrollBlockId = selectedBlockId;
       },
-      onEditedBlockSaved: (session) => { this.pendingFocusBlockId = session.blockId; },
+      onEditedBlockSaved: (session) => {
+        this.pendingFocusBlockId = session.blockId;
+        if (session.origin === "overview") this.overview.requestRevealOnNextRender();
+      },
       onProfileActivated: () => this.syncVisibleOutputCardPresentations(),
       requestRender: () => this.render(),
       notify: (message) => new Notice(message),

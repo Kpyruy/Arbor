@@ -90,6 +90,36 @@ describe("OverviewViewportController", () => {
     expect(card.offsetWidth).toBe(300);
     expect(scrollTo).not.toHaveBeenCalled();
   });
+
+  it("keeps an oversized editing card's top accessible on repeated reveals", () => {
+    const { camera, scrollTo, viewport } = overviewCamera();
+    const card = { offsetLeft: 100, offsetTop: 100, offsetWidth: 300, offsetHeight: 1000,
+      classList: { contains: (name: string) => name === "is-editing" } } as unknown as HTMLElement;
+    camera.revealOverviewSelectedCard(card);
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 0, top: 64, behavior: "smooth" });
+    viewport.scrollTop = 64;
+    camera.revealOverviewSelectedCard(card);
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 0, top: 64, behavior: "smooth" });
+  });
+
+  it("discards an old orientation restore without consuming the next preserve", () => {
+    const { camera, viewport, scrollTo } = overviewCamera();
+    viewport.scrollLeft = 120;
+    viewport.scrollTop = 240;
+    camera.preserve();
+    camera.discardPendingRestore();
+    scrollTo.mockClear();
+    camera.restore();
+    expect(scrollTo).not.toHaveBeenCalled();
+    viewport.scrollTop = 360;
+    camera.preserve();
+    viewport.scrollTop = 0;
+    camera.restore();
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 120, top: 360, behavior: "auto" });
+    scrollTo.mockClear();
+    camera.restore();
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
 });
 
 function branchCamera(elements: Partial<{

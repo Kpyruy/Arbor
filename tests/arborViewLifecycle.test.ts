@@ -197,6 +197,28 @@ describe("orientation-only lifecycle", () => {
     finally { saving.resolve(); await closing; }
   });
 
+  it.each(["onUnloadFile", "onClose"] as const)("cancels a queued overview camera frame on %s even if the browser delivers its old callback", async method => {
+    const harness = createHarness();
+    const { work } = pendingOverview(harness);
+    const frames = new Map<number, FrameRequestCallback>();
+    let cameraMoves = 0;
+    vi.stubGlobal("window", {
+      requestAnimationFrame: (callback: FrameRequestCallback) => { frames.set(1, callback); return 1; },
+      cancelAnimationFrame: (id: number) => frames.delete(id)
+    });
+    try {
+      work.frame(window, () => { cameraMoves += 1; });
+      const staleFrame = frames.get(1)!;
+      await harness.view[method]();
+      expect(frames.size).toBe(0);
+      staleFrame(0);
+      expect(cameraMoves).toBe(0);
+      expect(harness.writes).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("keeps loaded source, selected ID, output profiles, history and draft without saving", async () => {
     const harness = createHarness();
     await harness.view.onLoadFile(harness.files.a);

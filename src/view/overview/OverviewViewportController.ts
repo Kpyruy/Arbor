@@ -54,7 +54,8 @@ export class OverviewViewportController {
     let targetTop = viewport.scrollTop;
     if (cardLeft < viewport.scrollLeft + padding) targetLeft = cardLeft - padding;
     else if (cardRight > viewportRight - padding) targetLeft = cardRight - viewport.clientWidth + padding;
-    if (cardTop < viewport.scrollTop + padding) targetTop = cardTop - padding;
+    if (selectedCard.offsetHeight * zoom > viewport.clientHeight - padding * 2 && selectedCard.classList.contains("is-editing")) targetTop = cardTop - padding;
+    else if (cardTop < viewport.scrollTop + padding) targetTop = cardTop - padding;
     else if (cardBottom > viewportBottom - padding) targetTop = cardBottom - viewport.clientHeight + padding;
     viewport.scrollTo({
       left: Math.max(0, Math.min(targetLeft, viewport.scrollWidth - viewport.clientWidth)),

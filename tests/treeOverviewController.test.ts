@@ -4,6 +4,45 @@ import { TreeOverviewController, type TreeOverviewPort } from "../src/view/overv
 import { readSource, sourceClass, sourceMethod } from "./helpers/viewSource";
 
 describe("TreeOverviewController", () => {
+  it("drops the old focus request on reset and accepts a fresh mounted lifetime", () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let frameId = 0;
+    let cleared = 0;
+    const unused = (): never => { throw Error("Focus lifetime test must not render"); };
+    const controller = new TreeOverviewController({
+      read: { getState: unused, getSettings: unused, getMode: unused, getFilePath: unused },
+      editor: { getSession: unused, beginEditingBlock: unused, commitEditIfNeeded: unused, clearBlurCommitTimer: unused, wireEditorElement: unused, resizeEditor: unused },
+      markdown: { render: unused }, selection: { selectBlock: unused },
+      getBody: unused, getContext: unused, getOverviewOrientation: () => "horizontal",
+      bindViewport: unused, openBlockMenu: unused, setHoveredBlock: unused, restoreViewport: unused,
+      centerSelected: unused, revealSelected: unused, syncTouchDock: unused, requestRender: unused,
+      waitForNextPaint: unused, syncOutputCardPresentation: unused, consumeAutofocus: unused,
+      clearPendingFocus: () => { cleared += 1; }, tryHandleCardLink: unused
+    });
+    const scheduler = controller as unknown as { restoreOverviewKeyboardFocusAfterMutation(): void };
+    vi.stubGlobal("window", {
+      requestAnimationFrame: (callback: FrameRequestCallback) => { frames.set(++frameId, callback); return frameId; },
+      cancelAnimationFrame: (id: number) => frames.delete(id)
+    });
+    try {
+      controller.requestKeyboardFocusAfterMutation();
+      scheduler.restoreOverviewKeyboardFocusAfterMutation();
+      const detachedCallback = frames.get(frameId)!;
+      controller.reset();
+      detachedCallback(0);
+      scheduler.restoreOverviewKeyboardFocusAfterMutation();
+      expect(cleared).toBe(0);
+      expect(frames.size).toBe(0);
+      controller.requestKeyboardFocusAfterMutation();
+      scheduler.restoreOverviewKeyboardFocusAfterMutation();
+      frames.get(frameId)!(1);
+      expect(cleared).toBe(1);
+    } finally {
+      controller.reset();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("retains a pending keyboard-focus request across a cancelled render frame", () => {
     const frames = new Map<number, FrameRequestCallback>();
     let nextId = 0;

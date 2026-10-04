@@ -41,6 +41,7 @@ export class TreeOverviewController {
   private overviewRenderVersion = 0;
   private overviewSelectionAnimation: Animation | null = null;
   private shouldCenterOverviewOnNextRender = false;
+  private shouldRevealOverviewOnNextRender = false;
   private shouldRestoreOverviewKeyboardFocusAfterMutation = false;
   private viewportDisposer: (() => void) | null = null;
   private readonly work = new ViewWorkScope();
@@ -247,7 +248,15 @@ export class TreeOverviewController {
       this.work.frame(window, () => {
         if (!isCurrentPublication() || !this.shouldCenterOverviewOnNextRender) return;
         this.shouldCenterOverviewOnNextRender = false;
+        this.shouldRevealOverviewOnNextRender = false;
         this.port.centerSelected();
+      });
+    } else if (this.shouldRevealOverviewOnNextRender) {
+      this.work.frame(window, () => {
+        if (!isCurrentPublication() || !this.shouldRevealOverviewOnNextRender) return;
+        this.shouldRevealOverviewOnNextRender = false;
+        const selectedCard = surface.querySelector<HTMLElement>(".arbor-overview-card.is-active");
+        if (selectedCard) this.port.revealSelected(selectedCard);
       });
     }
     this.restoreOverviewKeyboardFocusAfterMutation();
@@ -353,6 +362,10 @@ export class TreeOverviewController {
     this.shouldCenterOverviewOnNextRender = requested;
   }
 
+  requestRevealOnNextRender(): void {
+    this.shouldRevealOverviewOnNextRender = true;
+  }
+
   requestKeyboardFocusAfterMutation(requested = true): void {
     this.shouldRestoreOverviewKeyboardFocusAfterMutation = requested;
   }
@@ -377,6 +390,7 @@ export class TreeOverviewController {
     this.overviewSceneEl = null;
     this.overviewSurfaceEl = null;
     this.shouldCenterOverviewOnNextRender = false;
+    this.shouldRevealOverviewOnNextRender = false;
     this.shouldRestoreOverviewKeyboardFocusAfterMutation = false;
   }
 

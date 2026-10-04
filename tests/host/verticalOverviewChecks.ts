@@ -12,6 +12,7 @@ import type { ViewShell } from "../../src/view/chrome/ViewShell";
 import { fixtureTree } from "../helpers/arborFixtures";
 import { getBlock, getChildren } from "../../src/model/tree";
 import { parseBranchDocument } from "../../src/storage/document";
+import { loadImportedBranchDocument } from "../../src/storage/reconcile";
 
 interface InstalledNavigationInput {
   root: HTMLElement;
@@ -30,6 +31,502 @@ interface InstalledNavigationInput {
   activateExternal(anchor: HTMLAnchorElement): MouseEvent;
   readSource(): Promise<string>;
   waitForNextPaint(): Promise<void>;
+}
+
+interface InstalledCameraInput extends InstalledNavigationInput {
+  setZoom(value: number): Promise<void>;
+  revealSelected(card: HTMLElement): void;
+  markdownCount(): number;
+  getOrientation(): ArborOverviewOrientation;
+}
+
+interface InstalledLifecycleInput extends InstalledCameraInput {
+  pauseNextMarkdown(): { entered: Promise<void>; resume(): void };
+  centerCount(): number;
+  preserve(): void;
+  restore(): void;
+  hideMenu(): Promise<void>;
+  createSnapshot(): Promise<{ dispose(): void; frame: HTMLElement }>;
+}
+
+interface InstalledLifetimeInput extends InstalledLifecycleInput {
+  deferImage(): void;
+  releaseImage(): Promise<void>;
+  switchSource(): Promise<void>;
+  close(): Promise<void>;
+}
+
+interface InstalledGestureInput extends InstalledLifecycleInput {
+  cdp(method: string, params: Record<string, unknown>): Promise<void>;
+  captureScreenshot(label: string): Promise<string>;
+  clearZoomPersist(): void;
+}
+
+export async function checkInstalledSaveCameraHost(input: InstalledLifecycleInput): Promise<{ checks: number }> {
+  await input.setMode("overview");
+  await input.setZoom(1);
+  await input.setOrientation("horizontal");
+  const metadata = fixtureTree();
+  metadata.blocks.push(...Array.from({ length: 12 }, (_, index) => ({ id: `save-${index}`, parentId: index === 0 ? "leaf" : `save-${index - 1}`, order: 0, content: `Save descendant ${index}`, after: "\n\n" })));
+  await input.resetTree(metadata);
+  input.root.setCssStyles({ width: "480px" });
+  input.shell.applyViewClasses(input.root);
+  input.shell.syncTouchDock();
+  const viewport = input.overview.getElements().viewport!;
+  viewport.scrollTo({ left: viewport.scrollWidth - viewport.clientWidth, top: 0, behavior: "instant" });
+  input.select("second");
+  input.select("first");
+  viewport.focus({ preventScroll: true });
+  viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  const editor = input.root.querySelector<HTMLTextAreaElement>("textarea")!;
+  if (!editor || input.editor.getSession()?.blockId !== "first") throw Error("Save fixture must edit first in the actual facade");
+  editor.value = "Rapid native save";
+  editor.dispatchEvent(new Event("input", { bubbles: true }));
+  input.root.querySelector<HTMLButtonElement>('button[aria-label="Save"]')!.click();
+  let published = false;
+  for (let attempt = 0; attempt < 500; attempt++) {
+    if (!input.root.querySelector(".is-staging") && !input.editor.getSession() && input.overview.getElements().surface?.textContent?.includes("Rapid native save")) {
+      published = true;
+      break;
+    }
+    await new Promise(resolve => globalThis.setTimeout(resolve, 10));
+  }
+  if (!published) throw Error("Rapid Save never published the saved Markdown");
+  await input.waitForNextPaint();
+  await new Promise(resolve => globalThis.setTimeout(resolve, 1200));
+  const card = input.overview.getElements().surface!.querySelector<HTMLElement>('[data-block-id="first"]')!;
+  const rect = card.getBoundingClientRect(), visible = viewport.getBoundingClientRect();
+  if (rect.left < visible.left || rect.right > visible.right || rect.top < visible.top || rect.bottom > visible.bottom) throw Error(`Rapid Save stopped selection reveal: card left ${rect.left}, viewport left ${visible.left}`);
+  if (getBlock(loadImportedBranchDocument(await input.readSource()).metadata, "first")?.content !== "Rapid native save") throw Error("Rapid Save did not persist the real source");
+  return { checks: 3 };
+}
+
+export async function checkInstalledOverviewGesturesHost(input: InstalledGestureInput): Promise<{ checks: number; screenshot: string }> {
+  await input.setMode("overview");
+  await input.setZoom(1);
+  await input.setOrientation("vertical-top-down");
+  const metadata = fixtureTree();
+  metadata.blocks.push(...Array.from({ length: 12 }, (_, index) => ({ id: `gesture-${index}`, parentId: "root", order: index + 2, content: `Gesture sibling ${index}`, after: "\n\n" })));
+  await input.resetTree(metadata);
+  const { viewport, surface } = input.overview.getElements();
+  if (!viewport || !surface) throw Error("Gesture fixture must publish native elements");
+  viewport.scrollTo({ left: 200, top: 100, behavior: "instant" });
+  await input.waitForNextPaint();
+  const rect = viewport.getBoundingClientRect();
+  const background = (x: number, y: number) => {
+    const hit = input.root.ownerDocument.elementFromPoint(x, y);
+    return hit && viewport.contains(hit) && !hit.closest(".arbor-overview-card,button,a,input,textarea");
+  };
+  let point: { x: number; y: number } | null = null;
+  for (let top = rect.top + 24; top < rect.bottom - 24 && !point; top += 24) {
+    for (let left = rect.left + 24; left < rect.right - 100; left += 24) {
+      if (background(left, top) && background(left + 60, top) && background(left + 80, top)) {
+        point = { x: left, y: top };
+        break;
+      }
+    }
+  }
+  if (!point) throw Error("Need real empty viewport pixels for native gestures");
+  const count = input.markdownCount();
+  const source = await input.readSource();
+  const left = viewport.scrollLeft;
+  let mouseDown = false;
+  let touchActive = false;
+  try {
+    await input.cdp("Input.dispatchMouseEvent", { type: "mousePressed", ...point, button: "left", clickCount: 1 });
+    mouseDown = true;
+    await input.cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x + 60, y: point.y, button: "left", buttons: 1 });
+    await input.cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x + 60, y: point.y, button: "left", clickCount: 1 });
+    mouseDown = false;
+    if (Math.abs(viewport.scrollLeft - (left - 60)) > 2 || viewport.classList.contains("is-panning")) throw Error("Native mouse pan did not move/release the viewport");
+    await input.cdp("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 2 });
+    const points = [{ x: point.x, y: point.y, id: 1 }, { x: point.x + 60, y: point.y, id: 2 }];
+    await input.cdp("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: points });
+    touchActive = true;
+    await input.cdp("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [points[0], { ...points[1], x: point.x + 80 }] });
+    await input.waitForNextPaint();
+    await input.cdp("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    touchActive = false;
+    input.clearZoomPersist();
+    await input.waitForNextPaint();
+    if (input.read.getSettings().zoomLevel !== 1.333 || viewport.classList.contains("is-panning")) throw Error("Native pinch did not preserve the 80/60 zoom ratio/release touch capture");
+    if (surface !== input.overview.getElements().surface || count !== input.markdownCount() || await input.readSource() !== source) throw Error("Pan/pinch rebuilt Markdown or saved source");
+    const screenshot = await input.captureScreenshot("native-pan-pinch");
+    return { checks: 5, screenshot };
+  } finally {
+    if (touchActive) await input.cdp("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
+    if (mouseDown) await input.cdp("Input.dispatchMouseEvent", { type: "mouseReleased", ...point, button: "left", clickCount: 1 });
+    await input.cdp("Emulation.setTouchEmulationEnabled", { enabled: false });
+    input.clearZoomPersist();
+  }
+}
+
+export async function checkInstalledPendingLifetimeHost(input: InstalledLifetimeInput): Promise<{ checks: number }> {
+  let checks = 0;
+  const check = (condition: unknown, label: string) => {
+    if (!condition) throw Error(label);
+    checks += 1;
+  };
+  const wait = async (predicate: () => unknown, label: string) => {
+    for (let attempt = 0; attempt < 500; attempt++) {
+      if (predicate()) return;
+      await new Promise(resolve => globalThis.setTimeout(resolve, 10));
+    }
+    throw Error(`Timed out: ${label}`);
+  };
+  await input.setMode("overview");
+  await input.setZoom(1);
+  await input.setOrientation("vertical-top-down");
+  const metadata = fixtureTree();
+  metadata.blocks[1].content = "Task5 delayed image";
+  input.deferImage();
+  await input.resetTree(metadata);
+  input.select("first");
+  const old = input.overview.getElements().surface!;
+  const image = old.querySelector<HTMLImageElement>('[data-block-id="first"] img')!;
+  const oldHeight = old.querySelector<HTMLElement>('[data-block-id="first"]')!.offsetHeight;
+  check(image && !image.getAttribute("src") && image.naturalHeight === 0, "delayed resource must be pending on the published card");
+  await input.releaseImage();
+  await wait(() => input.overview.getElements().surface !== old && !input.root.querySelector(".is-staging"), "image-driven publication");
+  const loaded = input.overview.getElements().surface!;
+  check(loaded.querySelector<HTMLElement>('[data-block-id="first"]')!.offsetHeight > oldHeight, "real image load must remeasure the selected card");
+  check(input.read.getState()?.selectedBlockId === "first" && loaded.querySelector<HTMLElement>(".is-active")?.dataset.blockId === "first", "image load lost selected metadata/DOM");
+  const sourceA = await input.readSource();
+  const gate = input.pauseNextMarkdown();
+  const pending = input.setOrientation("vertical-bottom-up");
+  try {
+    await gate.entered;
+    await input.switchSource();
+    gate.resume();
+    await pending;
+    check(await input.readSource() === sourceA, "source-switch pending render changed source A");
+    check(!loaded.isConnected && !input.root.querySelector(".is-staging"), "source switch published detached/staging work");
+    check(input.overview.getElements().surface?.textContent?.includes("Source B sentinel"), "source switch lost the actual B publication");
+  } finally {
+    gate.resume();
+    await pending;
+  }
+  input.select("first");
+  const viewport = input.overview.getElements().viewport!;
+  viewport.focus({ preventScroll: true });
+  viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  const editor = input.root.querySelector<HTMLTextAreaElement>("textarea")!;
+  check(editor && input.editor.getSession()?.blockId === "first", "close fixture must queue actual editor autofocus");
+  const closingGate = input.pauseNextMarkdown();
+  const closingRender = input.setOrientation(input.getOrientation() === "horizontal" ? "vertical-top-down" : "horizontal");
+  try {
+    await closingGate.entered;
+    const centers = input.centerCount();
+    await input.close();
+    closingGate.resume();
+    await closingRender;
+    await input.waitForNextPaint();
+    check(!viewport.isConnected && !editor.isConnected && input.root.ownerDocument.activeElement !== editor, "close leaked detached editor autofocus");
+    check(input.centerCount() === centers && !input.overview.getElements().surface && !input.root.querySelector(".is-staging"), "close executed detached camera work or retained surfaces");
+  } finally {
+    closingGate.resume();
+    await closingRender;
+  }
+  return { checks };
+}
+
+export async function checkInstalledReducedMotionHost(input: InstalledCameraInput): Promise<{ checks: number }> {
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) throw Error("Native reduced-motion emulation must be active");
+  await input.setMode("overview");
+  await input.resetTree(fixtureTree());
+  const published = input.overview.getElements().surface!;
+  const count = input.markdownCount();
+  input.select("second");
+  const transforms = Array.from(published.querySelectorAll<HTMLElement>(".arbor-overview-card")).flatMap(card => card.getAnimations()).filter(animation => animation.effect instanceof KeyframeEffect && animation.effect.getKeyframes().some(frame => frame.transform));
+  if (transforms.length || published.getAnimations().length || input.overview.getElements().surface !== published || input.markdownCount() !== count) throw Error("Reduced motion animated/rebuilt the selected scene");
+  if (published.querySelector<HTMLElement>(".is-active")?.dataset.blockId !== "second") throw Error("Reduced motion lost selection");
+  return { checks: 3 };
+}
+
+export async function checkInstalledOverviewLifecycleHost(input: InstalledLifecycleInput): Promise<{ checks: number }> {
+  let checks = 0;
+  const check = (condition: unknown, label: string) => {
+    if (!condition) throw Error(label);
+    checks += 1;
+  };
+  const wait = async (predicate: () => unknown, label: string) => {
+    for (let attempt = 0; attempt < 500; attempt++) {
+      if (await predicate()) return;
+      await new Promise(resolve => globalThis.setTimeout(resolve, 10));
+    }
+    throw Error(`Timed out: ${label}`);
+  };
+  const settle = async () => {
+    await input.waitForNextPaint();
+    await new Promise(resolve => globalThis.setTimeout(resolve, 350));
+    let stable = 0;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const previous = { left: viewport().scrollLeft, top: viewport().scrollTop };
+      await new Promise(resolve => globalThis.setTimeout(resolve, 40));
+      stable = Math.abs(viewport().scrollLeft - previous.left) < 0.5 && Math.abs(viewport().scrollTop - previous.top) < 0.5 ? stable + 1 : 0;
+      if (stable === 3) return;
+    }
+    throw Error("Native camera did not settle");
+  };
+  const surface = () => input.overview.getElements().surface!;
+  const viewport = () => input.overview.getElements().viewport!;
+  const selected = () => input.read.getState()!.selectedBlockId!;
+  const key = (value: string) => {
+    viewport().focus({ preventScroll: true });
+    return viewport().dispatchEvent(new KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true }));
+  };
+  const visibility = () => {
+    const card = surface().querySelector<HTMLElement>(`.arbor-overview-card[data-block-id="${selected()}"]`)!;
+    const rect = card.getBoundingClientRect(), visible = viewport().getBoundingClientRect();
+    check(rect.width > 0 && rect.height > 0, "selected card must have painted bounds");
+    if (rect.width <= visible.width - 72 && rect.height <= visible.height - 72) {
+      check(rect.left >= visible.left && rect.right <= visible.right && rect.top >= visible.top && rect.bottom <= visible.bottom, `selected ${selected()} visible after camera settles: card=${JSON.stringify(rect.toJSON())}, viewport=${JSON.stringify(visible.toJSON())}`);
+    } else {
+      check(rect.right > visible.left && rect.left < visible.right && rect.bottom > visible.top && rect.top < visible.bottom, "oversized selected card remains reachable");
+    }
+  };
+  const metadata = fixtureTree();
+  metadata.blocks.push(...Array.from({ length: 14 }, (_, index) => ({ id: `wide-${index}`, parentId: "root", order: index + 2, content: `Wide sibling ${index + 1}`, after: "\n\n" })));
+  metadata.blocks.push(...Array.from({ length: 6 }, (_, index) => ({ id: `deep-${index}`, parentId: index === 0 ? "leaf" : `deep-${index - 1}`, order: 0, content: `Deep descendant ${index + 1}`, after: "\n\n" })));
+  await input.setMode("overview");
+  await input.setZoom(1);
+  await input.resetTree(metadata);
+  for (const [orientation, child, parent, next, previous] of [
+    ["horizontal", "ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"],
+    ["vertical-top-down", "ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"],
+    ["vertical-bottom-up", "ArrowUp", "ArrowDown", "ArrowRight", "ArrowLeft"]
+  ] as const) {
+    await input.setOrientation(orientation);
+    input.select("first");
+    await settle();
+    const published = surface();
+    const count = input.markdownCount();
+    const source = await input.readSource();
+    const borders = Array.from(published.querySelectorAll<HTMLElement>(".arbor-overview-card")).map(card => ({ card, border: getComputedStyle(card).borderColor }));
+    for (const arrow of [child, child, child, parent, parent, parent, next, previous, next, previous]) {
+      const before = selected();
+      const allowed = key(arrow);
+      check(selected() !== before, `${orientation}/${arrow}/${before}: all thirty navigation inputs must transition selection; mode=${input.read.getMode()}, editor=${input.editor.getSession()?.blockId ?? "none"}, orientation=${input.getOrientation()}, prevented=${!allowed}, direction=${input.read.getSettings().layoutDirection}, tree=${JSON.stringify(input.read.getState()?.metadata.blocks.map(block => [block.id, block.parentId]))}`);
+      check(published.querySelectorAll(".is-active").length === 1 && published.querySelector<HTMLElement>(".is-active")?.dataset.blockId === selected(), "exactly latest selected card is active");
+      const animated = Array.from(published.querySelectorAll<HTMLElement>(".arbor-overview-card")).filter(card => card.getAnimations().some(animation => animation instanceof Animation && animation.effect instanceof KeyframeEffect && animation.effect.getKeyframes().some(frame => frame.transform)));
+      check(animated.every(card => card.dataset.blockId === selected()), "selection animation must not touch unrelated cards");
+      await settle();
+      visibility();
+      check(surface() === published && input.markdownCount() === count, "ordinary selection must not render Markdown or replace surface");
+    }
+    for (const saved of borders.filter(({ card }) => card.dataset.blockId?.startsWith("wide-"))) {
+      check(getComputedStyle(saved.card).borderColor === saved.border, "unrelated sibling border flickered");
+    }
+    const active = published.querySelector<HTMLElement>(".is-active")!;
+    active.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    await input.hideMenu();
+    check(selected() === "first" && surface() === published && input.markdownCount() === count, "right-click selected card must not change selection/render");
+    check(await input.readSource() === source, "selection/menus must not save the source");
+  }
+  await input.setOrientation("vertical-top-down");
+  input.select("deep-5");
+  await settle();
+  visibility();
+  const currentViewport = viewport();
+  currentViewport.scrollTo({ left: 150, top: 100, behavior: "instant" });
+  input.preserve();
+  const preserved = { left: currentViewport.scrollLeft, top: currentViewport.scrollTop };
+  currentViewport.scrollTo({ left: 0, top: 0, behavior: "instant" });
+  input.restore();
+  check(currentViewport.scrollLeft === preserved.left && currentViewport.scrollTop === preserved.top, "same-orientation pixel restore failed");
+  input.preserve();
+  const centers = input.centerCount();
+  const gate = input.pauseNextMarkdown();
+  let pending: Promise<void> | null = null;
+  try {
+    pending = input.setOrientation("vertical-bottom-up");
+    await gate.entered;
+    const staged = input.root.querySelector(".is-staging");
+    check(staged && !staged.classList.contains("is-active"), "controlled Markdown must leave a hidden staging surface");
+    key("ArrowDown");
+    key("ArrowDown");
+    check(selected() === "deep-3", "pending-render arrows must mutate the same selected state");
+    gate.resume();
+    await pending;
+    await settle();
+    check(surface().querySelectorAll(".is-active").length === 1 && surface().querySelector<HTMLElement>(".is-active")?.dataset.blockId === "deep-3", "publication restored stale selection");
+    check(input.centerCount() === centers + 1, "orientation must center exactly once after final publication");
+    check(input.root.querySelectorAll(".arbor-overview-surface").length === 1 && !input.root.querySelector(".is-staging"), "publication leaked staging surfaces");
+    visibility();
+  } finally {
+    gate.resume();
+    await pending;
+  }
+  const old = surface();
+  const superseded = input.pauseNextMarkdown();
+  const firstRequest = input.setOrientation("horizontal");
+  try {
+    await superseded.entered;
+    const requests = [input.setOrientation("vertical-top-down"), input.setOrientation("vertical-bottom-up"), input.setOrientation("horizontal")];
+    superseded.resume();
+    await Promise.all([firstRequest, ...requests]);
+    await settle();
+    const root = surface().querySelector<HTMLElement>('[data-block-id="root"]')!;
+    const first = surface().querySelector<HTMLElement>('[data-block-id="first"]')!;
+    check(!old.isConnected && root.offsetLeft < first.offsetLeft, "rapid orientation switches must publish latest horizontal geometry");
+    check(input.root.querySelectorAll(".arbor-overview-surface").length === 1 && !input.root.querySelector(".is-staging"), "rapid switches leaked a staged tree");
+    visibility();
+  } finally {
+    superseded.resume();
+    await firstRequest;
+  }
+  input.root.setCssStyles({ width: "480px" });
+  input.shell.applyViewClasses(input.root);
+  input.shell.syncTouchDock();
+  input.select("first");
+  key("Enter");
+  await wait(() => input.root.querySelector("textarea"), "Enter editor");
+  const original = await input.readSource();
+  let editor = input.root.querySelector<HTMLTextAreaElement>("textarea")!;
+  editor.value = "Cancelled draft";
+  editor.dispatchEvent(new Event("input", { bubbles: true }));
+  input.root.querySelector<HTMLButtonElement>('button[aria-label="Cancel"]')!.click();
+  await wait(() => !input.editor.getSession() && !input.root.querySelector("textarea"), "Cancel restoration");
+  check(await input.readSource() === original && selected() === "first", "Cancel changed saved source or selection");
+  const card = surface().querySelector<HTMLElement>('[data-block-id="first"]')!;
+  card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+  await wait(() => input.root.querySelector("textarea"), "double-click editor");
+  editor = input.root.querySelector<HTMLTextAreaElement>("textarea")!;
+  editor.value = "Saved native lifecycle content";
+  editor.dispatchEvent(new Event("input", { bubbles: true }));
+  input.root.querySelector<HTMLButtonElement>('button[aria-label="Save"]')!.click();
+  await wait(() => !input.editor.getSession() && !input.root.querySelector("textarea"), "Save restoration");
+  await wait(async () => getBlock(loadImportedBranchDocument(await input.readSource()).metadata, "first")?.content === "Saved native lifecycle content", "Save source persistence");
+  const saved = loadImportedBranchDocument(await input.readSource()).metadata;
+  check(getBlock(saved, "first")?.content === "Saved native lifecycle content" && selected() === "first", "Save must persist the edited selected block");
+  await settle();
+  visibility();
+  let snapshot: Awaited<ReturnType<InstalledLifecycleInput["createSnapshot"]>> | null = null;
+  try {
+    snapshot = await input.createSnapshot();
+    check(snapshot.frame.isConnected && snapshot.frame.querySelectorAll(".arbor-overview-card").length === metadata.blocks.length, "snapshot factory must render the real loaded tree");
+  } finally {
+    snapshot?.dispose();
+  }
+  check(!input.root.ownerDocument.querySelector(".arbor-tree-overview-export"), "snapshot disposal leaked export DOM");
+  return { checks };
+}
+
+export async function checkInstalledOversizedEditorHost(input: InstalledGestureInput): Promise<{ checks: number }> {
+  const metadata = fixtureTree();
+  metadata.blocks[1].content = Array.from({ length: 70 }, (_, index) => `Tall paragraph ${index + 1} with wrapped text for editing.`).join("\n\n");
+  await input.setMode("overview");
+  await input.setZoom(1);
+  await input.setOrientation("vertical-top-down");
+  await input.resetTree(metadata);
+  input.select("first");
+  const viewport = input.overview.getElements().viewport!;
+  viewport.focus({ preventScroll: true });
+  const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  viewport.dispatchEvent(enter);
+  await input.waitForNextPaint();
+  await new Promise(resolve => globalThis.setTimeout(resolve, 600));
+  const card = input.overview.getElements().surface!.querySelector<HTMLElement>('[data-block-id="first"]')!;
+  const editor = card.querySelector("textarea");
+  if (!editor || input.editor.getSession()?.blockId !== "first") throw Error(`Enter must edit the selected card: prevented=${enter.defaultPrevented}, selected=${input.read.getState()?.selectedBlockId}, session=${input.editor.getSession()?.blockId}, mode=${input.read.getMode()}, viewportConnected=${viewport.isConnected}`);
+  const rect = card.getBoundingClientRect();
+  const visible = viewport.getBoundingClientRect();
+  if (rect.height <= visible.height - 72) throw Error("Oversized editor fixture must exceed the viewport");
+  if (rect.top < visible.top - 1 || rect.top >= visible.bottom) throw Error(`Oversized editing top inaccessible: card ${rect.top}, viewport ${visible.top}`);
+  const top = viewport.scrollTop;
+  input.revealSelected(card);
+  await new Promise(resolve => globalThis.setTimeout(resolve, 600));
+  if (Math.abs(viewport.scrollTop - top) > 1) throw Error("Repeated oversized editor reveal oscillates");
+  input.root.setCssStyles({ width: "480px" });
+  input.shell.applyViewClasses(input.root);
+  input.shell.syncTouchDock();
+  const source = await input.readSource();
+  const textarea = editor;
+  textarea.value += "\n\nCancelled tall draft";
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  input.root.querySelector<HTMLButtonElement>('button[aria-label="Cancel"]')!.click();
+  await input.waitForNextPaint();
+  if (await input.readSource() !== source) throw Error("Tall editor Cancel changed the source");
+  card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+  await input.waitForNextPaint();
+  const tallEditor = input.root.querySelector<HTMLTextAreaElement>("textarea")!;
+  if (!tallEditor || input.editor.getSession()?.blockId !== "first") throw Error("Double-click must reopen the tall selected editor");
+  const bounds = viewport.getBoundingClientRect();
+  const point = { x: bounds.left + 8, y: bounds.top + bounds.height / 2 };
+  const beforePan = viewport.scrollTop;
+  try {
+    await input.cdp("Input.dispatchMouseEvent", { type: "mousePressed", ...point, button: "left", clickCount: 1 });
+    await input.cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y - 60, button: "left", buttons: 1 });
+  } finally {
+    await input.cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y - 60, button: "left", clickCount: 1 });
+  }
+  if (viewport.scrollTop <= beforePan + 30 || !input.editor.getSession()) throw Error("Oversized editor must allow native background panning without closing the edit");
+  tallEditor.value += "\n\nSaved tall paragraph";
+  tallEditor.dispatchEvent(new Event("input", { bubbles: true }));
+  input.root.querySelector<HTMLButtonElement>('button[aria-label="Save"]')!.click();
+  let saved = false;
+  for (let attempt = 0; attempt < 500; attempt++) {
+    if (!input.editor.getSession() && !input.root.querySelector(".is-staging") && input.overview.getElements().surface?.textContent?.includes("Saved tall paragraph")) {
+      saved = true;
+      break;
+    }
+    await new Promise(resolve => globalThis.setTimeout(resolve, 10));
+  }
+  if (!saved || !getBlock(loadImportedBranchDocument(await input.readSource()).metadata, "first")?.content.endsWith("Saved tall paragraph")) throw Error("Tall Save must persist and publish the Markdown");
+  if (input.read.getState()?.selectedBlockId !== "first" || viewport.scrollTop <= 0) throw Error("Tall Save lost the selected card or reset the camera top-left");
+  return { checks: 9 };
+}
+
+export async function checkInstalledOverviewGeometryHost(input: InstalledCameraInput): Promise<{ checks: number }> {
+  let checks = 0;
+  const check = (condition: boolean, label: string) => {
+    if (!condition) throw Error(label);
+    checks += 1;
+  };
+  const surface = () => input.overview.getElements().surface!;
+  const geometry = () => Array.from(surface().querySelectorAll<HTMLElement>(".arbor-overview-card")).map(card => {
+    const rect = card.getBoundingClientRect();
+    const scale = input.read.getSettings().zoomLevel;
+    return { id: card.dataset.blockId, width: rect.width / scale, height: rect.height / scale, left: card.offsetLeft, top: card.offsetTop,
+      lineHeight: getComputedStyle(card.querySelector(".arbor-overview-card-content")!).lineHeight };
+  });
+  const metadata = fixtureTree();
+  metadata.blocks[1].content = Array.from({ length: 18 }, (_, index) => `Multiline paragraph ${index + 1} with enough words to wrap naturally.`).join("\n\n");
+  await input.setMode("overview");
+  await input.setZoom(1);
+  await input.resetTree(metadata);
+  for (const orientation of ["horizontal", "vertical-top-down", "vertical-bottom-up"] as const) {
+    await input.setZoom(1);
+    await input.setOrientation(orientation);
+    const baseline = geometry();
+    const published = surface();
+    const count = input.markdownCount();
+    for (const zoom of [0.25, 0.5, 1, 1.6]) {
+      await input.setZoom(zoom);
+      check(surface() === published, "zoom must not replace the published surface");
+      check(input.markdownCount() === count, "ordinary zoom must not render Markdown");
+      const current = geometry();
+      baseline.forEach((card, index) => {
+        check(Math.abs(card.height - current[index].height) < 1 && Math.abs(card.width - current[index].width) < 1,
+          `${orientation}/${zoom}: unscaled multiline dimensions changed`);
+        check(card.left === current[index].left && card.top === current[index].top, "zoom changed world spacing");
+      });
+    }
+    await input.setZoom(0.25);
+    await input.setOrientation(orientation === "horizontal" ? "vertical-top-down" : "horizontal");
+    await input.setOrientation(orientation);
+    const roundTrip = geometry();
+    baseline.forEach((card, index) => {
+      check(Math.abs(card.height - roundTrip[index].height) < 1 && Math.abs(card.width - roundTrip[index].width) < 1,
+        `${orientation}: low-zoom orientation round trip changed world dimensions ${card.height} -> ${roundTrip[index].height}`);
+      check(card.left === roundTrip[index].left && card.top === roundTrip[index].top, "low-zoom orientation round trip changed world spacing");
+    });
+    baseline.forEach((card, index) => {
+      check(card.lineHeight === roundTrip[index].lineHeight,
+        `${orientation}: low-zoom orientation round trip changed line-height ${card.lineHeight} -> ${roundTrip[index].lineHeight}`);
+    });
+  }
+  return { checks };
 }
 
 // Runs against the installed facade, DOM listeners, save path and native SVG icons.
