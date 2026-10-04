@@ -1,10 +1,12 @@
 import { ArborLayoutDirection, ArborOverviewOrientation } from "./types";
 
+export type OverviewArrowKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
+
 export interface OverviewDirectionKeys {
-  parent: string;
-  child: string;
-  previous: string;
-  next: string;
+  parent: OverviewArrowKey;
+  child: OverviewArrowKey;
+  previous: OverviewArrowKey;
+  next: OverviewArrowKey;
 }
 
 export function normalizeOverviewOrientation(value: unknown): ArborOverviewOrientation | null {
