@@ -8,6 +8,223 @@ import { createOverviewSnapshot, type OverviewSnapshotInput } from "../../src/vi
 import { TreeOverviewController, type TreeOverviewPort } from "../../src/view/overview/TreeOverviewController";
 import type { MarkdownPort, ViewReadPort } from "../../src/view/state/viewTypes";
 import { BlockEditorController } from "../../src/view/editor/BlockEditorController";
+import type { ViewShell } from "../../src/view/chrome/ViewShell";
+import { fixtureTree } from "../helpers/arborFixtures";
+import { getBlock, getChildren } from "../../src/model/tree";
+import { parseBranchDocument } from "../../src/storage/document";
+
+interface InstalledNavigationInput {
+  root: HTMLElement;
+  read: ViewReadPort;
+  shell: ViewShell;
+  overview: TreeOverviewController;
+  editor: BlockEditorController;
+  resetTree(metadata: BranchTreeMetadata): Promise<void>;
+  setOrientation(value: ArborOverviewOrientation): Promise<void>;
+  setDirection(value: ArborLayoutDirection): Promise<void>;
+  select(id: string): void;
+  setMode(mode: "editor" | "overview" | "output"): Promise<void>;
+  openSearch(): void;
+  closeSearch(): void;
+  waitForSourceMetadata(): Promise<void>;
+  activateExternal(anchor: HTMLAnchorElement): MouseEvent;
+  readSource(): Promise<string>;
+  waitForNextPaint(): Promise<void>;
+}
+
+// Runs against the installed facade, DOM listeners, save path and native SVG icons.
+// The caller owns an isolated note/leaf and restores its workspace in finally.
+export async function checkInstalledVerticalNavigationHost(input: InstalledNavigationInput): Promise<{ checks: number }> {
+  let checks = 0;
+  const assert = (condition: unknown, label: string) => {
+    if (!condition) throw Error(label);
+    checks += 1;
+  };
+  const wait = async (predicate: () => unknown, label: string) => {
+    for (let attempt = 0; attempt < 500; attempt++) {
+      if (predicate()) return;
+      await new Promise(resolve => globalThis.setTimeout(resolve, 10));
+    }
+    throw Error(`Timed out: ${label}`);
+  };
+  const selected = () => input.read.getState()!.selectedBlockId;
+  const tree = () => input.read.getState()!.metadata;
+  const viewport = () => input.overview.getElements().viewport!;
+  const key = (value: string, options: KeyboardEventInit = {}, target: HTMLElement = viewport()) => {
+    const event = new KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true, ...options });
+    target.dispatchEvent(event);
+    return event;
+  };
+  const reset = async (metadata = fixtureTree()) => {
+    input.editor.cancelEditingSession();
+    await input.resetTree(metadata);
+    await wait(() => input.overview.getElements().surface?.querySelector('[data-block-id="first"]') && !input.root.querySelector(".is-staging"), "fixture reset");
+    input.select("first");
+    await input.waitForNextPaint();
+  };
+  const cases = [
+    ["vertical-top-down", "ltr", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"],
+    ["vertical-top-down", "rtl", "ArrowUp", "ArrowDown", "ArrowRight", "ArrowLeft"],
+    ["vertical-bottom-up", "ltr", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"],
+    ["vertical-bottom-up", "rtl", "ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"]
+  ] as const;
+  for (const [orientation, direction, parent, child, previous, next] of cases) {
+    await input.setMode("overview");
+    await input.setDirection(direction);
+    await input.setOrientation(orientation);
+    await reset();
+    key(child); assert(selected() === "leaf", "physical child must select first child");
+    key(parent); assert(selected() === "first", "physical parent must select parent");
+    key(next); assert(selected() === "second", "physical next must select next logical sibling");
+    key(next); assert(selected() === "second", "siblings must not wrap");
+    key(previous); key(parent); assert(selected() === "root", "previous then parent");
+    key(parent); assert(selected() === "root", "root parent must not move");
+    for (const modifier of ["ctrlKey", "metaKey"] as const) {
+      for (const [arrow, expectedParent, expectedOrder] of [
+        [child, "first", ["leaf", "NEW"]],
+        [previous, "root", ["NEW", "first", "second"]],
+        [next, "root", ["first", "NEW", "second"]],
+        [parent, null, ["root", "NEW"]]
+      ] as const) {
+        await reset();
+        key(arrow, { [modifier]: true });
+        await wait(() => selected() !== "first" && tree().blocks.length === 5, "directional create");
+        const id = selected()!;
+        assert(getBlock(tree(), id)?.parentId === expectedParent, `${orientation}/${direction}/${modifier}/${arrow}: created parent`);
+        assert(JSON.stringify(getChildren(tree(), expectedParent).map(block => block.id === id ? "NEW" : block.id)) === JSON.stringify(expectedOrder), "created sibling order/selection");
+        await wait(() => !input.root.querySelector(".is-staging") && input.editor.getSession()?.blockId === id, "created editor publication");
+        input.editor.cancelEditingSession();
+        await input.waitForNextPaint();
+        const persisted = parseBranchDocument(await input.readSource()).metadata!;
+        assert(getBlock(persisted, id)?.parentId === expectedParent && persisted.blocks.length === 5, "real source save keeps creation topology");
+      }
+      await reset(); input.select("root"); key(parent, { [modifier]: true });
+      await input.waitForNextPaint();
+      assert(selected() === "root" && tree().blocks.length === 4, "root modified parent must not create");
+    }
+    await reset(); key("Delete");
+    await wait(() => tree().blocks.length === 3 && !input.root.querySelector(".is-staging"), "delete publication");
+    assert(selected() === "leaf" && getBlock(tree(), "leaf")?.parentId === "root", "Delete lifts child and selects it");
+    key(next); assert(selected() === "second", "arrow navigation continues after Delete");
+    key(parent); assert(selected() === "root", "parent after Delete");
+    await reset(); key("Enter");
+    await wait(() => input.editor.getSession()?.blockId === "first" && input.root.querySelector("textarea"), "Enter editing");
+    assert(input.editor.getSession()?.origin === "overview", "Enter keeps overview origin");
+    const textarea = input.root.querySelector<HTMLTextAreaElement>("textarea")!;
+    const before = selected();
+    const nativeKey = key(child, { ctrlKey: true }, textarea);
+    assert(!nativeKey.defaultPrevented && selected() === before && tree().blocks.length === 4, "textarea owns native modified arrows");
+    input.editor.cancelEditingSession();
+    await input.waitForNextPaint();
+    const card = input.overview.getElements().surface!.querySelector<HTMLElement>('[data-block-id="second"]')!;
+    card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+    await wait(() => input.editor.getSession()?.blockId === "second", "double click editing");
+    assert(selected() === "second" && input.editor.getSession()?.origin === "overview", "double-click selects and edits its block");
+    input.editor.cancelEditingSession();
+    await input.waitForNextPaint();
+    for (const width of [480, 360]) {
+      input.root.setCssStyles({ width: `${width}px` });
+      input.shell.applyViewClasses(input.root);
+      input.shell.syncTouchDock();
+      await input.waitForNextPaint();
+      input.select("first");
+      const labels = ["Parent block", "Previous block", "Next block", "Child block"];
+      for (const [index, arrow] of [parent, previous, next, child].entries()) {
+        const button = input.root.querySelector<HTMLButtonElement>(`button[aria-label="${labels[index]}"]`)!;
+        assert(Boolean(button?.querySelector(`.lucide-${arrow.replace("Arrow", "arrow-").toLowerCase()}`)), `${width}px dock physical glyph ${labels[index]}`);
+        const box = button.getBoundingClientRect();
+        assert(box.width >= 44 && box.height >= 44 && getComputedStyle(button).visibility !== "hidden", "dock hit target at least 44px");
+        assert(button.ownerDocument.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.closest("button") === button, "dock target is not occluded");
+      }
+      const previousButton = input.root.querySelector<HTMLButtonElement>('button[aria-label="Previous block"]')!;
+      const nextButton = input.root.querySelector<HTMLButtonElement>('button[aria-label="Next block"]')!;
+      assert(previousButton.disabled && !nextButton.disabled, "dock disabled state follows logical sibling edge");
+      nextButton.click(); assert(selected() === "second", "dock next routes logical action");
+      input.root.querySelector<HTMLButtonElement>('button[aria-label="Parent block"]')!.click();
+      assert(selected() === "root", "dock parent routes logical action");
+    }
+    input.root.setCssStyles({ width: "900px" });
+    input.shell.applyViewClasses(input.root); input.shell.syncTouchDock();
+    assert(!input.root.querySelector(".arbor-touch-dock"), "wide desktop keeps dock absent");
+    const threeChildren = fixtureTree();
+    threeChildren.blocks.push({ id: "third", parentId: "root", order: 2, content: "Third", after: "" });
+    await reset(threeChildren);
+    input.root.setCssStyles({ width: "480px" });
+    input.shell.applyViewClasses(input.root); input.shell.syncTouchDock();
+    input.select("root");
+    input.root.querySelector<HTMLButtonElement>('button[aria-label="Child block"]')!.click();
+    assert(selected() === "second", "dock keeps preferred middle child");
+    input.select("root"); key(child);
+    assert(selected() === "first", "keyboard keeps first child instead of preferred child");
+    for (const tag of ["input", "div"] as const) {
+      const nativeInput = viewport().createEl(tag);
+      if (tag === "div") nativeInput.setAttribute("contenteditable", "true");
+      const nativeKey = key(child, { metaKey: true }, nativeInput);
+      assert(!nativeKey.defaultPrevented && selected() === "first" && tree().blocks.length === 5, "input/contenteditable owns modified arrow");
+      nativeInput.remove();
+    }
+    const manyChildren = fixtureTree();
+    manyChildren.blocks = [manyChildren.blocks[0], ...Array.from({length:25}, (_, index) => ({
+      id: index === 0 ? "first" : `child-${index + 1}`, parentId: "root", order: index,
+      content: index === 24 ? "Needle last child" : `Child ${index + 1}`, after: "\n\n"
+    }))];
+    await reset(manyChildren); input.select("root");
+    key("2"); await new Promise(resolve => globalThis.setTimeout(resolve, 100)); key("5");
+    await new Promise(resolve => globalThis.setTimeout(resolve, 200));
+    assert(selected() === "root", "multi-digit input waits after last digit");
+    await wait(() => selected() === "child-25", "250ms multi-digit child");
+    assert(selected() === "child-25", "25 selects twenty-fifth child");
+    key("0"); await wait(() => selected() === "root", "zero parent");
+    key("9"); key("9"); await wait(() => selected() === "child-25", "clamped numeric child");
+    assert(selected() === "child-25", "99 clamps to last child");
+    input.select("root");
+    // Start far from the result, so activation must also reveal it in the viewport.
+    viewport().scrollLeft = direction === "ltr" ? 0 : viewport().scrollWidth;
+    input.openSearch();
+    await wait(() => input.root.querySelector(".arbor-search-input"), "search input");
+    const search = input.root.querySelector<HTMLInputElement>(".arbor-search-input")!;
+    search.value = "Needle last child"; search.dispatchEvent(new Event("input"));
+    await wait(() => input.root.querySelector(".arbor-search-result"), "search results");
+    key("Enter", {}, search);
+    await wait(() => selected() === "child-25", "search reveal selection");
+    assert(selected() === "child-25", "search reveals matched overview block");
+    input.closeSearch();
+    await input.waitForNextPaint();
+    await wait(() => {
+      const card = input.overview.getElements().surface?.querySelector('[data-block-id="child-25"]')?.getBoundingClientRect();
+      if (!card) return false;
+      const visible = viewport().getBoundingClientRect();
+      return card.right > visible.left && card.left < visible.right && card.bottom > visible.top && card.top < visible.bottom;
+    }, "search result enters visible viewport");
+    assert(Boolean(input.overview.getElements().surface?.querySelector('[data-block-id="child-25"]')), "search result is visibly published");
+    const linkTree = fixtureTree();
+    linkTree.blocks[0].content = "# Root\n\n[[#Root]]\n\n[External](https://example.invalid/)";
+    await reset(linkTree);
+    await input.waitForSourceMetadata();
+    const rootCard = input.overview.getElements().surface!.querySelector<HTMLElement>('[data-block-id="root"]')!;
+    const internal = rootCard.querySelector<HTMLAnchorElement>("a.internal-link")!;
+    assert(Boolean(internal), "MarkdownRenderer supplies real internal anchor");
+    input.select("leaf");
+    const sourceBeforeLink = await input.readSource();
+    internal.click();
+    await wait(() => selected() === "root", "local internal heading selection");
+    assert(input.read.getMode() === "overview" && await input.readSource() === sourceBeforeLink, "internal heading reveals without source/mode change");
+    const external = rootCard.querySelector<HTMLAnchorElement>('a[href="https://example.invalid/"]')!;
+    assert(Boolean(external), "MarkdownRenderer supplies real external anchor");
+    const externalEvent = input.activateExternal(external);
+    assert(!externalEvent.defaultPrevented && selected() === "root" && !input.editor.getSession(), "external link stays native, never selects/edits the card");
+    input.root.setCssStyles({ width: "480px" });
+    await input.setMode("editor");
+    input.shell.applyViewClasses(input.root); input.shell.syncTouchDock();
+    for (const [label, icon] of [["Parent block", direction === "rtl" ? "arrow-right" : "arrow-left"], ["Child block", direction === "rtl" ? "arrow-left" : "arrow-right"], ["Previous block", "chevron-up"], ["Next block", "chevron-down"]]) {
+      assert(Boolean(input.root.querySelector(`button[aria-label="${label}"] .lucide-${icon}`)), "Branch Editor retains horizontal glyphs");
+    }
+    await input.setMode("output");
+    input.shell.syncTouchDock();
+    assert(!input.root.querySelector(".arbor-touch-dock"), "Output keeps dock absent");
+  }
+  return { checks };
+}
 
 interface NativeInput {
   document: Document;

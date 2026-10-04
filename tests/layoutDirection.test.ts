@@ -90,13 +90,11 @@ describe("Arbor layout direction", () => {
   it("renders RTL as a CSS mirror while keeping semantic depth and card text in place", () => {
     const view = readSource("src/view/chrome/ViewShell.ts");
     const renderer = readSource("src/view/branch/BranchRenderer.ts");
-    const directionalCreate = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleDirectionalCreateShortcut");
     const editorArrow = sourceMethod("src/view/navigation/NavigationController.ts", "NavigationController", "handleEditorArrow");
     const styles = readSource("styles.css");
 
     expect(renderer).toContain("columnEl.dataset.columnDepth");
-    expect(directionalCreate).toContain("getParentArrowKey(direction)");
-    expect(directionalCreate).toContain("getChildArrowKey(direction)");
+    // Physical creation routes are covered by real topology assertions in navigationController.test.ts.
     expect(editorArrow).toContain("getParentArrowKey(direction)");
     expect(editorArrow).toContain("getChildArrowKey(direction)");
     expect(renderer).toContain("getHorizontalWheelDelta(event.deltaY, settings.layoutDirection)");

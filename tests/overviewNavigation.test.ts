@@ -11,6 +11,22 @@ import { readSource, sourceMethod } from "./helpers/viewSource";
 const tree: BranchTreeMetadata = fixtureTree();
 
 describe("overview arrow navigation", () => {
+  it.each([
+    ["vertical-top-down", "ltr", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"],
+    ["vertical-top-down", "rtl", "ArrowUp", "ArrowDown", "ArrowRight", "ArrowLeft"],
+    ["vertical-bottom-up", "ltr", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"],
+    ["vertical-bottom-up", "rtl", "ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"]
+  ] as const)("maps %s/%s physical arrows without wrapping", (orientation, direction, parent, child, previous, next) => {
+    expect(resolveOverviewArrowTarget(tree, "first", parent, direction, orientation)).toBe("root");
+    expect(resolveOverviewArrowTarget(tree, "first", child, direction, orientation)).toBe("leaf");
+    expect(resolveOverviewArrowTarget(tree, "first", next, direction, orientation)).toBe("second");
+    expect(resolveOverviewArrowTarget(tree, "second", previous, direction, orientation)).toBe("first");
+    expect(resolveOverviewArrowTarget(tree, "root", parent, direction, orientation)).toBeNull();
+    expect(resolveOverviewArrowTarget(tree, "leaf", child, direction, orientation)).toBeNull();
+    expect(resolveOverviewArrowTarget(tree, "first", previous, direction, orientation)).toBeNull();
+    expect(resolveOverviewArrowTarget(tree, "second", next, direction, orientation)).toBeNull();
+  });
+
   it("moves to the parent, first child, and neighbouring siblings", () => {
     expect(resolveOverviewArrowTarget(tree, "first", "ArrowLeft")).toBe("root");
     expect(resolveOverviewArrowTarget(tree, "first", "ArrowRight")).toBe("leaf");

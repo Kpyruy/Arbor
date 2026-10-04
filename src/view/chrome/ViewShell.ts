@@ -1,6 +1,7 @@
 import { Menu, Platform, setIcon } from "obsidian";
 import type { ArborLayoutDirection, ArborOverviewOrientation, ArborPresentationMode } from "../../types";
 import { getChildArrowIcon, getParentArrowIcon } from "../../layoutDirection";
+import { getOverviewDirectionKeys, type OverviewArrowKey } from "../../overviewOrientation";
 import {
   getNextSibling,
   getParentBlock,
@@ -266,27 +267,33 @@ export class ViewShell {
     dock.removeClass("is-editing");
     const id = state.selectedBlockId;
     const tree = state.metadata;
+    const direction = this.port.read.getSettings().layoutDirection;
+    const orientation = this.port.read.getMode() === "overview" ? this.port.getOverviewOrientation() : "horizontal";
+    const keys = getOverviewDirectionKeys(direction, orientation);
+    const icons: Record<OverviewArrowKey, string> = {
+      ArrowUp: "arrow-up", ArrowDown: "arrow-down", ArrowLeft: "arrow-left", ArrowRight: "arrow-right"
+    };
     button(
       "Parent block",
-      getParentArrowIcon(this.port.read.getSettings().layoutDirection),
+      orientation === "horizontal" ? getParentArrowIcon(direction) : icons[keys.parent],
       () => this.port.dock.selectParent(),
       !getParentBlock(tree, id)
     );
     button(
       "Previous block",
-      "chevron-up",
+      orientation === "horizontal" ? "chevron-up" : icons[keys.previous],
       () => this.port.dock.selectPrevious(),
       !getPreviousSibling(tree, id)
     );
     button(
       "Next block",
-      "chevron-down",
+      orientation === "horizontal" ? "chevron-down" : icons[keys.next],
       () => this.port.dock.selectNext(),
       !getNextSibling(tree, id)
     );
     button(
       "Child block",
-      getChildArrowIcon(this.port.read.getSettings().layoutDirection),
+      orientation === "horizontal" ? getChildArrowIcon(direction) : icons[keys.child],
       () => this.port.dock.selectChild(),
       !getPreferredChildBlock(tree, id)
     );

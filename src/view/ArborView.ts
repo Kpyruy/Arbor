@@ -310,7 +310,7 @@ export class ArborView extends FileView {
       setKeyboardSelection: (id) => this.documentController.setSelection(id),
       openBlockMenu: (id, event) => this.buildBlockMenu(id).showAtMouseEvent(event),
       tryHandleCardLink: (event, card) => this.cardLinks.handleActivation(event, card)
-    });
+    }, () => this.getOverviewOrientation());
     this.branchViewport = new BranchViewportController({
       read: {
         getState: () => this.state,

@@ -1,6 +1,6 @@
 import { getFirstChildBlock, getNextSibling, getParentBlock, getPreviousSibling } from "./model/tree";
-import { getChildArrowKey, getParentArrowKey } from "./layoutDirection";
-import { BranchBlockId, BranchTreeMetadata } from "./types";
+import { getOverviewDirectionKeys } from "./overviewOrientation";
+import { ArborOverviewOrientation, BranchBlockId, BranchTreeMetadata } from "./types";
 
 export interface OverviewCardSelectionState {
   active: boolean;
@@ -56,15 +56,17 @@ export function resolveOverviewArrowTarget(
   metadata: BranchTreeMetadata,
   selectedBlockId: BranchBlockId,
   key: string,
-  direction: "ltr" | "rtl" = "ltr"
+  direction: "ltr" | "rtl" = "ltr",
+  orientation: ArborOverviewOrientation = "horizontal"
 ): BranchBlockId | null {
-  const target = key === getParentArrowKey(direction)
+  const keys = getOverviewDirectionKeys(direction, orientation);
+  const target = key === keys.parent
     ? getParentBlock(metadata, selectedBlockId)
-    : key === getChildArrowKey(direction)
+    : key === keys.child
       ? getFirstChildBlock(metadata, selectedBlockId)
-      : key === "ArrowUp"
+      : key === keys.previous
         ? getPreviousSibling(metadata, selectedBlockId)
-        : key === "ArrowDown"
+        : key === keys.next
           ? getNextSibling(metadata, selectedBlockId)
           : null;
 

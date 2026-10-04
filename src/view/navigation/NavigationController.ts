@@ -4,7 +4,8 @@ import { findRenderedCardLink } from "./CardLinkController";
 import { getChildArrowKey, getParentArrowKey } from "../../layoutDirection";
 import { resolveNumericChildTarget } from "../../numericNavigation";
 import { resolveOverviewArrowTarget } from "../../overviewNavigation";
-import type { BranchBlockId } from "../../types";
+import { getOverviewDirectionKeys } from "../../overviewOrientation";
+import type { ArborOverviewOrientation, BranchBlockId } from "../../types";
 import type { EditingOrigin, SelectionPort, ViewReadPort } from "../state/viewTypes";
 
 export interface NavigationActions {
@@ -32,7 +33,8 @@ export class NavigationController {
   constructor(
     private readonly read: ViewReadPort,
     private readonly selection: SelectionPort,
-    private readonly actions: NavigationActions
+    private readonly actions: NavigationActions,
+    private readonly getOverviewOrientation: () => ArborOverviewOrientation = () => "horizontal"
   ) {}
 
   selectParentBlock(): void {
@@ -198,7 +200,7 @@ export class NavigationController {
     if (this.handleDeleteShortcut(event)) return;
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
     event.preventDefault();
-    const targetId = resolveOverviewArrowTarget(state.metadata, state.selectedBlockId, event.key, this.read.getSettings().layoutDirection);
+    const targetId = resolveOverviewArrowTarget(state.metadata, state.selectedBlockId, event.key, this.read.getSettings().layoutDirection, this.getOverviewOrientation());
     if (targetId) this.selection.selectBlock(targetId);
   }
 
@@ -223,22 +225,23 @@ export class NavigationController {
     const state = this.read.getState();
     if (!state?.selectedBlockId) return false;
     const direction = this.read.getSettings().layoutDirection;
-    if (event.key === getChildArrowKey(direction)) {
+    const keys = getOverviewDirectionKeys(direction, this.read.getMode() === "overview" ? this.getOverviewOrientation() : "horizontal");
+    if (event.key === keys.child) {
       event.preventDefault();
       void this.actions.createChild();
       return true;
     }
-    if (event.key === "ArrowUp") {
+    if (event.key === keys.previous) {
       event.preventDefault();
       void this.actions.createSiblingAbove();
       return true;
     }
-    if (event.key === "ArrowDown") {
+    if (event.key === keys.next) {
       event.preventDefault();
       void this.actions.createSiblingBelow();
       return true;
     }
-    if (event.key !== getParentArrowKey(direction) || !getParentBlock(state.metadata, state.selectedBlockId)) return false;
+    if (event.key !== keys.parent || !getParentBlock(state.metadata, state.selectedBlockId)) return false;
     event.preventDefault();
     void this.actions.createParentLevelBlock();
     return true;

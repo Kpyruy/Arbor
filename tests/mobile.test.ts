@@ -2,10 +2,24 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { compactColumns, pinchViewport, resolvePinchZoom, shouldSaveOnEnter, useCompactLayout } from "../src/mobile";
-import { buildColumnModels } from "../src/model/tree";
+import { buildColumnModels, getPreferredChildBlock } from "../src/model/tree";
+import { resolveOverviewArrowTarget } from "../src/overviewNavigation";
+import { fixtureTree } from "./helpers/arborFixtures";
 import type { BranchTreeMetadata } from "../src/types";
 
 describe("mobile interaction policy", () => {
+  it.each([
+    ["vertical-top-down", "ArrowDown"],
+    ["vertical-bottom-up", "ArrowUp"]
+  ] as const)("keeps preferred touch child distinct from the %s keyboard first child", (orientation, childKey) => {
+    const tree = fixtureTree();
+    tree.blocks.push({ id: "third", parentId: "root", order: 2, content: "Third", after: "" });
+    expect(getPreferredChildBlock(tree, "root")?.id).toBe("second");
+    for (const direction of ["ltr", "rtl"] as const) {
+      expect(resolveOverviewArrowTarget(tree, "root", childKey, direction, orientation)).toBe("first");
+    }
+  });
+
   it("uses the actual leaf width, ignoring unmeasured leaves", () => {
     expect([0, 360, 600, 601, 1024].map(useCompactLayout)).toEqual([false, true, true, false, false]);
   });

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { NavigationController, type NavigationActions } from "../src/view/navigation/NavigationController";
 import { CardLinkController } from "../src/view/navigation/CardLinkController";
 import { fixtureLoaded, fixtureSettings } from "./helpers/arborFixtures";
+import { addChild, addRootBlock, addSibling, deleteBlockAndLiftChildren, getBlock, getChildren, getParentBlock } from "../src/model/tree";
+import type { ArborOverviewOrientation, ArborPresentationMode } from "../src/types";
 
 function keyEvent(key: string, options: Partial<KeyboardEvent> = {}): KeyboardEvent {
   return {
@@ -18,7 +20,7 @@ function keyEvent(key: string, options: Partial<KeyboardEvent> = {}): KeyboardEv
   } as unknown as KeyboardEvent;
 }
 
-function createController() {
+function createController(orientation: ArborOverviewOrientation = "horizontal", mode: ArborPresentationMode = "editor") {
   const state = fixtureLoaded();
   const settings = fixtureSettings();
   const selectBlock = vi.fn((id: string | null) => { state.selectedBlockId = id; });
@@ -50,12 +52,40 @@ function createController() {
   const controller = new NavigationController({
     getState: () => state,
     getSettings: () => settings,
-    getMode: () => "editor",
+    getMode: () => mode,
     getFilePath: () => "fixture.md"
-  }, { selectBlock }, actions);
+  }, { selectBlock }, actions, () => orientation);
 
   return { actions, controller, selectBlock, settings, state, openInternal };
 }
+
+// Keep model mutations real; only the file-save/render boundary is omitted.
+function createMutationController(orientation: ArborOverviewOrientation, mode: ArborPresentationMode = "overview") {
+  const fixture = createController(orientation, mode);
+  const { state, actions } = fixture;
+  const apply = (result: { metadata: typeof state.metadata; selectedBlockId: string | null }) => {
+    Object.assign(state, result);
+  };
+  actions.createChild = vi.fn(async () => apply(addChild(state.metadata, state.selectedBlockId)));
+  actions.createSiblingAbove = vi.fn(async () => apply(addSibling(state.metadata, state.selectedBlockId, "above")));
+  actions.createSiblingBelow = vi.fn(async () => apply(addSibling(state.metadata, state.selectedBlockId, "below")));
+  actions.createParentLevelBlock = vi.fn(async () => {
+    const parent = getParentBlock(state.metadata, state.selectedBlockId);
+    if (parent) apply(addSibling(state.metadata, parent.id, "below"));
+  });
+  actions.createRootBlock = vi.fn(async () => apply(addRootBlock(state.metadata)));
+  actions.deleteSelectedBlock = vi.fn(async () => {
+    if (state.selectedBlockId) apply(deleteBlockAndLiftChildren(state.metadata, state.selectedBlockId));
+  });
+  return fixture;
+}
+
+const verticalCases = [
+  ["vertical-top-down", "ltr", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"],
+  ["vertical-top-down", "rtl", "ArrowUp", "ArrowDown", "ArrowRight", "ArrowLeft"],
+  ["vertical-bottom-up", "ltr", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"],
+  ["vertical-bottom-up", "rtl", "ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"]
+] as const;
 
 function renderedLinkEvent(type = "click", button = 0) {
   const content = {};
@@ -82,6 +112,98 @@ describe("NavigationController", () => {
     controller?.clearNumericNavigation();
     controller = null;
     vi.useRealTimers();
+  });
+
+  describe.each(verticalCases)("vertical overview %s/%s", (orientation, direction, parent, child, previous, next) => {
+    it("navigates through parent, first child and logical siblings", () => {
+      const fixture = createController(orientation, "overview");
+      fixture.settings.layoutDirection = direction;
+      controller = fixture.controller;
+      controller.handleOverviewKeyDown(keyEvent(child));
+      expect(fixture.state.selectedBlockId).toBe("leaf");
+      controller.handleOverviewKeyDown(keyEvent(parent));
+      expect(fixture.state.selectedBlockId).toBe("first");
+      controller.handleOverviewKeyDown(keyEvent(next));
+      expect(fixture.state.selectedBlockId).toBe("second");
+      controller.handleOverviewKeyDown(keyEvent(next));
+      expect(fixture.state.selectedBlockId).toBe("second");
+      controller.handleOverviewKeyDown(keyEvent(previous));
+      controller.handleOverviewKeyDown(keyEvent(parent));
+      expect(fixture.state.selectedBlockId).toBe("root");
+      controller.handleOverviewKeyDown(keyEvent(parent));
+      expect(fixture.state.selectedBlockId).toBe("root");
+    });
+
+    it.each(["ctrlKey", "metaKey"] as const)("%s physical arrows create the correct topology and selected ID", (modifier) => {
+      for (const [key, expectedParent, expectedSiblings] of [
+        [child, "first", ["leaf", "NEW"]],
+        [previous, "root", ["NEW", "first", "second"]],
+        [next, "root", ["first", "NEW", "second"]],
+        [parent, null, ["root", "NEW"]]
+      ] as const) {
+        const fixture = createMutationController(orientation);
+        fixture.settings.layoutDirection = direction;
+        controller = fixture.controller;
+        controller.handleOverviewKeyDown(keyEvent(key, { [modifier]: true }));
+        const createdId = fixture.state.selectedBlockId!;
+        expect(createdId).not.toBe("first");
+        expect(fixture.state.metadata.blocks).toHaveLength(5);
+        expect(getBlock(fixture.state.metadata, createdId)?.parentId).toBe(expectedParent);
+        expect(getChildren(fixture.state.metadata, expectedParent).map(block => block.id === createdId ? "NEW" : block.id)).toEqual(expectedSiblings);
+        expect(getBlock(fixture.state.metadata, "leaf")?.parentId).toBe("first");
+      }
+      const rootFixture = createMutationController(orientation);
+      rootFixture.settings.layoutDirection = direction;
+      rootFixture.state.selectedBlockId = "root";
+      rootFixture.controller.handleOverviewKeyDown(keyEvent(parent, { [modifier]: true }));
+      expect(rootFixture.state.selectedBlockId).toBe("root");
+      expect(rootFixture.state.metadata.blocks).toHaveLength(4);
+    });
+
+    it("continues arrow navigation after deleting and lifting children", () => {
+      const fixture = createMutationController(orientation);
+      fixture.settings.layoutDirection = direction;
+      controller = fixture.controller;
+      controller.handleOverviewKeyDown(keyEvent("Delete"));
+      expect(fixture.state.selectedBlockId).toBe("leaf");
+      expect(getBlock(fixture.state.metadata, "leaf")?.parentId).toBe("root");
+      controller.handleOverviewKeyDown(keyEvent(next));
+      expect(fixture.state.selectedBlockId).toBe("second");
+      controller.handleOverviewKeyDown(keyEvent(parent));
+      expect(fixture.state.selectedBlockId).toBe("root");
+    });
+
+    it.each(["input", "textarea", "[contenteditable='true']"])("leaves %s keys native", (selector) => {
+      const fixture = createMutationController(orientation);
+      const preventDefault = vi.fn();
+      const target = { closest: (query: string) => query.includes(selector) ? {} : null } as unknown as EventTarget;
+      fixture.controller.handleOverviewKeyDown(keyEvent(child, { ctrlKey: true, target, preventDefault }));
+      expect(fixture.state.selectedBlockId).toBe("first");
+      expect(fixture.state.metadata.blocks).toHaveLength(4);
+      expect(preventDefault).not.toHaveBeenCalled();
+    });
+  });
+
+  it.each(["editor", "output"] as const)("keeps %s creation horizontal despite a vertical overview default", (mode) => {
+    for (const orientation of ["vertical-top-down", "vertical-bottom-up"] as const) {
+      for (const direction of ["ltr", "rtl"] as const) {
+        for (const modifier of ["ctrlKey", "metaKey"] as const) {
+          for (const [key, expectedParent, expectedOrder] of [
+            [direction === "ltr" ? "ArrowRight" : "ArrowLeft", "first", ["leaf", "NEW"]],
+            ["ArrowUp", "root", ["NEW", "first", "second"]],
+            ["ArrowDown", "root", ["first", "NEW", "second"]],
+            [direction === "ltr" ? "ArrowLeft" : "ArrowRight", null, ["root", "NEW"]]
+          ] as const) {
+            const fixture = createMutationController(orientation, mode);
+            fixture.settings.layoutDirection = direction;
+            fixture.controller.handleViewportKeyDown(keyEvent(key, { [modifier]: true }));
+            const selected = fixture.state.selectedBlockId;
+            expect(getBlock(fixture.state.metadata, selected)?.parentId).toBe(expectedParent);
+            expect(getChildren(fixture.state.metadata, expectedParent).map(block => block.id === selected ? "NEW" : block.id)).toEqual(expectedOrder);
+          }
+        }
+      }
+    }
   });
 
   it("waits the complete 250 ms before selecting a numeric child", async () => {
