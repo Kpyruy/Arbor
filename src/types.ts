@@ -130,6 +130,7 @@ export interface BranchHistoryEntry {
 
 export type ArborPresentationMode = "editor" | "overview" | "output";
 export type ArborLayoutDirection = "ltr" | "rtl";
+export type ArborOverviewOrientation = "horizontal" | "vertical-top-down" | "vertical-bottom-up";
 export interface ArborCustomTheme {
   canvas: string;
   card: string;
