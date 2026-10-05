@@ -1898,15 +1898,8 @@
   max-height: var(--arbor-card-preview-max-height);
 }
 
-.arbor-card.has-truncated-content:not(.is-active):not(.is-editing) .arbor-card-content::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 3.4rem;
-  content: "";
-  pointer-events: none;
-  background: linear-gradient(transparent, color-mix(in srgb, var(--background-secondary) 92%, black 8%));
+.arbor-card.has-truncated-content:not(.is-active):not(.is-editing) .arbor-card-content {
+  mask-image: linear-gradient(to bottom, black calc(100% - 3.4rem), transparent);
 }
 
 .arbor-card.is-active .arbor-card-content,
