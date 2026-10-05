@@ -10,6 +10,20 @@ export interface ArborReleaseNote {
 
 export const ARBOR_RELEASE_NOTES: readonly ArborReleaseNote[] = [
   {
+    version: "0.3.0",
+    title: "Grow in every direction",
+    changes: [
+      "Vertical Tree Overview grows upward or downward, with matching navigation and PNG/PDF exports.",
+      "Color individual cards or whole branches with inherited colors, custom HEX values and isolated previews.",
+      "Find blocks with selectable search results, and follow links directly between cards of the same note.",
+      "Smoother branch transitions, inline editing and theme-aware previews keep your writing in focus."
+    ],
+    action: {
+      label: "Open Arbor settings",
+      id: "open-settings"
+    }
+  },
+  {
     version: "0.2.9",
     title: "Shape every draft",
     changes: [

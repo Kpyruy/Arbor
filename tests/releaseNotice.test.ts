@@ -4,6 +4,12 @@ import { fileURLToPath } from "node:url";
 import { getReleaseNote, shouldShowReleaseNotice } from "../src/releaseNotice";
 
 describe("release notice", () => {
+  it("announces 0.3.0 to existing users without repeating it or notifying fresh installs", () => {
+    expect(shouldShowReleaseNotice("0.2.9", "0.3.0", false)).toBe(true);
+    expect(getReleaseNote("0.3.0")?.changes.join(" ")).toMatch(/vertical/i);
+    expect(shouldShowReleaseNotice("0.3.0", "0.3.0", false)).toBe(false);
+    expect(shouldShowReleaseNotice(undefined, "0.3.0", true)).toBe(false);
+  });
   it("does not show a release note on a fresh install", () => {
     expect(shouldShowReleaseNotice(undefined, "0.2.9", true)).toBe(false);
   });

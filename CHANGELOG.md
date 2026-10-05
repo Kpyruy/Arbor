@@ -4,15 +4,40 @@ All notable changes to Arbor should be documented in this file.
 
 ## Unreleased
 
+## 0.3.0 - 2026-10-05
+
+Grow in every direction: vertical Tree Overview, card and branch colors, and faster ways to find and connect ideas.
+
+![Vertical Tree Overview with inherited branch colors](https://github.com/Kpyruy/Arbor/releases/download/0.3.0/arbor-vertical-overview-release.png)
+
 ### Added
 
+- added vertical Tree Overview with the root at the bottom or at the top, plus a plugin default and independent, saved per-tab overrides
+- adapted arrows, Ctrl/Cmd + arrow creation, number navigation and touch controls to the effective Overview orientation and LTR/RTL sibling order; Branch Editor remains horizontal
+- added selectable search results with titles, highlighted snippets and paths, keyboard selection, click-to-reveal and mobile-friendly scrolling
 - added per-card colors and inherited branch colors with swatches, HEX input, isolated preview and reset controls in both editor modes
 - preserved block colors through note reloads, move/duplicate, undo/redo and Tree Overview exports while keeping clean Markdown undecorated
 - integrated Heading Linker's public index to automatically link terms and aliases to headings in other cards of the same Arbor note, without changing its Markdown
 - respected Heading Linker's Reading highlighting, folder scope, exclusions and per-note opt-out; ambiguous local targets remain unlinked
 
+![Branch color controls with swatches, HEX input and a preview](https://github.com/Kpyruy/Arbor/releases/download/0.3.0/arbor-branch-colors-release.png)
+
+### Improved
+
+- exported the current horizontal or vertical Overview layout as a PNG or single-page PDF, with upright text and preserved colors
+- kept the selected card visible during rapid navigation and centered fitting narrow trees when opened
+- reflowed neighbors and connectors around the inline Overview editor while retaining the textarea, draft, focus and caret
+- showed long profile names from the beginning with an ellipsis and a gentle hover scroll; added recognizable layout-menu icons
+- separated rendering, editing, navigation, document persistence and viewport lifecycles into dedicated modules
+
 ### Fixed
 
+- prevented root/parent columns from jumping when a differently sized descendant branch appears or disappears, while retaining selection animations
+- kept common ancestors stationary during child navigation and reduced active-card scrollbar inset without shifting the text
+- blended truncated previews into the actual card color instead of painting a mismatched dark rectangle
+- applied a branch color to its parent card while retaining independent descendant card overrides
+- preserved newer document state when stale loads, saves or unloads complete after switching notes
+- scheduled and cancelled editor, navigation and preview timers in their owning windows for popout compatibility
 - preserved Tree Overview connector strokes in PNG and single-page PDF exports instead of rendering black filled curves
 - respected Obsidian's text font in rendered cards, previews, editors and Tree Overview exports without changing interface, code or custom heading fonts
 - opened internal links in Branch Editor and Tree Overview cards with the correct source path, heading/block/PDF subpath, and Obsidian new-pane shortcuts

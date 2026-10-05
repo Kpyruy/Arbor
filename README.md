@@ -45,7 +45,7 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Context-aware dimming so the active branch stays readable
 - Drag-and-drop reorder and reparent
 - Keyboard-first navigation and structure editing
-- Search overlay for block-level search
+- Block search with selectable results, highlighted snippets and paths; use arrows and Enter or click to reveal a card
 - Zoom, breadcrumbs, view menu, and context menus
 - Whole-tree Overview map with connected, fully rendered Markdown cards
 - Tree Overview export as a PNG or one-page PDF
