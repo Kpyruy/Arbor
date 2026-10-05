@@ -1602,7 +1602,9 @@
 .arbor-columns {
   display: flex;
   gap: calc(var(--bw-column-gap) * var(--bw-zoom));
-  align-items: center;
+  /* Active-path transforms own vertical alignment. Flex centering would jump
+     every retained column when a descendant changes the scene height. */
+  align-items: flex-start;
   min-height: 100%;
   min-width: var(--arbor-columns-min-width, max-content);
   position: relative;
@@ -1907,6 +1909,15 @@
   max-height: min(560px, calc(100dvh - 220px));
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.arbor-card.is-active > .arbor-card-content {
+  margin-inline-end: calc(-8px * var(--bw-zoom));
+  padding-inline-end: calc(8px * var(--bw-zoom));
+}
+
+.arbor-card.is-active:is(.is-output-excluded-direct, .is-output-excluded-inherited) > .arbor-card-content {
+  padding-inline-end: calc(24px + 8px * var(--bw-zoom));
 }
 
 .arbor-card-content > :first-child {
