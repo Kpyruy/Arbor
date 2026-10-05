@@ -1202,6 +1202,7 @@
   width: var(--arbor-overview-width, 224px);
   height: var(--arbor-overview-height, 76px);
   margin: 60px;
+  margin-inline: max(60px, calc((100% - var(--arbor-overview-width, 224px)) / 2));
 }
 
 .arbor-overview-surface {
