@@ -165,8 +165,8 @@ These work inside Arbor itself. They are not command-palette bindings.
 
 Notes:
 
-- The table describes the `Left to right` layout. In `Right to left`, horizontal arrows and Ctrl/Cmd + horizontal-arrow creation mirror visually: `ArrowLeft` selects a child and `ArrowRight` selects the parent.
-- `Ctrl/Cmd + ArrowLeft` is intentionally conservative and does nothing when the selected block is already at the root level.
+- The tables describe horizontal `Left to right` layout. In horizontal `Right to left`, horizontal arrows and Ctrl/Cmd + horizontal-arrow creation mirror visually: `ArrowLeft` selects a child and `ArrowRight` selects the parent. Vertical Tree Overview uses the mappings below.
+- The parent-direction creation shortcut is intentionally conservative and does nothing when the selected block is already at the root level.
 - Arbor uses `event.code` for view-level shortcuts where needed, so layout-dependent bindings like search remain stable across keyboard layouts.
 - `Delete subtree` shows a confirmation modal. Normal `Delete block` does not.
 
@@ -184,6 +184,18 @@ Notes:
 ### Tree overview
 
 Use **Tree overview** from the view menu or Command Palette to see every block in one connected map. Drag empty space to pan; Ctrl/Cmd + mouse wheel changes zoom. Cards render normal Obsidian Markdown and grow to fit their content. Select a card, then press `Enter` or double-click it to edit directly in place; Arbor smoothly reveals the editor when it is outside the viewport. Export the whole map as a PNG or one-page PDF from the overview menu. Overview always shows collapsed descendants and does not support drag-and-drop reparenting.
+
+Set **Tree overview layout** in Arbor settings to **Horizontal** (the default), **Vertical — root at bottom** (children grow upward), or **Vertical — root at top** (children grow downward). The same choices in the view menu override the default for that tab; **Use plugin default** removes its override. Tabs without an override follow the plugin setting.
+
+Tab overrides are saved only in Obsidian workspace view state, not in the note or Output Profile. They can be restored with that workspace; opening a different file normally in the tab clears the override. Changing orientation does not rewrite Markdown, change Output Profiles, or add an undo step. **Return to branch editor** keeps Branch Editor horizontal.
+
+| Vertical Overview shortcut | Root at top | Root at bottom |
+| --- | --- | --- |
+| Select parent | `ArrowUp` | `ArrowDown` |
+| Select child | `ArrowDown` | `ArrowUp` |
+| Previous / next sibling (left to right) | `ArrowLeft` / `ArrowRight` | `ArrowLeft` / `ArrowRight` |
+
+**Layout direction** still controls left-to-right or right-to-left sibling order: in vertical right-to-left mode, previous/next sibling arrows swap, but parent/child remain vertical. Ctrl/Cmd plus a direction arrow creates in that direction: child along the child arrow, sibling along previous/next, or a parent-level sibling along the parent arrow. `Home`/`End` still select the first/last sibling; number keys select a numbered child (`0` selects the parent). The touch dock keeps its Parent/Previous/Next/Child actions with arrows matching the effective layout; its add menu still creates a child or next sibling. PNG and one-page PDF exports use the current Overview orientation and sibling direction, with upright text.
 
 ## Command Palette Actions
 
@@ -245,7 +257,8 @@ Current menu actions:
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | Theme | `Automatic` | Follow Obsidian, choose a built-in palette, or open Theme Studio for custom themes |
-| Layout direction | `Left to right` | Choose which physical side the root starts on; right-to-left also mirrors directional navigation and controls |
+| Layout direction | `Left to right` | Choose the root side in horizontal views or sibling order in vertical Tree Overview; directional navigation and controls mirror accordingly |
+| Tree overview layout | `Horizontal` | Choose `Horizontal`, `Vertical — root at bottom`, or `Vertical — root at top`; individual tabs can override this default in the view menu |
 | Default opening mode | `Branch editor` | Choose whether Arbor notes open in the branch editor or Tree Overview |
 | Split direction | `Vertical split` | Where Arbor opens relative to the current note; desktop only |
 | Card width | `300 px` | Base card width in the branching scene |

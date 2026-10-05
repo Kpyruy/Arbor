@@ -802,6 +802,7 @@ interface NativeInput {
   read: ViewReadPort;
   waitForNextPaint(): Promise<void>;
   recordRaster?(canvas: HTMLCanvasElement, orientation: ArborOverviewOrientation, direction: ArborLayoutDirection): void;
+  recordPdf?(bytes: Uint8Array, orientation: ArborOverviewOrientation, direction: ArborLayoutDirection): void;
 }
 
 const metadata: BranchTreeMetadata = { version: 1, prefix: "", blocks: [
@@ -1045,10 +1046,12 @@ export async function checkVerticalSnapshotsHost(input: NativeInput): Promise<{ 
         if (painted < 10 || background / (data.length / 4) < 0.9) throw Error(`Vertical raster lost thin connector paint: ${painted}/${background}`);
         input.recordRaster?.(canvas, orientation, direction);
         const png = new Uint8Array(await (await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(Error("No PNG"))))).arrayBuffer());
-        const pdf = await PDFDocument.load(await buildSinglePageTreeOverviewPdf(png, snapshot.width, snapshot.height));
+        const pdfBytes = await buildSinglePageTreeOverviewPdf(png, snapshot.width, snapshot.height);
+        const pdf = await PDFDocument.load(pdfBytes);
         const page = pdf.getPages()[0];
         if (pdf.getPageCount() !== 1 || page.getWidth() !== snapshot.width || page.getHeight() !== snapshot.height) throw Error("PDF must preserve one-page geometry");
         checks += 2;
+        input.recordPdf?.(pdfBytes, orientation, direction);
       } finally {
         snapshot?.dispose();
       }
