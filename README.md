@@ -195,7 +195,7 @@ Tab overrides are saved only in Obsidian workspace view state, not in the note o
 | Select child | `ArrowDown` | `ArrowUp` |
 | Previous / next sibling (left to right) | `ArrowLeft` / `ArrowRight` | `ArrowLeft` / `ArrowRight` |
 
-**Layout direction** still controls left-to-right or right-to-left sibling order: in vertical right-to-left mode, previous/next sibling arrows swap, but parent/child remain vertical. Ctrl/Cmd plus a direction arrow creates in that direction: child along the child arrow, sibling along previous/next, or a parent-level sibling along the parent arrow. `Home`/`End` still select the first/last sibling; number keys select a numbered child (`0` selects the parent). The touch dock keeps its Parent/Previous/Next/Child actions with arrows matching the effective layout; its add menu still creates a child or next sibling. PNG and one-page PDF exports use the current Overview orientation and sibling direction, with upright text.
+**Layout direction** still controls left-to-right or right-to-left sibling order: in vertical right-to-left mode, previous/next sibling arrows swap, but parent/child remain vertical. Ctrl/Cmd plus a direction arrow creates in that direction: child along the child arrow, sibling along previous/next, or a parent-level sibling along the parent arrow. `Home`/`End` shortcuts are Branch Editor-only; number keys select a numbered child (`0` selects the parent). The touch dock keeps its Parent/Previous/Next/Child actions with arrows matching the effective layout; its add menu still creates a child or next sibling. PNG and one-page PDF exports use the current Overview orientation and sibling direction, with upright text.
 
 ## Command Palette Actions
 
