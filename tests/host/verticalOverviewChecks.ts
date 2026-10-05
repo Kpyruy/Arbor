@@ -62,6 +62,74 @@ interface InstalledGestureInput extends InstalledLifecycleInput {
   clearZoomPersist(): void;
 }
 
+async function settleInstalledCamera(input: InstalledCameraInput): Promise<void> {
+  const viewport = input.overview.getElements().viewport!;
+  await input.waitForNextPaint();
+  await new Promise(resolve => globalThis.setTimeout(resolve, 350));
+  let stable = 0;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const previous = { left: viewport.scrollLeft, top: viewport.scrollTop };
+    await new Promise(resolve => globalThis.setTimeout(resolve, 40));
+    stable = Math.abs(viewport.scrollLeft - previous.left) < 0.5 && Math.abs(viewport.scrollTop - previous.top) < 0.5 ? stable + 1 : 0;
+    if (stable === 3) return;
+  }
+  throw Error("Native camera did not settle");
+}
+
+export async function checkInstalledOverviewSelectionBurstHost(input: InstalledGestureInput): Promise<{ checks: number; screenshots: string[] }> {
+  let checks = 0;
+  const check = (condition: unknown, label: string) => {
+    if (!condition) throw Error(label);
+    checks += 1;
+  };
+  const metadata = fixtureTree();
+  metadata.blocks.push(...Array.from({ length: 14 }, (_, index) => ({ id: `wide-${index}`, parentId: "root", order: index + 2, content: `Burst sibling ${index + 1}`, after: "\n\n" })));
+  metadata.blocks.push(...Array.from({ length: 6 }, (_, index) => ({ id: `deep-${index}`, parentId: index === 0 ? "leaf" : `deep-${index - 1}`, order: 0, content: `Burst descendant ${index + 1}`, after: "\n\n" })));
+  await input.setMode("overview");
+  await input.setZoom(1);
+  await input.setDirection("ltr");
+  await input.resetTree(metadata);
+  const screenshots: string[] = [];
+  for (const [orientation, child, parent, next, previous] of [
+    ["horizontal", "ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"],
+    ["vertical-top-down", "ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"],
+    ["vertical-bottom-up", "ArrowUp", "ArrowDown", "ArrowRight", "ArrowLeft"]
+  ] as const) {
+    await input.setOrientation(orientation);
+    input.select("first");
+    await settleInstalledCamera(input);
+    const { viewport, surface } = input.overview.getElements();
+    if (!viewport || !surface) throw Error("Burst fixture must publish native elements");
+    const count = input.markdownCount();
+    const source = await input.readSource();
+    const arrows = [...Array<string>(7).fill(child), ...Array<string>(7).fill(parent), ...Array<string>(14).fill(next), previous, previous];
+    viewport.focus({ preventScroll: true });
+    // No await/paint/settlement between inputs: all thirty reveals overlap.
+    for (const arrow of arrows) {
+      const before = input.read.getState()!.selectedBlockId;
+      viewport.dispatchEvent(new KeyboardEvent("keydown", { key: arrow, bubbles: true, cancelable: true }));
+      check(input.read.getState()!.selectedBlockId !== before, `${orientation}: burst arrow must transition selection`);
+    }
+    check(input.read.getState()!.selectedBlockId === "wide-10", `${orientation}: thirty burst transitions must select wide-10`);
+    await settleInstalledCamera(input);
+    check(input.read.getState()!.selectedBlockId === "wide-10", `${orientation}: camera settlement changed latest selected metadata`);
+    check(surface.querySelectorAll(".is-active").length === 1 && surface.querySelector<HTMLElement>(".is-active")?.dataset.blockId === "wide-10", `${orientation}: burst retained stale active DOM`);
+    const card = surface.querySelector<HTMLElement>('[data-block-id="wide-10"]')!;
+    const rect = card.getBoundingClientRect(), visible = viewport.getBoundingClientRect();
+    check(rect.width > 0 && rect.height > 0, `${orientation}: burst selected card must have painted bounds`);
+    if (rect.width <= visible.width - 72 && rect.height <= visible.height - 72) {
+      check(rect.left >= visible.left && rect.right <= visible.right && rect.top >= visible.top && rect.bottom <= visible.bottom, `${orientation}: latest burst-selected card is not visible after settlement`);
+    } else {
+      check(rect.right > visible.left && rect.left < visible.right && rect.bottom > visible.top && rect.top < visible.bottom, `${orientation}: oversized burst-selected card is not reachable`);
+    }
+    check(surface === input.overview.getElements().surface && input.markdownCount() === count, `${orientation}: burst replaced the surface or rendered Markdown`);
+    check(input.root.querySelectorAll(".arbor-overview-surface").length === 1 && !input.root.querySelector(".is-staging"), `${orientation}: burst leaked a staging surface`);
+    check(await input.readSource() === source, `${orientation}: burst rewrote source`);
+    screenshots.push(await input.captureScreenshot(`selection-burst-${orientation}`));
+  }
+  return { checks, screenshots };
+}
+
 export async function checkInstalledSaveCameraHost(input: InstalledLifecycleInput): Promise<{ checks: number }> {
   await input.setMode("overview");
   await input.setZoom(1);
@@ -473,8 +541,13 @@ export async function checkInstalledOversizedEditorHost(input: InstalledGestureI
     await new Promise(resolve => globalThis.setTimeout(resolve, 10));
   }
   if (!saved || !getBlock(loadImportedBranchDocument(await input.readSource()).metadata, "first")?.content.endsWith("Saved tall paragraph")) throw Error("Tall Save must persist and publish the Markdown");
+  await settleInstalledCamera(input);
   if (input.read.getState()?.selectedBlockId !== "first" || viewport.scrollTop <= 0) throw Error("Tall Save lost the selected card or reset the camera top-left");
-  return { checks: 9 };
+  const savedCard = input.overview.getElements().surface!.querySelector<HTMLElement>('[data-block-id="first"]')!;
+  const savedRect = savedCard.getBoundingClientRect(), savedViewport = viewport.getBoundingClientRect();
+  if (savedRect.width <= 0 || savedRect.height <= 0 || savedRect.right <= savedViewport.left || savedRect.left >= savedViewport.right || savedRect.bottom <= savedViewport.top || savedRect.top >= savedViewport.bottom) throw Error("Tall saved card is not reachable after publication and camera settlement");
+  await input.captureScreenshot("tall-save-settled");
+  return { checks: 10 };
 }
 
 export async function checkInstalledOverviewGeometryHost(input: InstalledCameraInput): Promise<{ checks: number }> {
