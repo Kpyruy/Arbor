@@ -14,6 +14,7 @@ import { createOutputProfileButton, getOutputProfileButtonPresentation } from ".
 import type { EditingSession, LoadingOverlayState, ViewReadPort } from "../state/viewTypes";
 import { useCompactLayout } from "../../mobile";
 import { ViewWorkScope } from "../runtime/ViewWorkScope";
+import { OutputProfileLabel } from "./OutputProfileLabel";
 
 export interface ShellElements {
   readonly root: HTMLElement;
@@ -81,6 +82,7 @@ export class ViewShell {
   private bannerEl: HTMLElement | null = null;
   private loadingOverlayEl: HTMLElement | null = null;
   private disposeBranchViewport: (() => void) | null = null;
+  private outputProfileLabel: OutputProfileLabel | null = null;
   private compactLayout = false;
   private readonly work = new ViewWorkScope();
 
@@ -111,6 +113,8 @@ export class ViewShell {
       return;
     }
 
+    this.outputProfileLabel?.dispose();
+    this.outputProfileLabel = null;
     this.contentEl.empty();
     this.contentEl.addClass("arbor-view");
     this.applyViewClasses(this.contentEl);
@@ -153,6 +157,7 @@ export class ViewShell {
     const bodyEl = frameEl.createDiv({ cls: "arbor-body" });
     const modeControlsEl = bodyEl.createDiv({ cls: "arbor-mode-controls" });
     const outputProfileButtonEl = createOutputProfileButton(modeControlsEl, state.outputState);
+    this.outputProfileLabel = new OutputProfileLabel(outputProfileButtonEl);
     outputProfileButtonEl.addEventListener("click", (event) => {
       this.port.toolbar.openOutputProfileMenu(event);
     });
@@ -391,6 +396,8 @@ export class ViewShell {
   }
 
   teardownShell(): void {
+    this.outputProfileLabel?.dispose();
+    this.outputProfileLabel = null;
     this.work.reset();
     this.disposeBranchViewport?.();
     this.disposeBranchViewport = null;
@@ -410,7 +417,7 @@ export class ViewShell {
     const button = this.elements.outputProfileButtonEl;
     if (!button || !state) return;
     const presentation = getOutputProfileButtonPresentation(state.outputState);
-    button.setText(presentation.text);
+    this.outputProfileLabel?.setText(presentation.text);
     button.setAttr("aria-label", presentation.ariaLabel);
   }
 

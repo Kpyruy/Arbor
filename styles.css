@@ -594,6 +594,24 @@
   font-size: 0.77rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: start;
+}
+
+.arbor-output-profile-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+
+.arbor-output-profile-label.is-marquee {
+  text-overflow: clip;
+}
+
+.arbor-output-profile-label.is-marquee .arbor-output-profile-text {
+  display: inline-block;
 }
 
 .arbor-output-profile-button:hover,
