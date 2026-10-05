@@ -314,6 +314,7 @@ export class TreeOverviewController {
     this.port.editor.wireEditorElement(editor, block, "overview");
     editor.value = session.value;
     this.port.editor.resizeEditor(editor);
+    this.reflowOverviewCard(block.id);
     this.port.syncOutputCardPresentation(card, block.id, this.port.getContext());
     const state = this.port.read.getState();
     const filePath = this.port.read.getFilePath();
@@ -325,6 +326,7 @@ export class TreeOverviewController {
       editor.focus({ preventScroll: true });
       editor.setSelectionRange(editor.value.length, editor.value.length);
       this.port.editor.resizeEditor(editor);
+      this.reflowOverviewCard(block.id);
       this.port.revealSelected(card);
       this.port.consumeAutofocus(session);
     });
@@ -355,7 +357,41 @@ export class TreeOverviewController {
       image.addEventListener("load", () => this.port.requestRender(), { once: true });
     });
     this.port.syncOutputCardPresentation(card, block.id, this.port.getContext());
+    this.reflowOverviewCard(block.id);
     card.focus({ preventScroll: true });
+  }
+
+  reflowOverviewCard(blockId: BranchBlockId): void {
+    const state = this.port.read.getState();
+    const { scene, surface, viewport } = this.getElements();
+    const changedCard = surface?.querySelector<HTMLElement>(`.arbor-overview-card[data-block-id="${blockId}"]`);
+    if (!state || !scene || !surface || !viewport || !changedCard) return;
+    const settings = this.port.read.getSettings();
+    const orientation = this.port.getOverviewOrientation();
+    const selected = surface.querySelector<HTMLElement>(".arbor-overview-card.is-active");
+    const previousLeft = selected?.offsetLeft ?? 0;
+    const previousTop = selected?.offsetTop ?? 0;
+    const position = { left: viewport.scrollLeft, top: viewport.scrollTop };
+    const cards = new Map<BranchBlockId, HTMLElement>();
+    const heights = new Map<BranchBlockId, number>();
+    changedCard.addClass("is-measuring");
+    surface.querySelectorAll<HTMLElement>(".arbor-overview-card[data-block-id]").forEach(card => {
+      const id = card.dataset.blockId!;
+      cards.set(id, card);
+      heights.set(id, card === changedCard
+        ? Math.max(card.offsetHeight, card.scrollHeight)
+        : Number.parseFloat(card.style.getPropertyValue("--arbor-overview-card-height")) || card.offsetHeight);
+    });
+    changedCard.removeClass("is-measuring");
+    const layout = buildOverviewLayout(state.metadata, {
+      cardWidth: settings.cardWidth, cardHeights: heights, direction: settings.layoutDirection, orientation
+    });
+    applyOverviewLayout(scene, surface, cards, layout, settings.zoomLevel, settings.layoutDirection, orientation);
+    viewport.scrollTo({
+      left: position.left + ((selected?.offsetLeft ?? 0) - previousLeft) * settings.zoomLevel,
+      top: position.top + ((selected?.offsetTop ?? 0) - previousTop) * settings.zoomLevel,
+      behavior: "auto"
+    });
   }
 
   requestCenterOnNextRender(requested = true): void {

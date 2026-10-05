@@ -253,7 +253,11 @@ export class ArborView extends FileView {
       onCancel: (session) => this.onEditorCancel(session),
       onUnchanged: (session) => this.onEditorUnchanged(session),
       saveEdit: (session) => this.saveEditorSession(session),
-      onInput: () => this.scheduleColumnAlignment(),
+      onInput: () => {
+        const session = this.editor.getSession();
+        if (session?.origin === "overview") this.overview.reflowOverviewCard(session.blockId);
+        else this.scheduleColumnAlignment();
+      },
       handleSearchShortcut: (event) => this.handleSearchShortcut(event),
       paste: (event, textarea) => this.attachments.handleEditorPaste(event, textarea),
       drop: (event, textarea) => this.attachments.handleEditorDrop(event, textarea)
