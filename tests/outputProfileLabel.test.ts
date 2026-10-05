@@ -65,6 +65,17 @@ describe("bounded output profile label", () => {
     reduced.controller.dispose();
   });
 
+  it.each([1000, 5000])("starts a %i px overflow marquee within a fixed pause", distance => {
+    const host = labelHost("ltr", distance + 80);
+    host.handlers.get("mouseenter")!();
+
+    const [frames, timing] = host.animate.mock.calls[0] as unknown as [Keyframe[], KeyframeAnimationOptions];
+    const initialPause = Number(frames[1].offset) * Number(timing.duration);
+
+    expect(initialPause).toBeLessThanOrEqual(501);
+    host.controller.dispose();
+  });
+
   it("cancels stale animation on rename, resize, motion preference change and shell close", () => {
     const host = labelHost();
     host.handlers.get("mouseenter")!();

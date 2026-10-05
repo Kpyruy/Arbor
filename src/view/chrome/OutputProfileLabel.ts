@@ -54,15 +54,16 @@ export class OutputProfileLabel {
     if (distance <= 1) return;
     const win = this.button.ownerDocument.defaultView ?? window;
     const offset = win.getComputedStyle(this.label).direction === "rtl" ? distance : -distance;
+    const travel = Math.max(2500, distance / 18 * 1000);
+    const duration = 2 * travel + 1000;
     this.label.addClass("is-marquee");
     this.animation = this.text.animate([
       { transform: "translateX(0)", offset: 0 },
-      { transform: "translateX(0)", offset: 0.1 },
-      { transform: `translateX(${offset}px)`, offset: 0.45 },
-      { transform: `translateX(${offset}px)`, offset: 0.55 },
-      { transform: "translateX(0)", offset: 0.9 },
+      { transform: "translateX(0)", offset: 500 / duration },
+      { transform: `translateX(${offset}px)`, offset: (500 + travel) / duration },
+      { transform: `translateX(${offset}px)`, offset: (1000 + travel) / duration },
       { transform: "translateX(0)", offset: 1 }
-    ], { duration: Math.max(6000, distance * 2 / 18 * 1000 + 2000), iterations: Infinity, easing: "linear" });
+    ], { duration, iterations: Infinity, easing: "linear" });
   };
 
   private stop(): void {
