@@ -1,6 +1,7 @@
 interface VisualObservation {
   error?: number;
   separation?: number;
+  parentSeparation?: number;
   sameEditor?: boolean;
   sameSession?: boolean;
   focused?: boolean;
@@ -28,6 +29,7 @@ export function checkVisualFixObservations(suite: string, observations: VisualOb
     if (suite === "chain") check((observation.error ?? Infinity) < 3, "ordinary opening must center a fitting narrow chain");
     if (suite === "editor") {
       check((observation.separation ?? -1) >= 14, "editing card must stay separated from its child");
+      check((observation.parentSeparation ?? -1) >= 14, "editing card must stay separated from its parent");
       check(observation.sameEditor && observation.sameSession, "geometry reflow must retain the editor and draft session");
       check(observation.focused, "inline editor must retain focus");
       check(observation.renders === 0, "typing must not rerender Markdown");
