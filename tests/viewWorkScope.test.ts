@@ -1,5 +1,6 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ViewWorkScope } from "../src/view/runtime/ViewWorkScope";
+import { timerWindow } from "./helpers/windowTimers";
 
 type ControlledFrameScheduler = {
   window: Window;
@@ -36,7 +37,22 @@ function createControlledFrameScheduler(): ControlledFrameScheduler {
   };
 }
 
-afterEach(() => vi.useRealTimers());
+beforeEach(() => vi.stubGlobal("window", { setTimeout: (callback: () => void, delay: number) => setTimeout(callback, delay), clearTimeout: (id: ReturnType<typeof setTimeout>) => clearTimeout(id) }));
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+it("cancels a timeout in the supplied window without touching an identical ID in another window", () => {
+  const first = timerWindow();
+  const second = timerWindow();
+  const scope = new ViewWorkScope();
+  const effects: string[] = [];
+  scope.timeout(() => effects.push("cancelled"), 80, first.win);
+  second.win.setTimeout(() => effects.push("other-window"), 80);
+  expect(first.pendingCount()).toBe(1);
+  scope.reset();
+  first.flush();
+  second.flush();
+  expect(effects).toEqual(["other-window"]);
+});
 
 it("invalidates old work while allowing a new document generation", async () => {
   vi.useFakeTimers();

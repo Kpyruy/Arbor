@@ -1,9 +1,13 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NavigationController, type NavigationActions } from "../src/view/navigation/NavigationController";
 import { CardLinkController } from "../src/view/navigation/CardLinkController";
 import { fixtureLoaded, fixtureSettings } from "./helpers/arborFixtures";
 import { addChild, addRootBlock, addSibling, deleteBlockAndLiftChildren, getBlock, getChildren, getParentBlock } from "../src/model/tree";
 import type { ArborOverviewOrientation, ArborPresentationMode } from "../src/types";
+import { timerWindow } from "./helpers/windowTimers";
+
+beforeEach(() => vi.stubGlobal("window", { setTimeout: (callback: () => void, delay: number) => setTimeout(callback, delay), clearTimeout: (id: ReturnType<typeof setTimeout>) => clearTimeout(id) }));
+afterEach(() => vi.unstubAllGlobals());
 
 function keyEvent(key: string, options: Partial<KeyboardEvent> = {}): KeyboardEvent {
   return {
@@ -20,7 +24,7 @@ function keyEvent(key: string, options: Partial<KeyboardEvent> = {}): KeyboardEv
   } as unknown as KeyboardEvent;
 }
 
-function createController(orientation: ArborOverviewOrientation = "horizontal", mode: ArborPresentationMode = "editor") {
+function createController(orientation: ArborOverviewOrientation = "horizontal", mode: ArborPresentationMode = "editor", getWindow?: () => Window) {
   const state = fixtureLoaded();
   const settings = fixtureSettings();
   const selectBlock = vi.fn((id: string | null) => { state.selectedBlockId = id; });
@@ -54,7 +58,7 @@ function createController(orientation: ArborOverviewOrientation = "horizontal", 
     getSettings: () => settings,
     getMode: () => mode,
     getFilePath: () => "fixture.md"
-  }, { selectBlock }, actions, () => orientation);
+  }, { selectBlock }, actions, () => orientation, getWindow);
 
   return { actions, controller, selectBlock, settings, state, openInternal };
 }
@@ -112,6 +116,23 @@ describe("NavigationController", () => {
     controller?.clearNumericNavigation();
     controller = null;
     vi.useRealTimers();
+  });
+
+  it("cancels numeric debounce in its owning window when the view migrates", () => {
+    const first = timerWindow();
+    const second = timerWindow();
+    let owner = first.win;
+    const fixture = createController("horizontal", "editor", () => owner);
+    controller = fixture.controller;
+    controller.tryHandleNumericChildNavigation(keyEvent("2"), "root");
+    expect(first.pendingCount()).toBe(1);
+    owner = second.win;
+    controller.clearNumericNavigation();
+    first.flush();
+    expect(fixture.state.selectedBlockId).toBe("first");
+    controller.tryHandleNumericChildNavigation(keyEvent("2"), "root");
+    second.flush();
+    expect(fixture.state.selectedBlockId).toBe("second");
   });
 
   describe.each(verticalCases)("vertical overview %s/%s", (orientation, direction, parent, child, previous, next) => {

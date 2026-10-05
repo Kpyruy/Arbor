@@ -1,12 +1,14 @@
 import type { TFile } from "obsidian";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BlockEditorController, type BlockEditorPort } from "../src/view/editor/BlockEditorController";
 import { EditorAttachments } from "../src/view/editor/EditorAttachments";
 import { deferred, fixtureOutput, fixtureTree } from "./helpers/arborFixtures";
 import { linearizeTree } from "../src/storage/serializer";
 import { ensureSelectedBlock } from "../src/model/tree";
+import { timerWindow } from "./helpers/windowTimers";
 
-afterEach(() => vi.useRealTimers());
+beforeEach(() => vi.stubGlobal("window", { setTimeout: (callback: () => void, delay: number) => setTimeout(callback, delay), clearTimeout: (id: ReturnType<typeof setTimeout>) => clearTimeout(id) }));
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function createPort(): BlockEditorPort {
   const metadata = fixtureTree();
@@ -29,6 +31,29 @@ function createPort(): BlockEditorPort {
 }
 
 describe("BlockEditorController", () => {
+  it("cancels blur work through its original window after the view migrates", async () => {
+    const first = timerWindow();
+    const second = timerWindow();
+    let owner = first.win;
+    const port = createPort();
+    Object.assign(port, { getWindow: () => owner });
+    const saves: string[] = [];
+    port.saveEdit = async session => { saves.push(session.value); };
+    const editor = new BlockEditorController(port);
+    editor.beginEditingBlock("first");
+    const session = editor.getSession()!;
+    session.value = "Changed";
+    editor.scheduleEditingSessionCommit(session);
+    expect(first.pendingCount()).toBe(1);
+    owner = second.win;
+    editor.clearBlurCommitTimer();
+    first.flush();
+    expect(saves).toEqual([]);
+    editor.scheduleEditingSessionCommit(session);
+    second.flush();
+    await Promise.resolve();
+    expect(saves).toEqual(["Changed"]);
+  });
   it("does not save a cancelled session when its old blur timer fires", async () => {
     vi.useFakeTimers();
     const port = createPort();

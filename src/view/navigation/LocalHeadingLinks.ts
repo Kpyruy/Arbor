@@ -114,7 +114,7 @@ export class LocalHeadingLinks {
         const matches = collectLocalHeadingMatches(original, snapshot);
         if (!matches.length || !node.parentNode) continue;
         const document = node.ownerDocument;
-        const fragment = document.createDocumentFragment();
+        const fragment = document.adoptNode(window.createFragment());
         let cursor = 0;
         for (const match of matches) {
           fragment.appendChild(document.createTextNode(original.slice(cursor, match.start)));

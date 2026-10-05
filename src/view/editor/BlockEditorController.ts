@@ -7,6 +7,7 @@ import type { EditorPort } from "../state/viewTypes";
 
 export interface BlockEditorPort {
   getState(): Readonly<LoadedFileState> | null;
+  getWindow?(): Window;
   usesTouchControls(): boolean;
   getViewportHeight(): number;
   onBegin(session: EditingSession): void;
@@ -21,7 +22,7 @@ export interface BlockEditorPort {
 
 export class BlockEditorController implements EditorPort {
   private session: EditingSession | null = null;
-  private blurCommitTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private blurCommitTimer: { id: number; win: Window } | null = null;
   private readonly blurCommitSuspensions = new Map<symbol, EditingSession>();
 
   constructor(private readonly port: BlockEditorPort) {}
@@ -89,15 +90,17 @@ export class BlockEditorController implements EditorPort {
   scheduleEditingSessionCommit(session: EditingSession): void {
     this.clearBlurCommitTimer();
     if ([...this.blurCommitSuspensions.values()].includes(session)) return;
-    this.blurCommitTimer = globalThis.setTimeout(() => {
+    const win = this.port.getWindow?.() ?? window;
+    const id = win.setTimeout(() => {
       if (this.session !== session) return;
       void this.commitEditingSession(session);
     }, 80);
+    this.blurCommitTimer = { id, win };
   }
 
   clearBlurCommitTimer(): void {
     if (this.blurCommitTimer !== null) {
-      globalThis.clearTimeout(this.blurCommitTimer);
+      this.blurCommitTimer.win.clearTimeout(this.blurCommitTimer.id);
       this.blurCommitTimer = null;
     }
   }

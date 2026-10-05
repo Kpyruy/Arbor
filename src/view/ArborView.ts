@@ -247,6 +247,7 @@ export class ArborView extends FileView {
     });
     this.editor = new BlockEditorController({
       getState: () => this.state,
+      getWindow: () => this.contentEl.win,
       usesTouchControls: () => this.usesTouchControls,
       getViewportHeight: () => (this.presentationMode === "overview" ? this.overview.getElements().viewport : this.columnsViewportEl)?.clientHeight ?? window.innerHeight,
       onBegin: (session) => this.onEditorBegin(session),
@@ -317,7 +318,7 @@ export class ArborView extends FileView {
       setKeyboardSelection: (id) => this.documentController.setSelection(id),
       openBlockMenu: (id, event) => this.buildBlockMenu(id).showAtMouseEvent(event),
       tryHandleCardLink: (event, card) => this.cardLinks.handleActivation(event, card)
-    }, () => this.getOverviewOrientation());
+    }, () => this.getOverviewOrientation(), () => this.contentEl.win);
     this.branchViewport = new BranchViewportController({
       read: {
         getState: () => this.state,

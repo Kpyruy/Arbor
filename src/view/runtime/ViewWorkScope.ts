@@ -24,14 +24,14 @@ export class ViewWorkScope {
     return cancel;
   }
 
-  timeout(callback: () => void, delay: number): () => void {
+  timeout(callback: () => void, delay: number, win: Window = window): () => void {
     if (this.disposed) return () => undefined;
     const token = this.token();
-    const id = globalThis.setTimeout(() => {
+    const id = win.setTimeout(() => {
       cancel();
       if (this.isCurrent(token)) callback();
     }, delay);
-    const cancel = this.register(() => globalThis.clearTimeout(id));
+    const cancel = this.register(() => win.clearTimeout(id));
     return cancel;
   }
 

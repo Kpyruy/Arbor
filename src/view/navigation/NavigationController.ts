@@ -27,14 +27,15 @@ export interface NavigationActions {
 }
 
 export class NavigationController {
-  private numericNavigationTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private numericNavigationTimer: { id: number; win: Window } | null = null;
   private numericNavigationBuffer = "";
 
   constructor(
     private readonly read: ViewReadPort,
     private readonly selection: SelectionPort,
     private readonly actions: NavigationActions,
-    private readonly getOverviewOrientation: () => ArborOverviewOrientation = () => "horizontal"
+    private readonly getOverviewOrientation: () => ArborOverviewOrientation = () => "horizontal",
+    private readonly getWindow: () => Window = () => window
   ) {}
 
   selectParentBlock(): void {
@@ -88,8 +89,9 @@ export class NavigationController {
     if (event.ctrlKey || event.metaKey || event.altKey || !/^\d$/.test(event.key) || !this.read.getState()) return false;
     event.preventDefault();
     this.numericNavigationBuffer += event.key;
-    if (this.numericNavigationTimer !== null) globalThis.clearTimeout(this.numericNavigationTimer);
-    this.numericNavigationTimer = globalThis.setTimeout(() => {
+    if (this.numericNavigationTimer !== null) this.numericNavigationTimer.win.clearTimeout(this.numericNavigationTimer.id);
+    const win = this.getWindow();
+    const id = win.setTimeout(() => {
       const value = Number(this.numericNavigationBuffer);
       this.clearNumericNavigation();
       const state = this.read.getState();
@@ -98,12 +100,13 @@ export class NavigationController {
       const target = resolveNumericChildTarget(blockId, block.parentId, getChildren(state.metadata, blockId), value);
       if (target) this.selection.selectBlock(target, { focus: true });
     }, 250);
+    this.numericNavigationTimer = { id, win };
     return true;
   }
 
   clearNumericNavigation(): void {
     if (this.numericNavigationTimer !== null) {
-      globalThis.clearTimeout(this.numericNavigationTimer);
+      this.numericNavigationTimer.win.clearTimeout(this.numericNavigationTimer.id);
       this.numericNavigationTimer = null;
     }
     this.numericNavigationBuffer = "";

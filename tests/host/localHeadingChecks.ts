@@ -5,6 +5,28 @@ function check(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
 }
 
+/** Helper-created fragments must still belong to the rendered node's document. */
+export function checkLocalHeadingOwnerDocumentHost(): number {
+  const owner = document.implementation.createHTMLDocument("Heading links QA");
+  const root = owner.adoptNode(window.createDiv({ text: "Before signal after." }));
+  const text = root.textContent;
+  const provider = {
+    identity: {}, signature: "owner-document", targets: new Set(["Tree#Signal"]),
+    findMatches: () => [{ start: 7, end: 13, linktext: "Tree#Signal" }]
+  };
+  const decorator = new LocalHeadingLinks(() => provider);
+  decorator.decorate(root, "QA/Tree.md");
+  const anchor = root.querySelector<HTMLAnchorElement>("a.arbor-local-heading-link");
+  check(anchor?.ownerDocument === owner, "Helper created the link in the wrong owner document");
+  check(anchor?.getAttribute("data-href") === "QA/Tree.md#Signal", "Helper changed the local link target");
+  check(root.textContent === text && anchor?.textContent === "signal", "Helper changed visible wording");
+  decorator.decorate(root, "QA/Tree.md");
+  check(root.querySelector("a") === anchor, "Stable decoration replaced its link");
+  decorator.decorate(root, "QA/Tree.md", null);
+  check(!root.querySelector("a") && root.textContent === text, "Removing decoration changed the source text");
+  return 5;
+}
+
 /** Runs in the actual Obsidian DOM using the loaded Heading Linker API. */
 export function checkLocalHeadingDecorationHost(plugin: unknown, sourcePath: string): { generatedLinks: number; protectedContexts: number } {
   let provider = readHeadingLinker(plugin, sourcePath, {});

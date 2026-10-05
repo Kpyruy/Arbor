@@ -236,7 +236,7 @@ export class LinearPreviewController {
             editor.setSelectionRange(editor.value.length, editor.value.length);
             this.port.editor.resizeEditor(editor);
             this.port.consumeAutofocus(session);
-          }, 0);
+          }, 0, editor.win);
         }
       } else {
         const bodyEl = previewBlockEl.createDiv({ cls: "arbor-preview-block-body markdown-rendered" });
