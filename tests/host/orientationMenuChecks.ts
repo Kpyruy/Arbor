@@ -74,6 +74,13 @@ export async function checkOrientationMenuHost(input: OrientationMenuInput): Pro
     const item = Array.from(input.root.ownerDocument.querySelectorAll<HTMLElement>(".menu-item"))
       .find(row => row.querySelector(".menu-item-title")?.textContent === "Vertical — root at top");
     if (!item) throw Error("Actual native orientation menu item missing");
+    const orientationItems = Array.from(input.root.ownerDocument.querySelectorAll<HTMLElement>(".menu-item"))
+      .map(row => row.querySelector(".menu-item-title")?.textContent)
+      .filter(title => title === "Horizontal" || title === "Vertical — root at bottom" || title === "Vertical — root at top");
+    if (orientationItems.length !== 3 || input.root.ownerDocument.querySelectorAll(".menu-item-title").length === 0
+      || Array.from(input.root.ownerDocument.querySelectorAll<HTMLElement>(".menu-item-title")).some(title => title.textContent === "Use plugin default")) {
+      throw Error("Actual native orientation menu must contain exactly three choices and no plugin-default row");
+    }
     await input.click(item);
     let entryTimeout: ReturnType<typeof setTimeout> | undefined;
     try {

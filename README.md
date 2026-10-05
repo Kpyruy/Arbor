@@ -185,7 +185,7 @@ Notes:
 
 Use **Tree overview** from the view menu or Command Palette to see every block in one connected map. Drag empty space to pan; Ctrl/Cmd + mouse wheel changes zoom. Cards render normal Obsidian Markdown and grow to fit their content. Select a card, then press `Enter` or double-click it to edit directly in place; Arbor smoothly reveals the editor when it is outside the viewport. Export the whole map as a PNG or one-page PDF from the overview menu. Overview always shows collapsed descendants and does not support drag-and-drop reparenting.
 
-Set **Tree overview layout** in Arbor settings to **Horizontal** (the default), **Vertical — root at bottom** (children grow upward), or **Vertical — root at top** (children grow downward). The same choices in the view menu override the default for that tab; **Use plugin default** removes its override. Tabs without an override follow the plugin setting.
+Set **Tree overview layout** in Arbor settings to **Horizontal** (the default), **Vertical — root at bottom** (children grow upward), or **Vertical — root at top** (children grow downward). The same choices in the view menu override the default for that tab. Tabs without an override follow the plugin setting.
 
 Tab overrides are saved only in Obsidian workspace view state, not in the note or Output Profile. They can be restored with that workspace; opening a different file normally in the tab clears the override. Changing orientation does not rewrite Markdown, change Output Profiles, or add an undo step. **Return to branch editor** keeps Branch Editor horizontal.
 

@@ -130,11 +130,10 @@ export class ViewMenus {
     for (const [value, label, icon] of [
       ["horizontal", "Horizontal", "move-horizontal"],
       ["vertical-bottom-up", "Vertical — root at bottom", "arrow-up-from-line"],
-      ["vertical-top-down", "Vertical — root at top", "arrow-down-from-line"],
-      [null, "Use plugin default", "settings-2"]
+      ["vertical-top-down", "Vertical — root at top", "arrow-down-from-line"]
     ] as const) {
       menu.addItem((item) => item.setSection("Tree overview layout").setTitle(label).setIcon(icon)
-        .setChecked(value === null ? this.port.getOverviewOrientationOverride() === null : this.port.getOverviewOrientation() === value)
+        .setChecked(this.port.getOverviewOrientation() === value)
         .onClick(async () => {
           try { await this.port.setOverviewOrientationOverride(value); }
           catch (error) {
