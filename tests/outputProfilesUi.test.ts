@@ -183,6 +183,8 @@ function createProfileView(pendingSave: Promise<unknown>) {
   view.documentController = new DocumentController(port);
   view.file = port.getFile()!;
   view.plugin = { consumeOwnWrite: () => false };
+  Object.assign(view.plugin, { settings: { overviewOrientation: "horizontal" } });
+  Object.assign(view, { app: { vault: { cachedRead: async () => "Changed externally" } } });
   view.editor = { getSession: () => null };
   view.documentController.replaceLoadedState(fixtureLoaded("full"));
   view.viewContext = null;

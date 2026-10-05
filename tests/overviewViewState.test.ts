@@ -4,7 +4,11 @@ import { runInNewContext } from "node:vm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { ViewWorkScope } from "../src/view/runtime/ViewWorkScope";
 import { OverviewViewportController } from "../src/view/overview/OverviewViewportController";
-import { deferred, fixtureSettings, fixtureTree } from "./helpers/arborFixtures";
+import { deferred, fixtureLoaded, fixtureSettings, fixtureTree } from "./helpers/arborFixtures";
+import { DocumentController } from "../src/view/state/DocumentController";
+import { buildBranchDocument } from "../src/storage/document";
+import { loadImportedBranchDocument } from "../src/storage/reconcile";
+import { linearizeTree } from "../src/storage/serializer";
 import { buildOverviewLayout } from "../src/model/overviewLayout";
 
 type Modules = typeof import("../src/view/ArborView") & typeof import("../src/settings") & typeof import("../src/view/ArborLoadingView") & {
@@ -45,10 +49,21 @@ function viewFixture(settings = fixtureSettings()) {
   let publication = "horizontal";
   let geometry = buildOverviewLayout(fixtureTree());
   let savedState: unknown;
+  const loaded = fixtureLoaded();
+  let source = buildBranchDocument("", linearizeTree(loaded.metadata).body, loaded.metadata, loaded.outputState);
+  const port: ConstructorParameters<typeof DocumentController>[0] = {
+    getFile: () => view.file, cachedRead: async () => source,
+    process: async (_file, transform) => { source = transform(source); return source; },
+    markOwnWrite() {}, rememberManagedNote() {}, commitEditIfNeeded: async () => {},
+    clearEditingSession() {}, beforeOverviewEditSave() {}, onMutationPrepared() {}, onSelectionRestored() {},
+    onEditedBlockSaved() {}, onProfileActivated() {}, requestRender() {}, notify() {}, reportError() {}
+  };
+  const documentController = new DocumentController(port);
+  documentController.replaceLoadedState(loaded);
   Object.assign(view, {
     baseState: { file: "A.md", unknownHostField: 42 }, file: { path: "A.md" },
-    plugin: { settings }, work: new ViewWorkScope(), loadGeneration: 0,
-    overviewOrientationOverride: null, overviewOrientationChangeGeneration: 0,
+    plugin: { settings, getBranchViews: () => [view] }, documentController, work: new ViewWorkScope(), loadGeneration: 0,
+    overviewOrientationOverride: null, overviewOrientationChangeGeneration: 0, overviewOrientationWrites: 0,
     app: { workspace: { requestSaveLayout: () => { savedState = view.getState(); } } },
     overview: { invalidate() {}, requestCenterOnNextRender() {} },
     overviewViewport: { discardPendingRestore() {} },
@@ -57,14 +72,41 @@ function viewFixture(settings = fixtureSettings()) {
       geometry = buildOverviewLayout(fixtureTree(), { orientation: view.getOverviewOrientation() });
     }
   });
-  return { view, settings, get publication() { return publication; }, get geometry() { return geometry; }, get savedState() { return savedState; } };
+  return { view, settings, documentController, port, get source() { return source; }, get publication() { return publication; }, get geometry() { return geometry; }, get savedState() { return savedState; } };
 }
 
 describe("overview workspace state", () => {
+  it.each(["horizontal", null] as const)("keeps a fast return to %s while the intermediate choice is still saving", async initial => {
+    const fixture = viewFixture();
+    await fixture.view.setOverviewOrientationOverride(initial);
+    const gate = deferred<void>();
+    const process = fixture.port.process.bind(fixture.port);
+    fixture.port.process = async (file, transform) => { await gate.promise; return process(file, transform); };
+    const intermediate = fixture.view.setOverviewOrientationOverride("vertical-top-down");
+    const last = fixture.view.setOverviewOrientationOverride(initial);
+    gate.resolve();
+    await Promise.all([intermediate, last]);
+    expect(loadImportedBranchDocument(fixture.source).metadata.overviewOrientation ?? null).toBe(initial);
+    expect(fixture.view.getOverviewOrientationOverride()).toBe(initial);
+  });
+  it("persists a menu choice in the note and isolates it from another note and the global default", async () => {
+    const settings = fixtureSettings();
+    const first = viewFixture(settings);
+    const other = viewFixture(settings);
+    await first.view.setOverviewOrientationOverride("vertical-bottom-up");
+    const reopened = loadImportedBranchDocument(first.source);
+    expect(reopened.metadata.overviewOrientation).toBe("vertical-bottom-up");
+    expect(loadImportedBranchDocument(other.source).metadata.overviewOrientation).toBeUndefined();
+    settings.overviewOrientation = "vertical-top-down";
+    const reopenedView = viewFixture(settings);
+    reopenedView.documentController.replaceLoadedState({ ...fixtureLoaded(), metadata: reopened.metadata });
+    expect(reopenedView.view.getOverviewOrientation()).toBe("vertical-bottom-up");
+    expect(other.view.getOverviewOrientation()).toBe("vertical-top-down");
+  });
   it.each(["setState", "override"] as const)("publishes a pending same-file orientation when superseded by identical %s", async route => {
     const fixture = viewFixture();
     const pending = deferred<void>();
-    duringSetState = () => pending.promise;
+    duringSetState = async () => { await pending.promise; fixture.documentController.acceptOverviewOrientation("vertical-top-down"); };
     const state = { file: "A.md", arborOverviewOrientation: "vertical-top-down" };
     try {
       const first = fixture.view.setState(state, { history: false });
@@ -78,7 +120,7 @@ describe("overview workspace state", () => {
       const root = fixture.geometry.nodes.find(node => node.id === "root")!;
       const child = fixture.geometry.nodes.find(node => node.id === "first")!;
       expect(root.y + root.height).toBeLessThan(child.y);
-      expect(fixture.view.getState()).toMatchObject(state);
+      expect(fixture.view.getState()).toEqual({ file: "A.md" });
     } finally { pending.resolve(); duringSetState = null; }
   });
 
@@ -114,14 +156,18 @@ describe("overview workspace state", () => {
     expect(plugin.settings.overviewOrientation).toBe("horizontal");
   });
 
-  it.each(["vertical-top-down", "vertical-bottom-up"] as const)("round trips %s before FileView starts loading", async orientation => {
-    const { view } = viewFixture();
+  it.each(["vertical-top-down", "vertical-bottom-up"] as const)("loads stored %s instead of an old workspace choice", async orientation => {
+    const { view, documentController } = viewFixture();
     const observed: unknown[] = [];
-    duringSetState = current => { observed.push((current as typeof view).getOverviewOrientation()); };
+    duringSetState = current => {
+      documentController.replaceLoadedState(fixtureLoaded());
+      if (view.getState().file === "A.md") documentController.acceptOverviewOrientation(orientation);
+      observed.push((current as typeof view).getOverviewOrientation());
+    };
     try {
       await view.setState({ file: "A.md", unknownHostField: 42, arborOverviewOrientation: orientation }, { history: false });
       expect(observed).toEqual([orientation]);
-      expect(view.getState()).toEqual({ file: "A.md", unknownHostField: 42, arborOverviewOrientation: orientation });
+      expect(view.getState()).toEqual({ file: "A.md", unknownHostField: 42 });
       await view.setState({ file: "B.md", arborOverviewOrientation: "broken" }, { history: false });
       expect(view.getOverviewOrientation()).toBe("horizontal");
       expect(view.getState()).toEqual({ file: "B.md" });
@@ -141,7 +187,7 @@ describe("overview workspace state", () => {
     expect(persisted).toMatchObject({ overviewOrientation: "vertical-bottom-up" });
     expect([first.publication, second.publication, follower.publication]).toEqual(["vertical-top-down", "vertical-bottom-up", "vertical-bottom-up"]);
     await first.view.setOverviewOrientationOverride(null);
-    expect(first.savedState).toEqual({ file: "A.md", unknownHostField: 42 });
+    expect(first.view.getState()).toEqual({ file: "A.md", unknownHostField: 42 });
     expect(first.publication).toBe("vertical-bottom-up");
     await tab.setControlValue("overviewOrientation", "broken");
     expect(settings.overviewOrientation).toBe("horizontal");
@@ -149,21 +195,23 @@ describe("overview workspace state", () => {
   });
 
   it("does not apply an older state completion after a newer source choice", async () => {
-    const { view } = viewFixture();
+    const { view, documentController } = viewFixture();
     const pending = deferred<void>();
     let first = true;
     duringSetState = () => { if (first) { first = false; return pending.promise; } };
     try {
       const older = view.setState({ file: "A.md", arborOverviewOrientation: "vertical-top-down" }, { history: false });
       Object.assign(view, { file: { path: "B.md" }, loadGeneration: 1 });
+      documentController.replaceLoadedState(fixtureLoaded());
+      documentController.acceptOverviewOrientation("vertical-bottom-up");
       await view.setState({ file: "B.md", arborOverviewOrientation: "vertical-bottom-up", custom: 17 }, { history: false });
       pending.resolve();
       await older;
-      expect(view.getState()).toEqual({ file: "B.md", arborOverviewOrientation: "vertical-bottom-up", custom: 17 });
+      expect(view.getState()).toEqual({ file: "B.md", custom: 17 });
       expect(view.getOverviewOrientation()).toBe("vertical-bottom-up");
       await view.setState({ file: "B.md" }, { history: false });
       expect(view.getState()).toEqual({ file: "B.md" });
-      expect(view.getOverviewOrientationOverride()).toBeNull();
+      expect(view.getOverviewOrientationOverride()).toBe("vertical-bottom-up");
     } finally { pending.resolve(); duringSetState = null; }
   });
 

@@ -12,9 +12,10 @@ import {
   getActiveOutputProfile,
   reconcileProfilesAfterTreeChange
 } from "../../outputProfiles";
-import { buildBranchDocument, parseBranchDocument } from "../../storage/document";
+import { buildBranchDocument, parseBranchDocument, updateStoredOverviewOrientation } from "../../storage/document";
+import { normalizeOverviewOrientation } from "../../overviewOrientation";
 import { loadImportedBranchDocument } from "../../storage/reconcile";
-import { linearizeTree, normalizeMetadata } from "../../storage/serializer";
+import { buildStructureBlock, linearizeTree, normalizeMetadata } from "../../storage/serializer";
 import type {
   ArborOutputProfile,
   ArborOutputState,
@@ -23,6 +24,7 @@ import type {
   BranchTreeMutationResult,
   ImportedBranchDocument
 } from "../../types";
+import type { ArborOverviewOrientation } from "../../types";
 import { deepClone } from "../../utils";
 import type { EditingSession, LoadedFileState } from "./viewTypes";
 
@@ -66,7 +68,8 @@ export function buildLoadedFileState(
 export class DocumentController {
   private readonly history = new BranchHistory();
   private state: LoadedFileState | null = null;
-  private isPersisting = false;
+  private pendingWrites = 0;
+  private orientationWrites: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly port: DocumentPort) {}
 
@@ -93,7 +96,45 @@ export class DocumentController {
   }
 
   isWriting(): boolean {
-    return this.isPersisting;
+    return this.pendingWrites > 0;
+  }
+
+  acceptOverviewOrientation(value: ArborOverviewOrientation | null): void {
+    if (!this.state) return;
+    if (value) this.state.metadata.overviewOrientation = value;
+    else delete this.state.metadata.overviewOrientation;
+  }
+
+  syncOrientationOnlyChange(text: string): boolean {
+    const state = this.state;
+    if (!state) return false;
+    const parsed = parseBranchDocument(text);
+    if (!parsed.metadata || parsed.body !== state.linearized.body || parsed.frontmatter !== state.frontmatter
+      || parsed.outputError !== state.outputError || JSON.stringify(parsed.outputState) !== JSON.stringify(state.outputState)
+      || (parsed.outputError && parsed.outputRaw !== state.outputRaw)) return false;
+    const stored = { ...parsed.metadata }, current = { ...state.metadata };
+    delete stored.overviewOrientation;
+    delete current.overviewOrientation;
+    if (buildStructureBlock(stored) !== buildStructureBlock(current)) return false;
+    this.acceptOverviewOrientation(normalizeOverviewOrientation(parsed.metadata.overviewOrientation));
+    return true;
+  }
+
+  async saveOverviewOrientation(value: ArborOverviewOrientation | null): Promise<void> {
+    const file = this.port.getFile();
+    const state = this.state;
+    if (!file || !state) throw new Error("No Arbor note is loaded");
+    if (value !== null && !normalizeOverviewOrientation(value)) throw new Error("Invalid Tree Overview orientation");
+    const write = this.orientationWrites.then(async () => {
+      this.pendingWrites += 1;
+      try {
+        this.port.markOwnWrite(file.path);
+        await this.port.process(file, text => updateStoredOverviewOrientation(text, value, state.metadata));
+        if (this.state === state && this.port.getFile() === file) this.acceptOverviewOrientation(value);
+      } finally { this.pendingWrites -= 1; }
+    });
+    this.orientationWrites = write.catch(() => undefined);
+    await write;
   }
 
   async readLoadedFileState(
@@ -132,10 +173,19 @@ export class DocumentController {
       state.outputError ? state.outputRaw : undefined
     );
 
-    this.isPersisting = true;
+    this.pendingWrites += 1;
     try {
       this.port.markOwnWrite(file.path);
-      await this.port.process(file, () => document);
+      await this.port.process(file, text => {
+        const stored = parseBranchDocument(text).metadata;
+        if (!stored) return document;
+        const currentMetadata = { ...metadata };
+        const orientation = normalizeOverviewOrientation(stored.overviewOrientation);
+        if (orientation) currentMetadata.overviewOrientation = orientation;
+        else delete currentMetadata.overviewOrientation;
+        if (this.state === state && this.port.getFile() === file) this.acceptOverviewOrientation(orientation);
+        return updateStoredOverviewOrientation(document, orientation, currentMetadata);
+      });
       this.port.rememberManagedNote(file.path);
       if (this.state === state && this.port.getFile() === file) {
         state.origin = "metadata";
@@ -145,7 +195,7 @@ export class DocumentController {
       this.port.reportError(`[Arbor] Failed to persist state after ${reason}`, error);
       this.port.notify(`Arbor could not save the note after "${reason}".`);
     } finally {
-      this.isPersisting = false;
+      this.pendingWrites -= 1;
     }
   }
 
@@ -359,7 +409,9 @@ export class DocumentController {
   }
 
   private restoreHistoryState(snapshot: BranchHistoryEntry): void {
+    const orientation = normalizeOverviewOrientation(this.state!.metadata.overviewOrientation);
     this.state!.metadata = cloneMetadata(snapshot.metadata);
+    this.acceptOverviewOrientation(orientation);
     this.state!.outputState = snapshot.outputState;
     this.state!.selectedBlockId = ensureSelectedBlock(snapshot.metadata, snapshot.selectedBlockId);
     this.state!.linearized = linearizeTree(this.state!.metadata);

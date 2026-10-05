@@ -198,13 +198,18 @@ function mergeMarkerMetadataWithStoredExtras(
     };
   });
   if (!preserveStoredBlockOrder) {
-    return { ...markerMetadata, blocks: mergedBlocks };
+    return {
+      ...markerMetadata,
+      ...(storedMetadata.overviewOrientation ? { overviewOrientation: storedMetadata.overviewOrientation } : {}),
+      blocks: mergedBlocks
+    };
   }
 
   const mergedById = new Map(mergedBlocks.map((block) => [block.id, block]));
   const storedIds = new Set(storedMetadata.blocks.map((block) => block.id));
   return {
     ...markerMetadata,
+    ...(storedMetadata.overviewOrientation ? { overviewOrientation: storedMetadata.overviewOrientation } : {}),
     blocks: [
       ...storedMetadata.blocks.flatMap((block) => {
         const merged = mergedById.get(block.id);
@@ -278,9 +283,13 @@ export function loadImportedBranchDocument(text: string): ImportedBranchDocument
     }, parsed);
   }
 
+  const importedMetadata = importBodyToMetadata(parsed.body);
   return withOutputState({
-    metadata: importBodyToMetadata(parsed.body),
-    origin: getRootBlocks(importBodyToMetadata(parsed.body)).length > 0 ? "imported" : "metadata",
+    metadata: {
+      ...importedMetadata,
+      ...(parsed.metadata?.overviewOrientation ? { overviewOrientation: parsed.metadata.overviewOrientation } : {})
+    },
+    origin: getRootBlocks(importedMetadata).length > 0 ? "imported" : "metadata",
     staleMetadata: null,
     needsVisibleMarkerMigration: false
   }, parsed);

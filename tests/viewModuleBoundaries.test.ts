@@ -195,7 +195,7 @@ describe("Arbor view module boundaries", () => {
     const documentController = sourceFile(resolve(viewRoot, "state/DocumentController.ts"));
     const facade = sourceFile(resolve(viewRoot, "ArborView.ts"));
 
-    expect(memberCallNames(documentController).filter((name) => documentIoMethods.has(name))).toEqual(["process"]);
+    expect(new Set(memberCallNames(documentController).filter((name) => documentIoMethods.has(name)))).toEqual(new Set(["process"]));
     expect(memberCallNames(facade).filter((name) => documentIoMethods.has(name))).toEqual(["process"]);
     for (const file of controllerFiles.filter((file) => !file.endsWith("state/DocumentController.ts"))) {
       expect(

@@ -2,7 +2,7 @@ import { build } from "esbuild";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ViewWorkScope } from "../src/view/runtime/ViewWorkScope";
 import type { TFile } from "obsidian";
-import { buildBranchDocument } from "../src/storage/document";
+import { buildBranchDocument, parseBranchDocument } from "../src/storage/document";
 import { linearizeTree } from "../src/storage/serializer";
 import type { DocumentPort } from "../src/view/state/DocumentController";
 import type { LoadingOverlayState } from "../src/view/state/viewTypes";
@@ -219,7 +219,7 @@ describe("orientation-only lifecycle", () => {
     }
   });
 
-  it("keeps loaded source, selected ID, output profiles, history and draft without saving", async () => {
+  it("persists the note layout while preserving source text, profiles, history and draft", async () => {
     const harness = createHarness();
     await harness.view.onLoadFile(harness.files.a);
     const source = harness.disk.get("A.md");
@@ -231,8 +231,9 @@ describe("orientation-only lifecycle", () => {
     const session = { blockId: "a-block", origin: "overview", value: "Unsaved draft", autofocus: false };
     const render = vi.fn();
     Object.assign(harness.view, {
+      plugin: { settings: fixtureSettings(), getBranchViews: () => [harness.view] },
       render,
-      overviewOrientationOverride: null, overviewOrientationChangeGeneration: 0,
+      overviewOrientationOverride: null, overviewOrientationChangeGeneration: 0, overviewOrientationWrites: 0,
       app: { workspace: { requestSaveLayout() {} } },
       overview: { invalidate() {}, requestCenterOnNextRender() {} },
       overviewViewport: { discardPendingRestore() {} },
@@ -245,11 +246,12 @@ describe("orientation-only lifecycle", () => {
     await harness.view.setOverviewOrientationOverride("vertical-bottom-up");
     expect(render.mock.calls.length).toBe(rendersAfterPublication);
     expect(harness.view.getOverviewOrientation()).toBe("vertical-bottom-up");
-    expect(harness.disk.get("A.md")).toBe(source);
+    expect(parseBranchDocument(harness.disk.get("A.md")!).body).toBe(parseBranchDocument(source!).body);
+    expect(parseBranchDocument(harness.disk.get("A.md")!).metadata?.overviewOrientation).toBe("vertical-bottom-up");
     expect(session.value).toBe("Unsaved draft");
     expect(harness.view.documentController.getState()).toBe(state);
     expect(JSON.stringify(history)).toBe(historyBefore);
-    expect(harness.writes).toEqual([]);
+    expect(harness.writes.map(write => write.path)).toEqual(["A.md", "A.md"]);
   });
 });
 

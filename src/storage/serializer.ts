@@ -1,6 +1,7 @@
 import { DEFAULT_BLOCK_SEPARATOR, LEGACY_METADATA_MARKER, STRUCTURE_MARKER, VISIBLE_BLOCK_MARKER } from "../constants";
 import {
   BlockLocation,
+  ArborOverviewOrientation,
   BranchBlock,
   BranchBlockId,
   BranchTreeMetadata,
@@ -15,9 +16,18 @@ const VISIBLE_BLOCK_LINE_PATTERN = new RegExp(
   `^<!--\\s*${VISIBLE_BLOCK_MARKER_PATTERN}\\s+id="([^"]+)"\\s+parent="([^"]*)"\\s+order="(\\d+)"\\s*-->$`
 );
 
+function normalizeOverviewOrientation(value: unknown): ArborOverviewOrientation | undefined {
+  return value === "horizontal" || value === "vertical-top-down" || value === "vertical-bottom-up"
+    ? value
+    : undefined;
+}
+
 export function normalizeMetadata(metadata: BranchTreeMetadata): BranchTreeMetadata {
+  const { overviewOrientation: rawOverviewOrientation, ...rest } = metadata;
+  const overviewOrientation = normalizeOverviewOrientation(rawOverviewOrientation);
   return {
-    ...metadata,
+    ...rest,
+    ...(overviewOrientation ? { overviewOrientation } : {}),
     version: 1,
     prefix: metadata.prefix ?? "",
     blocks: metadata.blocks.map((block) => {
@@ -226,10 +236,12 @@ function parseLegacyMetadataBlock(raw: string): BranchTreeMetadata | null {
 }
 
 export function buildStructureBlock(metadata: BranchTreeMetadata): string {
+  const normalized = normalizeMetadata(metadata);
   const structure = {
     "arbor-plugin": "tree",
     version: 2,
-    blocks: normalizeMetadata(metadata).blocks.map((block) => ({
+    ...(normalized.overviewOrientation ? { overviewOrientation: normalized.overviewOrientation } : {}),
+    blocks: normalized.blocks.map((block) => ({
       id: block.id,
       parent: block.parentId,
       order: block.order,
@@ -252,6 +264,7 @@ export function parseStructureBlock(raw: string): BranchTreeMetadata | null {
       "arbor-plugin"?: unknown;
       version?: unknown;
       blocks?: unknown;
+      overviewOrientation?: unknown;
     };
     if (parsed["arbor-plugin"] !== "tree" || parsed.version !== 2 || !Array.isArray(parsed.blocks)) {
       return null;
@@ -281,7 +294,8 @@ export function parseStructureBlock(raw: string): BranchTreeMetadata | null {
       });
     }
 
-    return normalizeMetadata({ version: 1, prefix: "", blocks });
+    const overviewOrientation = normalizeOverviewOrientation(parsed.overviewOrientation);
+    return normalizeMetadata({ version: 1, prefix: "", blocks, ...(overviewOrientation ? { overviewOrientation } : {}) });
   } catch {
     return null;
   }

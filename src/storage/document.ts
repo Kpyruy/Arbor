@@ -4,6 +4,8 @@ import { ArborOutputState, ParsedBranchDocument, BranchTreeMetadata } from "../t
 import { buildOutputBlock, isDefaultOutputState, parseOutputBlock } from "./outputProfiles";
 import { buildStructureBlock, parseStoredMetadataBlock } from "./serializer";
 import { normalizeNewlines } from "../utils";
+import { normalizeOverviewOrientation } from "../overviewOrientation";
+import type { ArborOverviewOrientation } from "../types";
 
 const FRONTMATTER_PATTERN = /^---\n[\s\S]*?\n---\n?/;
 const METADATA_MARKER_PATTERN = LEGACY_METADATA_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -96,4 +98,30 @@ export function buildBranchDocument(
   }
 
   return sections.join("");
+}
+
+/** A view preference must not rewrite Markdown or a preserved output footer. */
+export function updateStoredOverviewOrientation(text: string, value: ArborOverviewOrientation | null, fallback: BranchTreeMetadata): string {
+  const orientation = normalizeOverviewOrientation(value);
+  if (value !== null && !orientation) throw new Error("Invalid Tree Overview orientation");
+  const parsed = parseBranchDocument(text);
+  if (parsed.metadataRaw && !parsed.metadata) throw new Error("Cannot update malformed Arbor metadata");
+  const match = text.match(STRUCTURE_BLOCK_PATTERN);
+  if (match?.index !== undefined) {
+    const payload = match[0].match(/```json\r?\n([\s\S]*?)\r?\n```/);
+    if (!payload || !parsed.metadata) throw new Error("Cannot update Arbor structure");
+    const structure = JSON.parse(payload[1]) as Record<string, unknown>;
+    if (orientation) structure.overviewOrientation = orientation;
+    else delete structure.overviewOrientation;
+    const newline = match[0].includes("\r\n") ? "\r\n" : "\n";
+    const footer = match[0].replace(payload[1], () => JSON.stringify(structure, null, 2).replace(/\n/g, newline));
+    return text.slice(0, match.index) + footer + text.slice(match.index + match[0].length);
+  }
+  const metadata = { ...(parsed.metadata ?? fallback) };
+  if (orientation) metadata.overviewOrientation = orientation;
+  else delete metadata.overviewOrientation;
+  const footer = buildStructureBlock(metadata);
+  const legacy = text.match(MULTILINE_PATTERN) ?? text.match(COMPACT_PATTERN);
+  if (legacy?.index !== undefined) return text.slice(0, legacy.index) + "\n" + footer + "\n";
+  return text + (text.endsWith("\n") ? "\n" : "\n\n") + footer + "\n";
 }

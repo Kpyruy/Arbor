@@ -146,8 +146,8 @@ export class ArborView extends FileView {
   private renderGeneration = 0;
   private cancelRenderFrame: (() => void) | null = null;
   private loadGeneration = 0;
-  private overviewOrientationOverride: ArborOverviewOrientation | null = null;
   private overviewOrientationChangeGeneration = 0;
+  private overviewOrientationWrites = 0;
   private overviewOrientationRefreshPending = false;
   private overviewWorkspaceState: Record<string, unknown> = {};
   private overviewEditorSelectionContext: {
@@ -811,6 +811,15 @@ export class ArborView extends FileView {
       return;
     }
 
+    const state = this.state;
+    const text = await this.app.vault.cachedRead(file);
+    if (this.file !== file || this.state !== state) return;
+    const orientation = this.getOverviewOrientation();
+    if (this.documentController.syncOrientationOnlyChange(text)) {
+      if (this.getOverviewOrientation() !== orientation) this.refreshOverviewOrientation();
+      return;
+    }
+
     if (this.editingSession) {
       new Notice("The note changed on disk while a block was being edited. Finish or cancel the card edit before reloading.");
       return;
@@ -1013,17 +1022,16 @@ export class ArborView extends FileView {
   }
 
   getOverviewOrientation(): ArborOverviewOrientation {
-    return resolveOverviewOrientation(this.plugin.settings.overviewOrientation, this.overviewOrientationOverride);
+    return resolveOverviewOrientation(this.plugin.settings.overviewOrientation, this.getOverviewOrientationOverride());
   }
 
   getOverviewOrientationOverride(): ArborOverviewOrientation | null {
-    return this.overviewOrientationOverride ?? null;
+    return normalizeOverviewOrientation(this.state?.metadata.overviewOrientation);
   }
 
   override getState(): Record<string, unknown> {
     const state = { ...this.overviewWorkspaceState, ...super.getState() };
     delete state.arborOverviewOrientation;
-    if (this.overviewOrientationOverride) state.arborOverviewOrientation = this.overviewOrientationOverride;
     return state;
   }
 
@@ -1032,8 +1040,6 @@ export class ArborView extends FileView {
     const previous = this.getOverviewOrientation();
     const requested = ++this.overviewOrientationChangeGeneration;
     const token = this.work.token();
-    this.overviewOrientationOverride = normalizeOverviewOrientation(supplied.arborOverviewOrientation);
-    this.overviewOrientationRefreshPending ||= this.getOverviewOrientation() !== previous;
     delete supplied.arborOverviewOrientation;
     this.overviewWorkspaceState = supplied;
     const loading = super.setState(supplied, result);
@@ -1041,16 +1047,24 @@ export class ArborView extends FileView {
     await loading;
     if (requested !== this.overviewOrientationChangeGeneration || load !== this.loadGeneration
       || !this.work.isCurrent(token) || (this.file && this.file.path !== supplied.file)) return;
+    this.overviewOrientationRefreshPending ||= this.getOverviewOrientation() !== previous;
     if (this.overviewOrientationRefreshPending) this.refreshOverviewOrientation();
   }
 
   async setOverviewOrientationOverride(value: ArborOverviewOrientation | null): Promise<void> {
-    const previous = this.getOverviewOrientation();
-    this.overviewOrientationChangeGeneration += 1;
-    this.overviewOrientationOverride = normalizeOverviewOrientation(value);
-    this.overviewOrientationRefreshPending ||= this.getOverviewOrientation() !== previous;
-    this.app.workspace.requestSaveLayout();
-    if (this.overviewOrientationRefreshPending) this.refreshOverviewOrientation();
+    if (value === this.getOverviewOrientationOverride() && this.overviewOrientationWrites === 0) return;
+    const file = this.file;
+    const state = this.state;
+    const requested = ++this.overviewOrientationChangeGeneration;
+    this.overviewOrientationWrites += 1;
+    try { await this.documentController.saveOverviewOrientation(value); }
+    finally { this.overviewOrientationWrites -= 1; }
+    if (this.file !== file || this.state !== state || requested !== this.overviewOrientationChangeGeneration) return;
+    for (const view of this.plugin.getBranchViews()) {
+      if (view.file?.path !== file?.path) continue;
+      view.documentController.acceptOverviewOrientation(value);
+      view.refreshOverviewOrientation();
+    }
   }
 
   refreshOverviewOrientation(): void {

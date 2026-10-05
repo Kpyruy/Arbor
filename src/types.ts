@@ -69,6 +69,7 @@ export interface BranchTreeMetadata {
   version: 1;
   prefix: string;
   blocks: BranchBlock[];
+  overviewOrientation?: ArborOverviewOrientation;
 }
 
 export interface BranchTreeMutationResult {

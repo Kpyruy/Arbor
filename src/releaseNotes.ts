@@ -13,7 +13,7 @@ export const ARBOR_RELEASE_NOTES: readonly ArborReleaseNote[] = [
     version: "0.3.0",
     title: "Grow in every direction",
     changes: [
-      "Vertical Tree Overview grows upward or downward, with matching navigation and PNG/PDF exports.",
+      "Vertical Tree Overview grows upward or downward, with saved per-note layouts, matching navigation and PNG/PDF exports.",
       "Color individual cards or whole branches with inherited colors, custom HEX values and isolated previews.",
       "Find blocks with selectable search results, and follow links directly between cards of the same note.",
       "Smoother branch transitions, inline editing and theme-aware previews keep your writing in focus."

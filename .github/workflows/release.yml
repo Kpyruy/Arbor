@@ -5,6 +5,11 @@ on:
     tags:
       - "*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release to refresh; must match manifest.version"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -44,8 +49,19 @@ jobs:
       - name: Publish GitHub release
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
         run: |
-          tag="${{ github.ref_name }}"
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$RELEASE_TAG_INPUT"
+            gh release view "$tag" >/dev/null
+          else
+            tag="$GITHUB_REF_NAME"
+          fi
+          version=$(node -p 'require("./manifest.json").version')
+          if [[ "$tag" != "$version" ]]; then
+            echo "Release tag must match manifest.version" >&2
+            exit 1
+          fi
           assets=(manifest.json main.js styles.css)
 
           if gh release view "$tag" >/dev/null 2>&1; then

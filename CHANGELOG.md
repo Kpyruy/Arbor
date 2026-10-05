@@ -12,7 +12,7 @@ Grow in every direction: vertical Tree Overview, card and branch colors, and fas
 
 ### Added
 
-- added vertical Tree Overview with the root at the bottom or at the top, plus a plugin default and independent, saved per-tab overrides
+- added vertical Tree Overview with the root at the bottom or at the top, plus a plugin default and saved per-note layouts
 - adapted arrows, Ctrl/Cmd + arrow creation, number navigation and touch controls to the effective Overview orientation and LTR/RTL sibling order; Branch Editor remains horizontal
 - added selectable search results with titles, highlighted snippets and paths, keyboard selection, click-to-reveal and mobile-friendly scrolling
 - added per-card colors and inherited branch colors with swatches, HEX input, isolated preview and reset controls in both editor modes
@@ -32,6 +32,7 @@ Grow in every direction: vertical Tree Overview, card and branch colors, and fas
 
 ### Fixed
 
+- persisted a note's chosen Overview layout across closing/reopening, renaming and sync, without changing other notes, Output Profiles or content undo/redo history
 - prevented root/parent columns from jumping when a differently sized descendant branch appears or disappears, while retaining selection animations
 - kept common ancestors stationary during child navigation and reduced active-card scrollbar inset without shifting the text
 - blended truncated previews into the actual card color instead of painting a mismatched dark rectangle

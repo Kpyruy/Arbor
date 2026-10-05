@@ -185,9 +185,9 @@ Notes:
 
 Use **Tree overview** from the view menu or Command Palette to see every block in one connected map. Drag empty space to pan; Ctrl/Cmd + mouse wheel changes zoom. Cards render normal Obsidian Markdown and grow to fit their content. Select a card, then press `Enter` or double-click it to edit directly in place; Arbor smoothly reveals the editor when it is outside the viewport. Export the whole map as a PNG or one-page PDF from the overview menu. Overview always shows collapsed descendants and does not support drag-and-drop reparenting.
 
-Set **Tree overview layout** in Arbor settings to **Horizontal** (the default), **Vertical — root at bottom** (children grow upward), or **Vertical — root at top** (children grow downward). The same choices in the view menu override the default for that tab. Tabs without an override follow the plugin setting.
+Set **Tree overview layout** in Arbor settings to **Horizontal** (the default), **Vertical — root at bottom** (children grow upward), or **Vertical — root at top** (children grow downward). The same choices in the view menu save the layout for the current note. Notes without their own choice follow the plugin setting.
 
-Tab overrides are saved only in Obsidian workspace view state, not in the note or Output Profile. They can be restored with that workspace; opening a different file normally in the tab clears the override. Changing orientation does not rewrite Markdown, change Output Profiles, or add an undo step. **Return to branch editor** keeps Branch Editor horizontal.
+The note's layout is stored in its hidden Arbor metadata, so it survives closing the tab, restarting Obsidian, renaming the note and syncing it to another device. It applies to every tab showing that note, independently of other notes and Output Profiles. Changing orientation preserves the Markdown body, an active editor draft and content undo/redo history. **Return to branch editor** keeps Branch Editor horizontal.
 
 | Vertical Overview shortcut | Root at top | Root at bottom |
 | --- | --- | --- |
