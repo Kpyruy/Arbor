@@ -151,6 +151,43 @@ function branchCamera(elements: Partial<{
 }
 
 describe("BranchViewportController", () => {
+  it("snaps layout compensation for an unchanged ancestor during child selection", () => {
+    vi.stubGlobal("HTMLElement", class {});
+    const state = fixtureLoaded();
+    state.selectedBlockId = "first";
+    let ancestorTop = 20;
+    const classes = new Set<string>();
+    const ancestorProps: Record<string, string>[] = [];
+    const list = {
+      classList: { contains: (name: string) => classes.has(name), add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name) },
+      setCssProps: (props: Record<string, string>) => ancestorProps.push(props),
+      getBoundingClientRect: () => ({ top: ancestorTop })
+    } as unknown as HTMLElement;
+    const parent = {
+      dataset: { blockId: "root" }, offsetHeight: 80, get offsetTop() { return ancestorTop; }, offsetParent: null,
+      classList: { contains: () => false }
+    } as unknown as HTMLElement;
+    const column = {
+      dataset: { columnDepth: "0" }, querySelector: (selector: string) => selector === ".arbor-card-list" ? list : parent,
+      querySelectorAll: () => [parent]
+    } as unknown as HTMLElement;
+    const columns = { querySelectorAll: () => [column], getBoundingClientRect: () => ({ top: 0 }) } as unknown as HTMLElement;
+    const viewport = { clientHeight: 600, getBoundingClientRect: () => ({ top: 0 }) } as unknown as HTMLElement;
+    const readClasses: string[][] = [];
+    list.getBoundingClientRect = () => { readClasses.push([...classes]); return { top: 0 } as DOMRect; };
+    const camera = new BranchViewportController({
+      read: { getState: () => state, getSettings: fixtureSettings, getMode: () => "editor", getFilePath: () => "fixture.md" },
+      getElements: () => ({ root: columns, columns, viewport, stage: null, previewContent: null }),
+      getSession: () => null, isCompact: () => false, consumeAutofocus: () => {}
+    });
+    camera.alignColumnsToActivePath();
+    state.selectedBlockId = "second";
+    ancestorTop = 170;
+    camera.alignColumnsToActivePath();
+    expect(ancestorProps.at(-1)).toEqual({ "--arbor-card-list-offset-y": "54px" });
+    expect(readClasses.some(names => names.includes("is-alignment-stable"))).toBe(true);
+    expect(classes.has("is-alignment-stable")).toBe(false);
+  });
   it("cancels an earlier horizontal animation before starting a new one", () => {
     let nextFrame = 1;
     const cancelAnimationFrame = vi.fn();

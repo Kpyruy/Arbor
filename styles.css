@@ -1638,6 +1638,10 @@
   filter: saturate(0.88) blur(1px);
 }
 
+.arbor-card-list.is-alignment-stable {
+  transition: opacity 180ms ease, filter 220ms ease;
+}
+
 .arbor-card,
 .arbor-column-empty,
 .arbor-root-empty {

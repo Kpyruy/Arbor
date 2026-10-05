@@ -420,6 +420,7 @@ describe("ArborView load lifecycle", () => {
     let requestedFrame: FrameRequestCallback | undefined;
     let previews = 0;
     let reveals = 0;
+    const publication: string[] = [];
     Object.assign(harness.view.plugin, { settings: fixtureSettings() });
     Object.assign(harness.view, {
       render: () => lifecycle.ArborView.prototype.render.call(harness.view),
@@ -437,7 +438,8 @@ describe("ArborView load lifecycle", () => {
       overview: { invalidate: () => undefined, hide: () => undefined },
       output: { invalidate: () => undefined },
       branchRenderer: { invalidate: () => undefined, syncColumns: () => branch.promise },
-      preview: { invalidate: () => undefined, syncPreview: async () => { previews += 1; } },
+      preview: { invalidate: () => undefined, syncPreview: async () => { publication.push("preview"); previews += 1; } },
+      alignColumnsToActivePath: () => { publication.push("alignment"); },
       armSceneWidthForPendingScroll: () => 0,
       applyPendingFocusAndScroll: () => { reveals += 1; },
       syncHoverLinkedState: () => undefined
@@ -454,9 +456,11 @@ describe("ArborView load lifecycle", () => {
       await oldRender;
       expect(previews).toBe(0);
       expect(reveals).toBe(0);
+      expect(publication).toEqual([]);
       requestedFrame?.(1);
       await waitUntil(() => reveals === 1);
       expect(previews).toBe(1);
+      expect(publication).toEqual(["alignment", "preview"]);
     } finally {
       vi.unstubAllGlobals();
     }

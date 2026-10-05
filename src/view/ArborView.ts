@@ -1594,6 +1594,7 @@ export class ArborView extends FileView {
     const preservedSceneWidth = this.armSceneWidthForPendingScroll(columns.length);
     await this.branchRenderer.syncColumns(columns, this.viewContext);
     if (!isCurrent()) return;
+    this.alignColumnsToActivePath();
     await this.preview.syncPreview(this.viewContext);
     if (!isCurrent()) return;
     this.applyPendingFocusAndScroll(preservedSceneWidth);

@@ -22,6 +22,7 @@ export class BranchViewportController {
   private focusFrame: number | null = null;
   private layoutFrame: number | null = null;
   private horizontalScrollFrame: number | null = null;
+  private alignments = new WeakMap<HTMLElement, { target: HTMLElement; natural: number }>();
   private panState: { pointerId: number; startClientX: number; startScrollLeft: number; dragging: boolean } | null = null;
 
   constructor(private readonly port: BranchViewportPort) {}
@@ -213,7 +214,16 @@ export class BranchViewportController {
         ? clampCardCenter(preferred, target.offsetHeight, viewportRect.top - rootRect.top, resolvedViewport.clientHeight)
         : preferred;
       const shift = anchor - natural;
+      const previous = this.alignments.get(list);
+      const stableAncestor = previous?.target === target && !target.classList.contains("is-active")
+        && Math.abs(previous.natural - natural) > 0.25 && !list.classList.contains("is-rebinding");
+      if (stableAncestor) list.classList.add("is-alignment-stable");
       list.setCssProps({ "--arbor-card-list-offset-y": Math.abs(shift) < 0.25 ? "0px" : `${shift}px` });
+      if (stableAncestor) {
+        list.getBoundingClientRect();
+        list.classList.remove("is-alignment-stable");
+      }
+      this.alignments.set(list, { target, natural });
       if (list.classList.contains("is-rebinding")) {
         window.requestAnimationFrame(() => list.classList.remove("is-rebinding"));
       }
@@ -266,6 +276,7 @@ export class BranchViewportController {
   }
 
   reset(): void {
+    this.alignments = new WeakMap();
     if (this.focusFrame !== null) window.cancelAnimationFrame(this.focusFrame);
     if (this.layoutFrame !== null) window.cancelAnimationFrame(this.layoutFrame);
     this.focusFrame = null;
