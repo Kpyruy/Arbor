@@ -74,6 +74,22 @@ Grow in every direction: vertical Tree Overview, card and branch colors, and fas
 - removed duplicate native tooltips from excluded cards while preserving accessible Obsidian tooltips
 - refined mobile spacing for the Output Profile control
 
+## 0.2.8 - 2026-09-07
+
+Take Arbor with you: official phone and tablet support, while keeping the same Markdown notes.
+
+### Added
+
+- added a focused mobile Branch Editor with touch navigation, block actions, and accessible save/cancel controls
+- added one-finger Tree Overview panning and two-finger pinch zoom
+- adapted loading, legacy-note recovery and PNG/single-page PDF export limits for mobile devices
+
+### Fixed
+
+- lowered the minimum zoom to 25% and scaled mobile Branch Editor cards, text and spacing together
+- kept breadcrumb selection steady, animating only newly appearing path items
+- prevented large Theme Studio previews from overlapping on mobile and removed distracting action-bar shadows
+
 ## 0.2.7 - 2026-09-03
 
 ### Added
@@ -152,6 +168,18 @@ Readable Markdown, safer navigation, and smoother movement between Arbor and Obs
 - moved New arbor note into the File Explorer creation section for folders and empty space only
 - improved the normal Markdown switch so managed notes do not reopen Arbor immediately
 - refined export modal controls and File Explorer labels for clearer interaction
+
+## 0.2.2 - 2026-05-16
+
+### Changed
+
+- raised the minimum Obsidian version to 1.7.2 for `Workspace.revealLeaf`
+- added GitHub build provenance attestations for release assets
+
+### Fixed
+
+- aligned DOM and instance checks with Obsidian API practices
+- replaced CSS `!important` declarations with selector specificity
 
 ## 0.2.1 - 2026-03-27
 

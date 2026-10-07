@@ -79,7 +79,7 @@ export class ArborSettingTab extends PluginSettingTab {
       },
       {
         name: "Tree overview layout",
-        desc: "Choose the default tree overview layout. Individual tabs can override it.",
+        desc: "Choose the default tree overview layout. Individual notes can save their own layout.",
         control: {
           type: "dropdown",
           key: "overviewOrientation",
@@ -200,7 +200,7 @@ export class ArborSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Tree overview layout")
-      .setDesc("Choose the default tree overview layout. Individual tabs can override it.")
+      .setDesc("Choose the default tree overview layout. Individual notes can save their own layout.")
       .addDropdown((dropdown) => {
         Object.entries(OVERVIEW_ORIENTATION_OPTIONS).forEach(([value, label]) => { dropdown.addOption(value, label); });
         dropdown.setValue(this.plugin.settings.overviewOrientation)

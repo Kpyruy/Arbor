@@ -205,6 +205,9 @@ The note's layout is stored in its hidden Arbor metadata, so it survives closing
 
 All of these are exposed as normal Obsidian commands. By default, they have no bound hotkey unless you bind one yourself in Obsidian.
 
+<details>
+<summary>Show all commands and IDs</summary>
+
 | Command | ID | Scope | Default hotkey |
 | --- | --- | --- | --- |
 | Open view for current note | `open-view` | Global | None |
@@ -241,6 +244,8 @@ All of these are exposed as normal Obsidian commands. By default, they have no b
 | Rebuild tree from metadata | `rebuild-tree-from-metadata` | Arbor view | None |
 | Undo branch action | `undo-branch-action` | Arbor view | None |
 | Redo branch action | `redo-branch-action` | Arbor view | None |
+
+</details>
 
 ## View Menu
 
