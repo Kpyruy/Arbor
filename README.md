@@ -2,7 +2,7 @@
 
 Think in branches. Keep one note.
 
-Arbor is a writing-first branching editor for Obsidian. It lets you build a note as small Markdown blocks arranged left-to-right while keeping the note itself as a normal `.md` file.
+Arbor is a writing-first branching editor for Obsidian. Build a note as small Markdown blocks in a horizontal Branch Editor or a horizontal/vertical Tree Overview, while keeping the note itself as a normal `.md` file.
 
 No separate canvas file. No sidecar database.
 
@@ -37,7 +37,7 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 
 ## Core Features
 
-- Left-to-right branching editor for one Markdown note
+- Horizontal branching editor for one Markdown note, with left-to-right or right-to-left layout
 - Stable block tree with inline editing
 - Normal readable Markdown body as the source document
 - Visible block markers plus a readable in-note structure footer for exact recovery
@@ -47,11 +47,13 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Keyboard-first navigation and structure editing
 - Block search with selectable results, highlighted snippets and paths; use arrows and Enter or click to reveal a card
 - Zoom, breadcrumbs, view menu, and context menus
-- Whole-tree Overview map with connected, fully rendered Markdown cards
+- Whole-tree Overview with connected Markdown cards and horizontal, upward, or downward layouts saved per note
 - Tree Overview export as a PNG or one-page PDF
 - Touch-first phone editor with a focused sibling column and 44 px action controls
 - One-finger Tree Overview pan and two-finger pinch zoom
 - Automatic and custom palettes through Theme Studio
+- Individual card colors and inherited branch colors
+- Rendered cards and tree exports follow Obsidian's text font
 - Mouse-wheel navigation through sibling blocks and visible branch columns
 - Auto-open managed Arbor notes in Arbor view
 - File Explorer labels that mark managed notes with `ARBOR`
@@ -76,9 +78,9 @@ The source `.md` always retains the complete Arbor tree. Switching profiles, pre
 
 ## Install
 
-### Community Plugins
+### Community Plugins (recommended)
 
-Once Arbor is approved in the Obsidian community catalog:
+Arbor is available in the [Obsidian community catalog](https://community.obsidian.md/plugins/arbor).
 
 1. Open `Settings -> Community plugins -> Browse`.
 2. Search for `Arbor`.
@@ -87,9 +89,9 @@ Once Arbor is approved in the Obsidian community catalog:
 
 ### Manual install
 
-If you want to install Arbor before it appears in the community catalog:
+Use this alternative if you prefer to install the plugin files yourself.
 
-1. Download `manifest.json`, `main.js`, and `styles.css` from the latest [GitHub release](https://github.com/Kpyruy/Arbor/releases).
+1. Download `manifest.json`, `main.js`, and `styles.css` from the [latest GitHub release](https://github.com/Kpyruy/Arbor/releases/latest), not the source-code archives.
 2. Create this folder in your vault:
 
 ```text
@@ -97,9 +99,11 @@ If you want to install Arbor before it appears in the community catalog:
 ```
 
 3. Place those three files inside it.
-4. Open Obsidian.
+4. Open or restart Obsidian so it loads the installed files.
 5. Go to `Settings -> Community plugins`.
 6. Enable `Arbor`.
+
+For updates, use **Check for updates** in Community Plugins. For a manual update, replace only those three files and restart Obsidian; keep `data.json` to preserve your settings. See the [latest release](https://github.com/Kpyruy/Arbor/releases/latest) for changes and any update-specific instructions.
 
 ## Quick Start
 
@@ -108,7 +112,7 @@ If you want to install Arbor before it appears in the community catalog:
 3. Create a root block.
 4. Press `Enter` on a selected card to edit it on desktop, or double-tap it on mobile.
 5. Use `Ctrl/Cmd + Arrow` to grow the structure.
-6. Use the right-click menu to duplicate, move, delete, or continue a branch.
+6. Use the right-click menu or the mobile block-actions menu to duplicate, delete, or continue a branch.
 7. Turn on `Selected block panel` from the Arbor menu if you want a focused preview/editor panel.
 
 Rendered links in Branch Editor and Tree Overview are clickable: internal links open their note, heading, block, or PDF destination. Ctrl/Cmd-click or middle-click opens a new tab. A link click stays separate from card selection and editing; double-click the card's ordinary text to edit it.
@@ -119,7 +123,7 @@ When [Heading Linker](https://github.com/max-fluff/obsidian-heading-linker) is e
 
 On a phone, Arbor keeps the selected block's sibling column on screen and puts navigation in a bottom action bar. Tap a card to select it; double-tap a card or use **Edit** to edit it. **Save** and **Cancel** are always visible while editing. Plain `Enter` makes a new line, while `Ctrl/Cmd + Enter` on a hardware keyboard saves. Pinch with two fingers in the branch editor to adjust card and text density without leaving the active sibling column.
 
-In Tree Overview, drag with one finger to pan and pinch with two fingers to zoom. A drag never opens a card editor. Use the top-left map button to return to the branch editor.
+In Tree Overview, drag with one finger to pan and pinch with two fingers to zoom. A drag never opens a card editor. Use **Return to branch editor** in the view menu to switch back.
 
 ## Support
 
@@ -208,6 +212,7 @@ All of these are exposed as normal Obsidian commands. By default, they have no b
 | Create new note in Markdown editor | `create-note-markdown` | Global | None |
 | Create demo note | `create-demo-note` | Global | None |
 | Export clean copy | `export-clean-copy` | Arbor view | None |
+| Export tree overview | `export-tree-overview` | Arbor view | None |
 | Open tree overview | `open-tree-overview` | Arbor view | None |
 | Return to branch editor | `close-tree-overview` | Arbor view | None |
 | Open block actions menu | `open-block-actions-menu` | Arbor view | None |
@@ -239,18 +244,23 @@ All of these are exposed as normal Obsidian commands. By default, they have no b
 
 ## View Menu
 
-Arbor includes a compact view menu in the top-right corner of the editor.
+Arbor includes a compact view menu in its toolbar. The adjacent profile pill switches Output Profiles or opens **Manage output profiles…**.
 
-Current menu actions:
+Use the view menu to:
 
-- switch the active Output Profile or open `Manage output profiles…`
+- search blocks, zoom in/out, or reset zoom to `100%`
+- switch between Tree Overview and Branch Editor
+- save a horizontal, upward, or downward Tree Overview layout for this note
 - open `Output preview`
+- export a clean Markdown copy or the tree as PNG/PDF
+- open the source note in Markdown
 - toggle `Selected block panel`
 - toggle breadcrumb path
 - toggle breadcrumb flow
 - toggle `Ctrl/Cmd + wheel` zoom
-- reset zoom to `100%`
 - open Arbor settings
+
+For **Card color…**, **Branch color…**, or **Copy block link**, open a card's block-actions menu.
 
 ## Settings
 
@@ -258,7 +268,7 @@ Current menu actions:
 | --- | --- | --- |
 | Theme | `Automatic` | Follow Obsidian, choose a built-in palette, or open Theme Studio for custom themes |
 | Layout direction | `Left to right` | Choose the root side in horizontal views or sibling order in vertical Tree Overview; directional navigation and controls mirror accordingly |
-| Tree overview layout | `Horizontal` | Choose `Horizontal`, `Vertical — root at bottom`, or `Vertical — root at top`; individual tabs can override this default in the view menu |
+| Tree overview layout | `Horizontal` | Default for notes without a saved layout; use the view menu to save a different layout for a specific note |
 | Default opening mode | `Branch editor` | Choose whether Arbor notes open in the branch editor or Tree Overview |
 | Split direction | `Vertical split` | Where Arbor opens relative to the current note; desktop only |
 | Card width | `300 px` | Base card width in the branching scene |
@@ -342,7 +352,7 @@ The command creates a new Arbor-managed demo note in the current note folder, or
 - Desktop, Android, and iOS
 - Obsidian `>= 1.7.2`
 - Plugin ID: `arbor`
-- Current version: `0.2.9`
+- [Latest release and changelog](https://github.com/Kpyruy/Arbor/releases/latest)
 
 ## Known Limitations
 
@@ -350,12 +360,11 @@ The command creates a new Arbor-managed demo note in the current note folder, or
 - Undo and redo are Arbor view history, not native editor history.
 - Very large notes can still benefit from future virtualization work.
 - Mobile Tree Overview exports are capped at 4,096 px on a side and 8 MP before rendering, to avoid unsafe raster allocations.
+- Vertical layouts are available in Tree Overview only; Branch Editor remains horizontal.
 
-## Roadmap
+## Feedback and feature requests
 
-- richer block search navigation
-- stronger conflict handling when Arbor view and plain Markdown both change the same note
-- more refinement for very large note trees
+Report bugs or suggest improvements in [GitHub Issues](https://github.com/Kpyruy/Arbor/issues). Check existing issues first; for a bug, include your Obsidian and Arbor versions, device/platform, and steps to reproduce it.
 
 ## Development
 
