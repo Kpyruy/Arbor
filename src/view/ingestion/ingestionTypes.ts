@@ -22,6 +22,7 @@ export interface IngestionTarget {
   readonly filePath: string;
   readonly blockId: string;
   readonly loadEpoch: number;
+  readonly editingSessionId?: string;
 }
 
 export interface NativeDragReader {

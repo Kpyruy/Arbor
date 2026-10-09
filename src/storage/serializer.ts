@@ -10,6 +10,8 @@ import {
 import { hashString, normalizeNewlines } from "../utils";
 import { buildLinearOrder } from "../model/tree";
 import { normalizeBlockAppearance } from "../model/blockAppearance";
+import { maskCodeExamples } from "./codeExamples";
+import type { StorageSourceMap } from "./sourceMap";
 
 const VISIBLE_BLOCK_MARKER_PATTERN = VISIBLE_BLOCK_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const VISIBLE_BLOCK_LINE_PATTERN = new RegExp(
@@ -46,13 +48,13 @@ function countLines(input: string): number {
   return input.split("\n").length - 1;
 }
 
-function buildVisibleBlockMarker(block: Pick<BranchBlock, "id" | "parentId" | "order">): string {
+export function buildVisibleBlockMarker(block: Pick<BranchBlock, "id" | "parentId" | "order">): string {
   const parentId = block.parentId ?? "";
   return `<!-- ${VISIBLE_BLOCK_MARKER} id="${block.id}" parent="${parentId}" order="${block.order}" -->\n`;
 }
 
 function splitChunkContentAndAfter(chunk: string): { content: string; after: string } {
-  const trailingNewlines = chunk.match(/\n*$/)?.[0] ?? "";
+  const trailingNewlines = chunk.match(/(?:\r?\n)*$/)?.[0] ?? "";
   return {
     content: trailingNewlines.length > 0 ? chunk.slice(0, chunk.length - trailingNewlines.length) : chunk,
     after: trailingNewlines
@@ -60,8 +62,7 @@ function splitChunkContentAndAfter(chunk: string): { content: string; after: str
 }
 
 export function parseVisibleBlockMetadata(body: string): BranchTreeMetadata | null {
-  const normalized = normalizeNewlines(body);
-  const lines = normalized.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+  const lines = body.match(/[^\n]*\n|[^\n]+$/g) ?? [];
   const matches: Array<{
     index: number;
     markerLength: number;
@@ -70,32 +71,26 @@ export function parseVisibleBlockMetadata(body: string): BranchTreeMetadata | nu
     order: number;
   }> = [];
   let position = 0;
-  let inFence = false;
+  const visible = maskCodeExamples(body);
 
   for (const line of lines) {
-    const trimmed = line.trimStart();
-    if (/^(```|~~~)/.test(trimmed)) {
-      inFence = !inFence;
-    }
-
-    if (!inFence) {
-      const lineBody = line.endsWith("\n") ? line.slice(0, -1) : line;
-      const match = lineBody.match(VISIBLE_BLOCK_LINE_PATTERN);
-      if (match) {
-        const [, id, parentRaw, orderRaw] = match;
-        const order = Number(orderRaw);
-        if (!Number.isInteger(order) || order < 0) {
-          return null;
-        }
-
-        matches.push({
-          index: position,
-          markerLength: line.length,
-          id,
-          parentRaw,
-          order
-        });
+    const visibleLine = visible.slice(position, position + line.length);
+    const lineBody = visibleLine.replace(/\r?\n$/, "");
+    const match = lineBody.match(VISIBLE_BLOCK_LINE_PATTERN);
+    if (match) {
+      const [, id, parentRaw, orderRaw] = match;
+      const order = Number(orderRaw);
+      if (!Number.isInteger(order) || order < 0) {
+        return null;
       }
+
+      matches.push({
+        index: position,
+        markerLength: line.length,
+        id,
+        parentRaw,
+        order
+      });
     }
 
     position += line.length;
@@ -106,7 +101,7 @@ export function parseVisibleBlockMetadata(body: string): BranchTreeMetadata | nu
   }
 
   const firstMatch = matches[0];
-  const prefix = normalized.slice(0, firstMatch.index);
+  const prefix = body.slice(0, firstMatch.index);
 
   const seenIds = new Set<BranchBlockId>();
   const blocks: BranchTreeMetadata["blocks"] = [];
@@ -120,12 +115,15 @@ export function parseVisibleBlockMetadata(body: string): BranchTreeMetadata | nu
     }
 
     let contentStart = start + match.markerLength;
-    const expectedAnchor = `^arbor-${id}\n`;
-    if (normalized.slice(contentStart, contentStart + expectedAnchor.length) === expectedAnchor) {
-      contentStart += expectedAnchor.length;
+    for (const newline of ["\r\n", "\n"]) {
+      const expectedAnchor = `^arbor-${id}${newline}`;
+      if (body.slice(contentStart, contentStart + expectedAnchor.length) === expectedAnchor) {
+        contentStart += expectedAnchor.length;
+        break;
+      }
     }
-    const nextStart = matches[index + 1]?.index ?? normalized.length;
-    const chunk = normalized.slice(contentStart, nextStart);
+    const nextStart = matches[index + 1]?.index ?? body.length;
+    const chunk = body.slice(contentStart, nextStart);
     const { content, after } = splitChunkContentAndAfter(chunk);
     blocks.push({
       id,
@@ -235,11 +233,12 @@ function parseLegacyMetadataBlock(raw: string): BranchTreeMetadata | null {
   }
 }
 
-export function buildStructureBlock(metadata: BranchTreeMetadata): string {
+export function buildStructureBlock(metadata: BranchTreeMetadata, sourceMap?: StorageSourceMap): string {
   const normalized = normalizeMetadata(metadata);
   const structure = {
     "arbor-plugin": "tree",
     version: 2,
+    ...(sourceMap ? { sourceMap } : {}),
     ...(normalized.overviewOrientation ? { overviewOrientation: normalized.overviewOrientation } : {}),
     blocks: normalized.blocks.map((block) => ({
       id: block.id,
@@ -301,11 +300,13 @@ export function parseStructureBlock(raw: string): BranchTreeMetadata | null {
   }
 }
 
-export function parseStoredMetadataBlock(raw: string): { metadata: BranchTreeMetadata | null; storageFormat: "legacy-v1" | "structure-v2" | null } {
+export function parseStoredMetadataBlock(raw: string): { metadata: BranchTreeMetadata | null; storageFormat: "legacy-v1" | "structure-v2" | null; sourceMap?: unknown } {
   const normalized = raw.trim();
   const structure = parseStructureBlock(normalized);
   if (structure) {
-    return { metadata: structure, storageFormat: "structure-v2" };
+    const payload = normalized.match(/```json\n([\s\S]*?)\n```/)![1];
+    const parsed = JSON.parse(payload) as { sourceMap?: unknown };
+    return { metadata: structure, storageFormat: "structure-v2", sourceMap: parsed.sourceMap };
   }
   return { metadata: parseLegacyMetadataBlock(normalized), storageFormat: "legacy-v1" };
 }

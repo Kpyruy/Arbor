@@ -86,6 +86,7 @@ export interface ParsedBranchDocument {
   metadata: BranchTreeMetadata | null;
   metadataRaw: string;
   storageFormat: ArborStorageFormat;
+  sourceMap?: unknown;
   outputState: ArborOutputState;
   outputRaw: string;
   outputError: string | null;

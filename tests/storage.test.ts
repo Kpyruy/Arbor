@@ -1,10 +1,201 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseBranchDocument, buildBranchDocument } from "../src/storage/document";
+import { parseBranchDocument, buildBranchDocument, updateStoredOverviewOrientation } from "../src/storage/document";
 import { createDefaultOutputState } from "../src/outputProfiles";
 import { buildOutputBlock } from "../src/storage/outputProfiles";
 import { buildStructureBlock, linearizeTree } from "../src/storage/serializer";
 import { loadImportedBranchDocument } from "../src/storage/reconcile";
 import { ArborOutputState, BranchBlock, BranchTreeMetadata } from "../src/types";
+import { fixtureTree, fixtureOutput } from "./helpers/arborFixtures";
+import { validateIncoming } from "../src/view/ingestion/IncomingContent";
+import { appendIncomingContent } from "../src/model/ingestContent";
+
+describe("unfinished source fences at stored control boundaries", () => {
+  const cases = ["```", "````"].flatMap(fence => [false, true].flatMap(customOutput =>
+    ["\n", "\r\n"].flatMap(contentNewline => ["\n", "\r\n"].map(footerNewline =>
+      ({ fence, customOutput, contentNewline, footerNewline })))));
+
+  it.each(cases)("reopens the real appended cards and suffix without closing user code (%j)", ({ fence, customOutput, contentNewline, footerNewline }) => {
+    const tree = fixtureTree();
+    tree.blocks.find(block => block.id === "leaf")!.after = "\n\n";
+    tree.blocks.find(block => block.id === "second")!.after = "";
+    tree.blocks[1].content = `First\n\n\`\`\`\`md\n${buildStructureBlock(tree)}\n\`\`\`\``;
+    tree.blocks[1].appearance = { cardColor: "#123456" };
+    const incoming = `${fence}ts${contentNewline}const unfinished = true;`;
+    expect(validateIncoming(incoming, "markdown").kind).toBe("content");
+    const appended = appendIncomingContent(tree, "first", incoming).metadata;
+    const output = customOutput ? fixtureOutput() : createDefaultOutputState();
+    const body = linearizeTree(appended).body;
+    const canonical = buildBranchDocument("", body, appended, output);
+    const source = body + canonical.slice(body.length).replace(/\n/g, footerNewline);
+    const parsed = parseBranchDocument(source);
+    const reopened = loadImportedBranchDocument(source);
+
+    expect(parsed.storageFormat).toBe("structure-v2");
+    expect(parsed.metadata?.blocks.map(block => [block.id, block.parentId, block.order])).toEqual([
+      ["root", null, 0], ["first", "root", 0], ["second", "root", 1], ["leaf", "first", 0]
+    ]);
+    expect(parsed.body).toBe(body);
+    expect(parsed.outputRaw).toBe(customOutput ? buildOutputBlock(output).replace(/\n/g, footerNewline) : "");
+    expect(parsed.outputError).toBeNull();
+    expect(reopened.origin).toBe("metadata");
+    expect(reopened.metadata.blocks.map(block => [block.id, block.parentId, block.order, block.content, block.after, block.appearance])).toEqual(
+      appended.blocks.map(block => [block.id, block.parentId, block.order, block.content, block.after, block.appearance])
+    );
+    expect(reopened.metadata.blocks[1].content).toBe(`${tree.blocks[1].content}\n\n${incoming}`);
+    expect(reopened.outputState).toEqual(output);
+    expect(buildBranchDocument("", linearizeTree(reopened.metadata).body, reopened.metadata, reopened.outputState)).toBe(canonical);
+
+    const updated = updateStoredOverviewOrientation(source, "vertical-bottom-up", appended);
+    const footerStart = source.lastIndexOf("%% arbor:structure");
+    expect(updated.slice(0, footerStart)).toBe(source.slice(0, footerStart));
+    expect(parseBranchDocument(updated).metadata?.overviewOrientation).toBe("vertical-bottom-up");
+    expect(parseBranchDocument(updated).outputRaw).toBe(parsed.outputRaw);
+    expect(loadImportedBranchDocument(updated).metadata.blocks[1].content).toBe(`${tree.blocks[1].content}\n\n${incoming}`);
+  });
+
+  it("uses stored IDs only to recover unfinished boundaries, not to invent literal cards", () => {
+    const tree = fixtureTree();
+    tree.blocks.find(block => block.id === "leaf")!.after = "\n\n";
+    tree.blocks.find(block => block.id === "second")!.after = "";
+    const incoming = '````md\n<!-- arbor:block:v1 id="example" parent="" order="0" -->\nliteral';
+    expect(validateIncoming(incoming, "markdown").kind).toBe("content");
+    const appended = appendIncomingContent(tree, "first", incoming).metadata;
+    const reopened = loadImportedBranchDocument(buildBranchDocument("", linearizeTree(appended).body, appended));
+    expect(reopened.metadata.blocks.map(block => [block.id, block.content])).toEqual([
+      ["root", "Root"], ["first", `First\n\n${incoming}`], ["second", "Second"], ["leaf", "Leaf"]
+    ]);
+  });
+
+  it("refuses stale evidence when external marker edits remain hidden by unfinished code", () => {
+    const tree = fixtureTree();
+    const appended = appendIncomingContent(tree, "first", "````ts\nconst unfinished = true;").metadata;
+    const source = buildBranchDocument("", linearizeTree(appended).body, appended, fixtureOutput())
+      .replace('id="second" parent="root" order="1"', 'id="second" parent="first" order="2"')
+      .replace("Second", "Externally edited");
+    expect(() => loadImportedBranchDocument(source)).toThrowError(/ambiguous/i);
+  });
+
+  it.each(["```", "````"])("does not let a later card's source fence complete the receiving %s scope", fence => {
+    const tree = fixtureTree();
+    tree.blocks.find(block => block.id === "leaf")!.after = "\n\n";
+    tree.blocks.find(block => block.id === "second")!.after = "";
+    tree.blocks.find(block => block.id === "leaf")!.content = `${fence}ts\nconst child = true;\n${fence}`;
+    const appended = appendIncomingContent(tree, "first", `${fence}ts\nconst unfinished = true;`).metadata;
+    const source = buildBranchDocument("", linearizeTree(appended).body, appended, fixtureOutput());
+    const reopened = loadImportedBranchDocument(source);
+    expect(reopened.metadata.blocks.map(block => [block.id, block.content, block.after])).toEqual(
+      appended.blocks.map(block => [block.id, block.content, block.after])
+    );
+    expect(reopened.outputState).toEqual(fixtureOutput());
+  });
+
+  it("does not turn closed examples of existing card IDs into real boundaries", () => {
+    const tree = fixtureTree();
+    tree.blocks.find(block => block.id === "leaf")!.after = "\n\n";
+    tree.blocks.find(block => block.id === "second")!.after = "";
+    tree.blocks[1].content = '````md\n<!-- arbor:block:v1 id="leaf" parent="first" order="0" -->\nLiteral leaf\n````';
+    const appended = appendIncomingContent(tree, "first", "```ts\nconst unfinished = true;").metadata;
+    const reopened = loadImportedBranchDocument(buildBranchDocument("", linearizeTree(appended).body, appended));
+    expect(reopened.metadata.blocks.map(block => [block.id, block.content, block.after])).toEqual(
+      appended.blocks.map(block => [block.id, block.content, block.after])
+    );
+  });
+
+  it("does not promote fenced example markers from a topology-only footer", () => {
+    const tree = fixtureTree();
+    const body = `Example\n\n\`\`\`\`md\n${linearizeTree(tree).body}\n\`\`\`\``;
+    const reopened = loadImportedBranchDocument(buildBranchDocument("", body, tree));
+    expect(reopened.origin).toBe("imported");
+    expect(reopened.metadata.blocks).toHaveLength(1);
+    expect(reopened.metadata.blocks[0].content).toBe(body);
+    expect(reopened.metadata.blocks[0].id).not.toBe("root");
+  });
+
+  it.each(["nonmanaged", "legacy"])("preserves closed known-ID marker examples in %s notes", format => {
+    const tree = fixtureTree();
+    tree.blocks[1].content = 'Example\n\n````md\n<!-- arbor:block:v1 id="leaf" parent="first" order="0" -->\nliteral\n````';
+    tree.blocks[3].after = "\n\n";
+    tree.blocks[2].after = "";
+    const body = linearizeTree(tree).body;
+    const footer = format === "legacy" ? `\n<!-- arbor:metadata:v1:${Buffer.from(JSON.stringify(tree), "utf8").toString("base64")} -->` : "";
+    const reopened = loadImportedBranchDocument(body + footer);
+    const byId = (left: { id: string }, right: { id: string }) => left.id.localeCompare(right.id);
+    expect(reopened.metadata.blocks.map(({ id, parentId, order, content, after }) => ({ id, parentId, order, content, after })).sort(byId))
+      .toEqual(tree.blocks.map(({ id, parentId, order, content, after }) => ({ id, parentId, order, content, after })).sort(byId));
+  });
+
+  it("does not restore a deleted card from stale structure metadata", () => {
+    const tree = fixtureTree();
+    const edited = structuredClone(tree);
+    edited.blocks = edited.blocks.filter(block => block.id !== "leaf");
+    const source = buildBranchDocument("", linearizeTree(edited).body, tree, fixtureOutput());
+    const reopened = loadImportedBranchDocument(source);
+    expect(reopened.metadata.blocks.map(block => block.id)).toEqual(["root", "first", "second"]);
+  });
+});
+
+describe("literal code read boundaries", () => {
+  it.each(["inline-marker", "fenced-footer"])("keeps accepted %s byte-exact through real serialization and reopen", kind => {
+    const tree = fixtureTree();
+    tree.blocks.find(block => block.id === "leaf")!.after = "\n\n";
+    tree.blocks.find(block => block.id === "second")!.after = "";
+    const content = kind === "inline-marker"
+      ? 'Example: `code\n<!-- arbor:block:v1 id="example" parent="" order="0" -->\ncode`.'
+      : `\`\`\`\`md\n${buildStructureBlock(fixtureTree())}\n\`\`\`\``;
+    expect(validateIncoming(content, "plain").kind).toBe("content");
+    tree.blocks[1].content = content;
+    const source = buildBranchDocument("", linearizeTree(tree).body, tree);
+    const reopened = loadImportedBranchDocument(source);
+    expect(reopened.origin).toBe("metadata");
+    expect(reopened.metadata.blocks).toEqual(tree.blocks);
+    expect(buildBranchDocument("", linearizeTree(reopened.metadata).body, reopened.metadata)).toBe(source);
+  });
+
+  it.each([
+    '```md\n<!-- arbor:block:v1 id="example" parent="" order="0" -->\n^arbor-example\n```',
+    '~~~~md\n~~~\n<!-- arbor:block:v1 id="example" parent="" order="0" -->\n~~~~',
+    `\`\`\`\`md\n${buildOutputBlock(fixtureOutput())}\n\`\`\`\``,
+    '> ```md\n> <!-- arbor:block:v1 id="example" parent="" order="0" -->\n> ```',
+    '- Example:\n  ```md\n  <!-- arbor:block:v1 id="example" parent="" order="0" -->\n  ```'
+  ])("keeps fenced marker, anchor and output examples with real controls untouched (%j)", content => {
+    const tree = fixtureTree();
+    tree.blocks.find(block => block.id === "leaf")!.after = "\n\n";
+    tree.blocks.find(block => block.id === "second")!.after = "";
+    tree.blocks[1].content = content;
+    tree.blocks[1].appearance = { cardColor: "#123456" };
+    const output = fixtureOutput();
+    const source = buildBranchDocument("", linearizeTree(tree).body, tree, output);
+    expect(validateIncoming(content, "plain").kind).toBe("content");
+    const reopened = loadImportedBranchDocument(source);
+    expect(reopened.origin).toBe("metadata");
+    expect(reopened.metadata.blocks).toEqual(tree.blocks);
+    expect(reopened.outputState).toEqual(output);
+    expect(buildBranchDocument("", linearizeTree(reopened.metadata).body, reopened.metadata, reopened.outputState)).toBe(source);
+  });
+
+  it("changes only the actual orientation footer, not the literal fenced structure example", () => {
+    const tree = fixtureTree();
+    tree.blocks[1].content = `\`\`\`\`md\n${buildStructureBlock(tree)}\n\`\`\`\``;
+    const source = buildBranchDocument("", linearizeTree(tree).body, tree, fixtureOutput());
+    const updated = updateStoredOverviewOrientation(source, "vertical-top-down", tree);
+    const before = parseBranchDocument(source);
+    const after = parseBranchDocument(updated);
+    expect(after.body).toBe(before.body);
+    expect(after.outputRaw).toBe(before.outputRaw);
+    expect(after.metadata?.overviewOrientation).toBe("vertical-top-down");
+    expect(loadImportedBranchDocument(updated).metadata.blocks.find(block => block.id === "first")?.content).toBe(tree.blocks[1].content);
+  });
+
+  it("does not extract a literal suffix structure or output example when there is no actual footer", () => {
+    for (const footer of [buildStructureBlock(fixtureTree()), buildOutputBlock(fixtureOutput())]) {
+      const source = `Example\n\n\`\`\`\`md\n${footer}\n\`\`\`\`\n`;
+      const parsed = parseBranchDocument(source);
+      expect(parsed.body).toBe(source);
+      expect(parsed.metadataRaw).toBe("");
+      expect(parsed.outputRaw).toBe("");
+    }
+  });
+});
 
 const complexBlock = [
   "# Heading",

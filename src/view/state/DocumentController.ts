@@ -5,6 +5,7 @@ import { createDefaultOutputState, FULL_OUTPUT_PROFILE_ID, getActiveOutputProfil
 import { buildBranchDocument, parseBranchDocument, updateStoredOverviewOrientation } from "../../storage/document";
 import { normalizeOverviewOrientation } from "../../overviewOrientation";
 import { loadImportedBranchDocument } from "../../storage/reconcile";
+import { StorageAmbiguityError } from "../../storage/sourceMap";
 import { linearizeTree, normalizeMetadata } from "../../storage/serializer";
 import type { ArborOutputProfile, ArborOutputState, BranchHistoryEntry, BranchTreeMetadata, BranchTreeMutationResult, ImportedBranchDocument, ArborOverviewOrientation } from "../../types";
 import { deepClone } from "../../utils";
@@ -138,7 +139,18 @@ export class DocumentController {
     if (!this.state) return null;
     const loaded = this.getLoadedFileIdentity();
     if (!loaded) throw new DocumentLoadChangedError();
+    try {
+      loadImportedBranchDocument(this.state.diskText);
+    } catch (error) {
+      if (!(error instanceof StorageAmbiguityError)) throw error;
+      this.port.notify(error.message);
+      throw error;
+    }
     return loaded;
+  }
+
+  private assertSafeStorageText(text: string): void {
+    loadImportedBranchDocument(text);
   }
 
   private isCurrentLifetime(lifetime: WriteLifetime): boolean {
@@ -158,7 +170,8 @@ export class DocumentController {
       return operation();
     }).catch((error: unknown) => {
       this.port.reportError(`[Arbor] Failed to persist state after ${reason}`, error);
-      this.port.notify(error instanceof DocumentConflictError || error instanceof DocumentLoadChangedError ? error.message : `Arbor could not save the note after "${reason}".`);
+      this.port.notify(error instanceof DocumentConflictError || error instanceof DocumentLoadChangedError || error instanceof StorageAmbiguityError
+        ? error.message : `Arbor could not save the note after "${reason}".`);
       throw error;
     }).finally(() => { this.pendingWrites -= 1; });
     this.writes = write.catch(() => undefined);
@@ -202,6 +215,7 @@ export class DocumentController {
     candidate.linearized = linearizeTree(candidate.metadata);
     const persisted = await this.processWrite(lifetime, text => {
       this.assertLifetime(lifetime);
+      this.assertSafeStorageText(text);
       if (text !== baseline && !this.orientationOnlyChange(baseline, text)) throw new DocumentConflictError(lifetime.path);
       const orientation = normalizeOverviewOrientation(parseBranchDocument(text).metadata?.overviewOrientation);
       if (orientation) candidate.metadata.overviewOrientation = orientation;
@@ -228,6 +242,7 @@ export class DocumentController {
       const baseline = candidate.diskText;
       const persisted = await this.processWrite(lifetime, text => {
         this.assertLifetime(lifetime);
+        this.assertSafeStorageText(text);
         if (text !== baseline && !this.orientationOnlyChange(baseline, text)) throw new DocumentConflictError(lifetime.path);
         return updateStoredOverviewOrientation(text, value, candidate.metadata);
       });
@@ -242,10 +257,21 @@ export class DocumentController {
   async readLoadedFileState(file: TFile, preferredSelectedBlockId: string | null): Promise<{
     state: LoadedFileState; loaded: ImportedBranchDocument; parsed: ReturnType<typeof parseBranchDocument>;
   }> {
+    const readEpoch = this.loadEpoch;
+    const readPath = file.path;
     const text = await this.port.cachedRead(file);
     const parsed = parseBranchDocument(text);
-    const loaded = loadImportedBranchDocument(text);
-    return { state: buildLoadedFileState(parsed, loaded, preferredSelectedBlockId, text), loaded, parsed };
+    try {
+      const loaded = loadImportedBranchDocument(text);
+      return { state: buildLoadedFileState(parsed, loaded, preferredSelectedBlockId, text), loaded, parsed };
+    } catch (error) {
+      if (error instanceof StorageAmbiguityError && this.loadEpoch === readEpoch
+        && this.port.getFile() === file && file.path === readPath) {
+        this.invalidateLoad();
+        this.port.notify(error.message);
+      }
+      throw error;
+    }
   }
 
   async persistState(reason: string): Promise<void> {

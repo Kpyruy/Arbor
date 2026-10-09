@@ -6,6 +6,8 @@ import { ImportedBranchDocument, BranchBlock, BranchTreeMetadata } from "../type
 import { normalizeNewlines, nowIso } from "../utils";
 import { parseBranchDocument } from "./document";
 import { computeBodyHash, linearizeTree, linearizeTreeLegacy, normalizeMetadata, parseVisibleBlockMetadata } from "./serializer";
+import { readSourceMap, StorageAmbiguityError } from "./sourceMap";
+import { maskCodeExamples } from "./codeExamples";
 
 function withOutputState(
   imported: Omit<ImportedBranchDocument, "outputState" | "outputRaw" | "outputError">,
@@ -222,7 +224,25 @@ function mergeMarkerMetadataWithStoredExtras(
 
 export function loadImportedBranchDocument(text: string): ImportedBranchDocument {
   const parsed = parseBranchDocument(text);
+  if (parsed.metadata && parsed.storageFormat === "structure-v2") {
+    const recovered = readSourceMap(parsed.body, parsed.metadata, parsed.sourceMap);
+    if (recovered) return withOutputState({ metadata: recovered, origin: "metadata", staleMetadata: null, needsVisibleMarkerMigration: false }, parsed);
+  }
   const visibleMarkerMetadata = parseVisibleBlockMetadata(parsed.body);
+  const rawMarkers = [...parsed.body.matchAll(/^<!--\s*arbor:block:v1\s+id="([^"]+)"\s+parent="[^"]*"\s+order="\d+"\s*-->\r?$/gm)];
+  const visibleBody = maskCodeExamples(parsed.body);
+  const exposedMarkers = rawMarkers.filter(marker => visibleBody.slice(marker.index, marker.index + marker[0].length) === marker[0]);
+  const exposedIds = exposedMarkers.map(marker => marker[1]);
+  if (new Set(exposedIds).size !== exposedIds.length) throw new StorageAmbiguityError();
+  if (parsed.metadata) {
+    const storedIds = new Set(parsed.metadata.blocks.map(block => block.id));
+    const recoveredIds = new Set(visibleMarkerMetadata?.blocks.map(block => block.id));
+    const unfinishedVisible = maskCodeExamples(parsed.body, false);
+    const hasManagedBoundaries = exposedMarkers.length > 0 || parsed.sourceMap !== undefined;
+    if (rawMarkers.some(marker => storedIds.has(marker[1]) && !recoveredIds.has(marker[1]) && (
+      hasManagedBoundaries || unfinishedVisible.slice(marker.index, marker.index + marker[0].length) === marker[0]
+    ))) throw new StorageAmbiguityError();
+  }
   const hasStoredMetadataBlock = parsed.metadataRaw.length > 0;
 
   if (hasStoredMetadataBlock && visibleMarkerMetadata) {

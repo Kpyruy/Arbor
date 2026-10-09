@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { BranchHistory } from "../src/history";
 import { setActiveOutputProfile } from "../src/outputProfiles";
 import { ArborOutputState, BranchHistoryEntry, BranchTreeMetadata } from "../src/types";
+import { appendIncomingContent } from "../src/model/ingestContent";
+import { fixtureTree, fixtureOutput } from "./helpers/arborFixtures";
+import { buildBranchDocument } from "../src/storage/document";
+import { linearizeTree } from "../src/storage/serializer";
+import { loadImportedBranchDocument } from "../src/storage/reconcile";
 
 function tree(content: string): BranchTreeMetadata {
   return {
@@ -32,6 +37,27 @@ function snapshot(
 }
 
 describe("branch history", () => {
+  it("keeps one same-receiver append snapshot with exact references through undo, redo and reopen", () => {
+    const history = new BranchHistory();
+    const before = fixtureTree();
+    const output = fixtureOutput();
+    const markdown = '> quote\n\n[[Books/A.pdf#page=7|Source]]';
+    const appended = appendIncomingContent(before, "first", markdown);
+    const current: BranchHistoryEntry = { label: "Append incoming content", metadata: appended.metadata, outputState: output, selectedBlockId: "first" };
+    history.push(current.label, before, output, "second");
+    const previous = history.undo(current)!;
+    expect(previous.metadata).toEqual(before);
+    expect(previous.selectedBlockId).toBe("second");
+    expect(history.canUndo()).toBe(false);
+    const next = history.redo(previous)!;
+    expect(next).toEqual(current);
+    expect(next.metadata.blocks).toHaveLength(before.blocks.length);
+    const source = buildBranchDocument("", linearizeTree(next.metadata).body, next.metadata, next.outputState);
+    const reopened = loadImportedBranchDocument(source);
+    expect(reopened.metadata.blocks.find(block => block.id === "first")?.content).toBe(`First\n\n${markdown}`);
+    expect(reopened.outputState).toEqual(output);
+    expect(buildBranchDocument("", linearizeTree(reopened.metadata).body, reopened.metadata, reopened.outputState)).toBe(source);
+  });
   it("restores cloned tree and output state snapshots through undo and redo", () => {
     const history = new BranchHistory();
     const beforeTree = tree("Before");

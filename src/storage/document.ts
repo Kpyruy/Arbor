@@ -6,8 +6,10 @@ import { buildStructureBlock, parseStoredMetadataBlock } from "./serializer";
 import { normalizeNewlines } from "../utils";
 import { normalizeOverviewOrientation } from "../overviewOrientation";
 import type { ArborOverviewOrientation } from "../types";
+import { maskCodeExamples } from "./codeExamples";
+import { buildSourceMap } from "./sourceMap";
 
-const FRONTMATTER_PATTERN = /^---\n[\s\S]*?\n---\n?/;
+const FRONTMATTER_PATTERN = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n)?/;
 const METADATA_MARKER_PATTERN = LEGACY_METADATA_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const STRUCTURE_MARKER_PATTERN = STRUCTURE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const OUTPUT_MARKER_PATTERN = OUTPUT_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -16,30 +18,38 @@ const MULTILINE_PATTERN = new RegExp(`\\n?<!--\\s*${METADATA_MARKER_PATTERN}\\s*
 const OUTPUT_BLOCK_PATTERN = new RegExp(`\\r?\\n?(%%\\s*${OUTPUT_MARKER_PATTERN}\\s*\\r?\\n\`\`\`json\\r?\\n[\\s\\S]*?\\r?\\n\`\`\`\\r?\\n%%)\\s*$`);
 const STRUCTURE_BLOCK_PATTERN = new RegExp(`\\r?\\n?%%\\s*${STRUCTURE_MARKER_PATTERN}\\s*\\r?\\n\`\`\`json\\r?\\n[\\s\\S]*?\\r?\\n\`\`\`\\r?\\n%%\\s*$`);
 
-export function parseBranchDocument(text: string): ParsedBranchDocument {
-  const rawStructureMatch = text.match(STRUCTURE_BLOCK_PATTERN);
-  const rawWithoutStructure = rawStructureMatch?.index !== undefined
-    ? text.slice(0, rawStructureMatch.index)
-    : text;
-  const rawOutputMatch = rawWithoutStructure.match(OUTPUT_BLOCK_PATTERN);
-  const preservedOutputRaw = rawOutputMatch?.[1] ?? "";
+function matchControlFooter(text: string, marker: string, pattern: RegExp): RegExpMatchArray | null {
+  const headers = [...text.matchAll(new RegExp(`^%%[ \\t]*${marker}[ \\t]*\\r?$`, "gm"))];
+  const header = headers[headers.length - 1];
+  if (header?.index === undefined) return null;
+  const prefix = text.slice(0, header.index + header[0].length);
+  if (maskCodeExamples(prefix, false).slice(header.index) !== header[0]) return null;
+  let start = header.index;
+  if (start > 0 && text[start - 1] === "\n") start--;
+  if (start > 0 && text[start - 1] === "\r") start--;
+  const match = text.slice(start).match(pattern);
+  if (!match || match.index !== 0) return null;
+  match.index = start;
+  match.input = text;
+  return match;
+}
 
-  const normalized = normalizeNewlines(text);
-  const frontmatterMatch = normalized.match(FRONTMATTER_PATTERN);
+export function parseBranchDocument(text: string): ParsedBranchDocument {
+  const frontmatterMatch = text.match(FRONTMATTER_PATTERN);
   const frontmatter = frontmatterMatch?.[0] ?? "";
-  let remaining = normalized.slice(frontmatter.length);
+  let remaining = text.slice(frontmatter.length);
 
   let metadataRaw = "";
-  const structureMatch = remaining.match(STRUCTURE_BLOCK_PATTERN);
+  const structureMatch = matchControlFooter(remaining, STRUCTURE_MARKER_PATTERN, STRUCTURE_BLOCK_PATTERN);
   if (structureMatch?.index !== undefined) {
     metadataRaw = structureMatch[0].trimStart();
     remaining = remaining.slice(0, structureMatch.index);
   }
 
-  let outputRaw = preservedOutputRaw;
-  const outputMatch = remaining.match(OUTPUT_BLOCK_PATTERN);
+  let outputRaw = "";
+  const outputMatch = matchControlFooter(remaining, OUTPUT_MARKER_PATTERN, OUTPUT_BLOCK_PATTERN);
   if (outputMatch?.index !== undefined) {
-    outputRaw ||= outputMatch[1];
+    outputRaw = outputMatch[1];
     remaining = remaining.slice(0, outputMatch.index);
   }
 
@@ -53,8 +63,8 @@ export function parseBranchDocument(text: string): ParsedBranchDocument {
     }
   }
 
-  const stored = metadataRaw ? parseStoredMetadataBlock(metadataRaw) : { metadata: null, storageFormat: null };
-  const parsedOutput = outputRaw ? parseOutputBlock(outputRaw) : null;
+  const stored = metadataRaw ? parseStoredMetadataBlock(normalizeNewlines(metadataRaw)) : { metadata: null, storageFormat: null };
+  const parsedOutput = outputRaw ? parseOutputBlock(normalizeNewlines(outputRaw)) : null;
 
   return {
     frontmatter,
@@ -62,6 +72,7 @@ export function parseBranchDocument(text: string): ParsedBranchDocument {
     metadata: stored.metadata,
     metadataRaw,
     storageFormat: stored.storageFormat,
+    sourceMap: stored.sourceMap,
     outputState: parsedOutput?.ok ? parsedOutput.state : createDefaultOutputState(),
     outputRaw,
     outputError: parsedOutput && !parsedOutput.ok ? parsedOutput.error : null
@@ -91,7 +102,7 @@ export function buildBranchDocument(
   }
 
   if (metadata) {
-    const metadataBlock = buildStructureBlock(metadata);
+    const metadataBlock = buildStructureBlock(metadata, buildSourceMap(body, metadata));
     sections.push("\n");
     sections.push(metadataBlock);
     sections.push("\n");
@@ -106,7 +117,7 @@ export function updateStoredOverviewOrientation(text: string, value: ArborOvervi
   if (value !== null && !orientation) throw new Error("Invalid Tree Overview orientation");
   const parsed = parseBranchDocument(text);
   if (parsed.metadataRaw && !parsed.metadata) throw new Error("Cannot update malformed Arbor metadata");
-  const match = text.match(STRUCTURE_BLOCK_PATTERN);
+  const match = matchControlFooter(text, STRUCTURE_MARKER_PATTERN, STRUCTURE_BLOCK_PATTERN);
   if (match?.index !== undefined) {
     const payload = match[0].match(/```json\r?\n([\s\S]*?)\r?\n```/);
     if (!payload || !parsed.metadata) throw new Error("Cannot update Arbor structure");
