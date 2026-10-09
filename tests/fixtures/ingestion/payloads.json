@@ -1,0 +1,66 @@
+{
+  "captureStatus": "positive-native-annotation-file-link-and-book-export-captures; PDF-page-selection-and-Arbor-round-trip-pending",
+  "destinationPath": "Projects/Study.md",
+  "provenance": {
+    "pdf": "Source-derived reference syntax from PDF++ SHA 6a3218b9c506076b405438489e614bc9e22b833b; not a captured drag.",
+    "book": "Initial case is source-derived from Book Note SHA dcc189dfb16f26a1787bcf4c1146671065dee49e. The book-export-captured case is actual Book Note 0.27.4 Markdown from the real Export annotations button after provider API createHighlight seeded an annotation using the loaded chapter's actual Range CFI; not trusted annotation UI or drag evidence. Transfer MIME is a synthetic decoder replay, not captured getData.",
+    "core": "Initial cases are synthetic; nativeCaptures below were observed through trusted CDP pointer drags in real Niiga Obsidian panes using synthetic sources."
+  },
+  "providerVersions": { "obsidian": "1.14.4", "pdf-plus": "0.40.31", "book-note": "0.27.4" },
+  "nativeCaptures": [
+    {
+      "id": "pdf-plus-annotation-native",
+      "destinationPath": "Arbor ingestion QA/Receiver.md",
+      "captureMethod": "trusted CDP pointer drag, instrumented native Markdown destination, no Arbor insertion",
+      "snapshot": { "types": ["text/plain", "chromium/x-drag-id"], "markdown": "", "plain": "PDF annotation", "uriList": "", "hasFiles": false, "ownArborDrag": false },
+      "native": { "source": "pdf-plus", "type": "pdf-annotation", "title": "PDF annotation", "getTextType": "function" },
+      "generatedMarkdown": "> [!PDF|] [[Arbor annotated ingestion QA.pdf#page=1&annotation=7R|Arbor annotated ingestion QA, p.1]]\n> > A copied excerpt keeps its source reference\n> \n> "
+    },
+    {
+      "id": "core-file-native",
+      "destinationPath": "Arbor ingestion QA/Receiver.md",
+      "captureMethod": "trusted CDP file explorer drag, instrumented native Markdown destination",
+      "native": { "type": "file", "title": "Arbor annotated ingestion QA.pdf", "filePath": "90 System/Attachments/Arbor annotated ingestion QA.pdf" }
+    },
+    {
+      "id": "core-link-alias-native",
+      "destinationPath": "Arbor ingestion QA/Receiver.md",
+      "captureMethod": "trusted CDP rendered link drag, instrumented native Markdown destination",
+      "native": { "type": "link", "title": "Source alias", "linktext": "90 System/Attachments/Arbor annotated ingestion QA.pdf#page=1&annotation=7R", "sourcePath": "Arbor ingestion QA/Link source.md", "filePath": "90 System/Attachments/Arbor annotated ingestion QA.pdf" }
+    }
+  ],
+  "transfers": [
+    {
+      "id": "pdf-reference-source-derived",
+      "snapshot": {
+        "types": ["text/markdown", "text/plain"],
+        "markdown": "> Excerpt\n\n[[Books/Medicine.pdf#page=17&selection=1,2,3,4&annotation=abc|Source]]",
+        "plain": "Excerpt", "uriList": "", "hasFiles": false, "ownArborDrag": false
+      },
+      "expected": { "markdown": "> Excerpt\n\n[[Books/Medicine.pdf#page=17&selection=1,2,3,4&annotation=abc|Source]]", "via": "markdown" }
+    },
+    {
+      "id": "book-export-source-derived",
+      "snapshot": {
+        "types": ["text/plain"], "markdown": "",
+        "plain": "> Excerpt\n\n[Source](obsidian://book-note?file=Books%2FA.epub&id=mark-1)",
+        "uriList": "", "hasFiles": false, "ownArborDrag": false
+      },
+      "expected": { "markdown": "> Excerpt\n\n[Source](obsidian://book-note?file=Books%2FA.epub&id=mark-1)", "via": "plain" }
+    },
+    {
+      "id": "book-export-captured",
+      "captureMethod": "Real Export annotations button in Niiga; annotation seeded with provider createHighlight API and actual loaded chapter Range CFI. Synthetic MIME replay, no trusted annotation UI, no Book Note drag or Arbor round-trip proof.",
+      "sourcePath": "90 System/Attachments/Arbor ingestion QA-notes.md",
+      "snapshot": {
+        "types": ["text/markdown"],
+        "markdown": "> [!book-note-epub|yellow] 90 System/Attachments/Arbor ingestion QA.epub · Reference capture - 2026-10-09T10:56:39.872Z ^epub-4d952ccd-3db0-489e-a3ed-ea86396632c6\n> A copied excerpt keeps its source reference.\n>\n> [Back to source](obsidian://book-note?file=90%20System%2FAttachments%2FArbor%20ingestion%20QA.epub&id=4d952ccd-3db0-489e-a3ed-ea86396632c6)\n> <span style=\"display:none\" data-book-note-id=\"4d952ccd-3db0-489e-a3ed-ea86396632c6\" data-book-note-mode=\"epub\" data-book-note-cfi=\"epubcfi(/6/2!/4,/4,/4)\" data-book-note-source-path=\"90 System/Attachments/Arbor ingestion QA.epub\"></span>\n",
+        "plain": "", "uriList": "", "hasFiles": false, "ownArborDrag": false
+      },
+      "expected": {
+        "markdown": "> [!book-note-epub|yellow] 90 System/Attachments/Arbor ingestion QA.epub · Reference capture - 2026-10-09T10:56:39.872Z ^epub-4d952ccd-3db0-489e-a3ed-ea86396632c6\n> A copied excerpt keeps its source reference.\n>\n> [Back to source](obsidian://book-note?file=90%20System%2FAttachments%2FArbor%20ingestion%20QA.epub&id=4d952ccd-3db0-489e-a3ed-ea86396632c6)\n> <span style=\"display:none\" data-book-note-id=\"4d952ccd-3db0-489e-a3ed-ea86396632c6\" data-book-note-mode=\"epub\" data-book-note-cfi=\"epubcfi(/6/2!/4,/4,/4)\" data-book-note-source-path=\"90 System/Attachments/Arbor ingestion QA.epub\"></span>\n",
+        "via": "markdown"
+      }
+    }
+  ]
+}
