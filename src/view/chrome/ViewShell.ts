@@ -1,3 +1,4 @@
+import { runAsyncAction } from "../runtime/asyncActions";
 import { Menu, Platform, setIcon } from "obsidian";
 import type { ArborLayoutDirection, ArborOverviewOrientation, ArborPresentationMode } from "../../types";
 import { getChildArrowIcon, getParentArrowIcon } from "../../layoutDirection";
@@ -133,7 +134,7 @@ export class ViewShell {
       attr: { type: "button", "aria-label": "Open in Markdown" }
     });
     setIcon(markdownButtonEl, "file-text");
-    markdownButtonEl.addEventListener("click", () => void this.port.toolbar.openMarkdown());
+    markdownButtonEl.addEventListener("click", () => runAsyncAction(this.port.toolbar.openMarkdown()));
     markdownButtonEl.addEventListener("mousedown", (event) => event.stopPropagation());
     const themeButtonEl = frameEl.createEl("button", {
       cls: "arbor-theme-button",
@@ -266,7 +267,7 @@ export class ViewShell {
     if (this.port.getSession()) {
       dock.addClass("is-editing");
       button("Cancel", "x", () => this.port.dock.cancel(), false, true);
-      button("Save", "check", () => void this.port.dock.save(), false, true).addClass("mod-cta");
+      button("Save", "check", () => runAsyncAction(this.port.dock.save()), false, true).addClass("mod-cta");
       return;
     }
     dock.removeClass("is-editing");
@@ -309,11 +310,11 @@ export class ViewShell {
         item
           .setTitle(id ? "Create child" : "Create root block")
           .setIcon("git-branch")
-          .onClick(() => void (id ? this.port.dock.createChild() : this.port.dock.createRoot()))
+          .onClick(() => runAsyncAction((id ? this.port.dock.createChild() : this.port.dock.createRoot())))
       );
       if (id) {
         menu.addItem((item) =>
-          item.setTitle("Create sibling below").setIcon("plus").onClick(() => void this.port.dock.createSibling())
+          item.setTitle("Create sibling below").setIcon("plus").onClick(() => runAsyncAction(this.port.dock.createSibling()))
         );
       }
       const rect = add.getBoundingClientRect();

@@ -8,6 +8,8 @@ function controllerFixture() {
   const loaded = fixtureLoaded("draft");
   let file = { path: "A.md" };
   let text = buildBranchDocument("---\ntitle: Note\n---\n", loaded.linearized.body, loaded.metadata, loaded.outputState);
+  loaded.diskText = text;
+  loaded.frontmatter = "---\ntitle: Note\n---\n";
   const port: DocumentPort = {
     getFile: () => file as never, cachedRead: async () => text,
     process: async (_file, transform) => { text = transform(text); return text; },
@@ -59,7 +61,7 @@ describe("note orientation persistence", () => {
     await Promise.resolve();
     fixture.switchFile();
     gate.resolve();
-    await save;
+    await expect(save).rejects.toMatchObject({ name: "DocumentLoadChangedError" });
     expect(fixture.controller.getState()!.metadata.overviewOrientation).toBeUndefined();
   });
 

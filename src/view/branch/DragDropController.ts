@@ -1,3 +1,4 @@
+import { runAsyncAction } from "../runtime/asyncActions";
 import { canStartCardDrag } from "../../cardViewport";
 import { moveBlockToParentAtIndex } from "../../model/tree";
 import { findRenderedCardLink } from "../navigation/CardLinkController";
@@ -146,7 +147,7 @@ export class DragDropController {
     event.preventDefault();
     const column = this.port.getColumn((event.currentTarget as HTMLElement).dataset.columnKey ?? "");
     if (column) {
-      void this.applyDrop(column);
+      runAsyncAction(this.applyDrop(column));
     }
   }
 

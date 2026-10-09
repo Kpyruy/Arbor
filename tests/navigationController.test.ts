@@ -110,6 +110,19 @@ function renderedLinkEvent(type = "click", button = 0) {
 }
 
 describe("NavigationController", () => {
+  it("catches a failed write at the keyboard shortcut boundary", async () => {
+    const fixture = createController();
+    const failure = Error("disk full");
+    fixture.actions.undo.mockImplementation(async () => { throw failure; });
+    const errors: unknown[] = [];
+    const reporting = vi.spyOn(console, "error").mockImplementation((_message, error) => { errors.push(error); });
+    try {
+      fixture.controller.handleHistoryShortcut(keyEvent("z", { code: "KeyZ", ctrlKey: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(errors).toEqual([failure]);
+    } finally { reporting.mockRestore(); }
+  });
   let controller: NavigationController | null = null;
 
   afterEach(() => {

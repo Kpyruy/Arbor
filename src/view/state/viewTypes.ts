@@ -1,3 +1,4 @@
+import type { TFile } from "obsidian";
 import type {
   ArborBlockColorResolution,
   ArborOutputProfile,
@@ -35,7 +36,17 @@ export interface BranchSearchResult {
 
 export type EditingOrigin = "card" | "preview" | "overview";
 
+export interface LoadedFileIdentity {
+  readonly file: TFile;
+  readonly path: string;
+  readonly epoch: number;
+}
+
 export interface EditingSession {
+  readonly draftId?: string;
+  readonly filePath?: string;
+  readonly loadedFile?: LoadedFileIdentity;
+  recoveryId?: string;
   blockId: BranchBlockId;
   originalContent: string;
   value: string;
@@ -52,6 +63,7 @@ export interface OverviewEditorSelectionSnapshot {
 }
 
 export interface LoadedFileState {
+  diskText: string;
   frontmatter: string;
   metadata: BranchTreeMetadata;
   outputState: ArborOutputState;

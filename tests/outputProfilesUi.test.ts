@@ -233,26 +233,27 @@ describe("Output Profiles manager UI", () => {
     }
   });
 
-  it("ignores owned and in-flight writes, then reloads an external modification", async () => {
+  it("does not let an owned-write marker hide an external modification; defers reload during writes", async () => {
     const pending = deferred();
     const view = createProfileView(pending.promise);
     let reloads = 0;
     view.onLoadFile = async () => { reloads += 1; };
     view.plugin.consumeOwnWrite = () => true;
     await view.handleFileModified(view.file);
-    expect(reloads).toBe(0);
+    expect(reloads).toBe(1);
 
     view.plugin.consumeOwnWrite = () => false;
     const activation = view.applyActiveOutputProfile(outputState("draft"));
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
     expect(view.documentController.isWriting()).toBe(true);
     await view.handleFileModified(view.file);
-    expect(reloads).toBe(0);
+    expect(reloads).toBe(1);
     pending.resolve();
     await activation;
     await view.handleFileModified(view.file);
-    expect(reloads).toBe(1);
+    expect(reloads).toBe(2);
   });
 
   it("warns about an external write without reloading or losing an active draft", async () => {
@@ -527,7 +528,7 @@ describe("Output Profiles manager UI", () => {
     });
   });
 
-  it("renders an active profile before its asynchronous persistence finishes", async () => {
+  it("renders an active profile only after its asynchronous persistence finishes", async () => {
     const pendingSave = deferred();
     const renderedProfileIds: string[] = [];
     const view = createProfileView(pendingSave.promise);
@@ -537,12 +538,14 @@ describe("Output Profiles manager UI", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(renderedProfileIds).toEqual(["draft"]);
+    expect(renderedProfileIds).toEqual([]);
+    expect(view.state!.outputState.activeProfileId).toBe("full");
     pendingSave.resolve();
     await expect(activation).resolves.toMatchObject({ activeProfileId: "draft" });
+    expect(renderedProfileIds).toEqual(["draft"]);
   });
 
-  it.each(["branchRenderer", "overview"] as const)("updates visible %s cards through the facade before profile persistence finishes", async (renderer) => {
+  it.each(["branchRenderer", "overview"] as const)("updates visible %s cards through the facade only after profile persistence finishes", async (renderer) => {
     const pendingSave = deferred();
     const classNames = new Set<string>();
     const attributes = new Map<string, string>();
@@ -565,10 +568,12 @@ describe("Output Profiles manager UI", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(classNames.has("is-output-excluded-direct")).toBe(true);
-    expect(attributes.get("aria-label")).toContain("Excluded directly from output profile Draft");
+    expect(classNames.has("is-output-excluded-direct")).toBe(false);
+    expect(attributes.has("aria-label")).toBe(false);
     pendingSave.resolve();
     await activation;
+    expect(classNames.has("is-output-excluded-direct")).toBe(true);
+    expect(attributes.get("aria-label")).toContain("Excluded directly from output profile Draft");
   });
 
   it("keeps only the accessible Obsidian tooltip on excluded cards", () => {

@@ -249,7 +249,8 @@ describe("orientation-only lifecycle", () => {
     expect(parseBranchDocument(harness.disk.get("A.md")!).body).toBe(parseBranchDocument(source!).body);
     expect(parseBranchDocument(harness.disk.get("A.md")!).metadata?.overviewOrientation).toBe("vertical-bottom-up");
     expect(session.value).toBe("Unsaved draft");
-    expect(harness.view.documentController.getState()).toBe(state);
+    expect(harness.view.documentController.getState()!.metadata.blocks).toEqual(state.metadata.blocks);
+    expect(render.mock.calls.length).toBeGreaterThan(0);
     expect(JSON.stringify(history)).toBe(historyBefore);
     expect(harness.writes.map(write => write.path)).toEqual(["A.md", "A.md"]);
   });
@@ -661,14 +662,15 @@ describe("ArborView load lifecycle", () => {
 
     harness.setFile(harness.files.b);
     const loadingB = harness.view.onLoadFile(harness.files.b);
-    await waitUntil(() => harness.processWaiters.length === 2);
+    await waitUntil(() => harness.view.documentController.getState()?.metadata.blocks[0]?.id === "b-block");
     const newerOverlay = harness.view.loadingState;
     expect(newerOverlay).not.toBeNull();
 
     harness.processWaiters[0].resolve(undefined);
-    await loadingA;
+    await expect(loadingA).rejects.toMatchObject({ name: "DocumentLoadChangedError" });
 
     expect(harness.view.loadingState).toBe(newerOverlay);
+    await waitUntil(() => harness.processWaiters.length === 2);
     harness.processWaiters[1].resolve(undefined);
     await loadingB;
     expect(harness.view.loadingState).toBeNull();
@@ -746,7 +748,7 @@ describe("ArborView load lifecycle", () => {
     port.getFile = () => harness.files.b;
     controller.replaceLoadedState(second.state);
     pendingProcess.resolve(harness.disk.get(harness.files.a.path)!);
-    await savingA;
+    await expect(savingA).resolves.toBeUndefined();
 
     expect(harness.writes).toHaveLength(1);
     expect(harness.writes[0].path).toBe(harness.files.a.path);

@@ -1,3 +1,4 @@
+import { runAsyncAction } from "../runtime/asyncActions";
 import { getBlock, getChildren, getFirstChildBlock, getNextSibling, getParentBlock, getPreferredChildBlock, getPreviousSibling } from "../../model/tree";
 import { resolveBranchCardInteraction } from "../../cardInteraction";
 import { findRenderedCardLink } from "./CardLinkController";
@@ -219,8 +220,8 @@ export class NavigationController {
     if (!(event.ctrlKey || event.metaKey) || event.altKey || event.code !== "KeyZ") return false;
     event.preventDefault();
     event.stopPropagation();
-    if (event.shiftKey) void this.actions.redo();
-    else void this.actions.undo();
+    if (event.shiftKey) runAsyncAction(this.actions.redo());
+    else runAsyncAction(this.actions.undo());
     return true;
   }
 
@@ -231,22 +232,22 @@ export class NavigationController {
     const keys = getOverviewDirectionKeys(direction, this.read.getMode() === "overview" ? this.getOverviewOrientation() : "horizontal");
     if (event.key === keys.child) {
       event.preventDefault();
-      void this.actions.createChild();
+      runAsyncAction(this.actions.createChild());
       return true;
     }
     if (event.key === keys.previous) {
       event.preventDefault();
-      void this.actions.createSiblingAbove();
+      runAsyncAction(this.actions.createSiblingAbove());
       return true;
     }
     if (event.key === keys.next) {
       event.preventDefault();
-      void this.actions.createSiblingBelow();
+      runAsyncAction(this.actions.createSiblingBelow());
       return true;
     }
     if (event.key !== keys.parent || !getParentBlock(state.metadata, state.selectedBlockId)) return false;
     event.preventDefault();
-    void this.actions.createParentLevelBlock();
+    runAsyncAction(this.actions.createParentLevelBlock());
     return true;
   }
 
@@ -266,7 +267,7 @@ export class NavigationController {
   private handleDeleteShortcut(event: KeyboardEvent): boolean {
     if (!["Backspace", "Delete"].includes(event.key) || event.shiftKey || event.metaKey || event.ctrlKey) return false;
     event.preventDefault();
-    void this.actions.deleteSelectedBlock();
+    runAsyncAction(this.actions.deleteSelectedBlock());
     return true;
   }
 }

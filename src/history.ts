@@ -62,6 +62,14 @@ export class BranchHistory {
     this.redoStack = [];
   }
 
+  peekUndo(): BranchHistoryEntry | null {
+    return deepClone(this.undoStack[this.undoStack.length - 1] ?? null);
+  }
+
+  peekRedo(): BranchHistoryEntry | null {
+    return deepClone(this.redoStack[this.redoStack.length - 1] ?? null);
+  }
+
   canUndo(): boolean {
     return this.undoStack.length > 0;
   }

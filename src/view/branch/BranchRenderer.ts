@@ -1,3 +1,4 @@
+import { runAsyncAction } from "../runtime/asyncActions";
 import { Menu } from "obsidian";
 import { canDragCard, hasVerticalOverflow, resolveColumnWheelNavigation } from "../../cardViewport";
 import { getChildArrowIcon, getHorizontalWheelDelta } from "../../layoutDirection";
@@ -143,7 +144,7 @@ export class BranchRenderer {
       this.rootEmptyEl = root.createDiv({ cls: "arbor-root-empty" });
       this.rootEmptyEl.createEl("p", { text: "This note has no branch blocks yet." });
       const button = this.rootEmptyEl.createEl("button", { text: "Create root block" });
-      button.addEventListener("click", () => void this.port.createRootBlock());
+      button.addEventListener("click", () => runAsyncAction(this.port.createRootBlock()));
       return;
     }
     this.rootEmptyEl?.remove();
@@ -222,7 +223,7 @@ export class BranchRenderer {
       event.preventDefault();
       const column = this.getColumn(cardsEl.dataset.columnKey ?? "");
       if (column) {
-        void this.port.events.columnDrop(column);
+        runAsyncAction(this.port.events.columnDrop(column));
       }
     });
     this.columnElementMap.set(columnKey, columnEl);
@@ -258,7 +259,7 @@ export class BranchRenderer {
         text: "Expand branch",
         attr: { type: "button" }
       });
-      expandButton.addEventListener("click", () => void this.port.setCollapsedState(column.collapsedBlockId!, false));
+      expandButton.addEventListener("click", () => runAsyncAction(this.port.setCollapsedState(column.collapsedBlockId!, false)));
       return;
     }
 
@@ -274,7 +275,7 @@ export class BranchRenderer {
           this.port.selectBlock(column.parentId);
           const menu = new Menu();
           menu.addItem((item) =>
-            item.setTitle("Create child block").setIcon(getChildArrowIcon(this.port.read.getSettings().layoutDirection)).onClick(() => void this.port.createChild())
+            item.setTitle("Create child block").setIcon(getChildArrowIcon(this.port.read.getSettings().layoutDirection)).onClick(() => runAsyncAction(this.port.createChild()))
           );
           menu.showAtMouseEvent(event);
         });

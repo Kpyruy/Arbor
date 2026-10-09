@@ -29,6 +29,7 @@ import { ThemeStudioModal } from "./themeStudio";
 import { getNextNumberedName } from "./utils";
 import { ArborLoadingView } from "./view/ArborLoadingView";
 import { ArborView } from "./view/ArborView";
+import { DraftRecoveryStore } from "./view/editor/DraftRecoveryStore";
 
 interface ArborPluginData {
   settings: ArborSettings;
@@ -37,6 +38,7 @@ interface ArborPluginData {
 }
 
 export default class ArborPlugin extends Plugin {
+  readonly draftRecoveryStore = new DraftRecoveryStore();
   settings: ArborSettings = DEFAULT_SETTINGS;
   private readonly ownWrites = new Map<string, number>();
   private readonly suppressedAutoOpen = new AutoOpenSuppression(1_000);
@@ -68,7 +70,7 @@ export default class ArborPlugin extends Plugin {
         void this.refreshManagedStatus(file);
       }
       this.getBranchViews().forEach((view) => {
-        void view.handleFileModified(file);
+        void view.handleFileModified(file).catch(error => console.error("[Arbor] Could not refresh modified note", error));
       });
     }));
     this.registerEvent(this.app.vault.on("delete", (file) => {
@@ -202,11 +204,11 @@ export default class ArborPlugin extends Plugin {
   refreshAllBranchViews(options?: { layoutDirectionChanged?: boolean }): void {
     this.getBranchViews().forEach((view) => {
       if (options?.layoutDirectionChanged) {
-        void view.refreshLayoutDirection();
+        void view.refreshLayoutDirection().catch(error => console.error("[Arbor] Could not refresh layout", error));
         return;
       }
 
-      void view.refreshView();
+      void view.refreshView().catch(error => console.error("[Arbor] Could not refresh view", error));
     });
   }
 
@@ -512,7 +514,10 @@ export default class ArborPlugin extends Plugin {
         }
 
         if (!checking) {
-          void this.withBranchView(callback);
+          void this.withBranchView(callback).catch(error => {
+            console.error("[Arbor] Command failed", error);
+            new Notice("Arbor could not complete the command. Unsaved drafts are retained.");
+          });
         }
         return true;
       }

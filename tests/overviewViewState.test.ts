@@ -51,6 +51,7 @@ function viewFixture(settings = fixtureSettings()) {
   let savedState: unknown;
   const loaded = fixtureLoaded();
   let source = buildBranchDocument("", linearizeTree(loaded.metadata).body, loaded.metadata, loaded.outputState);
+  loaded.diskText = source;
   const port: ConstructorParameters<typeof DocumentController>[0] = {
     getFile: () => view.file, cachedRead: async () => source,
     process: async (_file, transform) => { source = transform(source); return source; },
@@ -59,7 +60,6 @@ function viewFixture(settings = fixtureSettings()) {
     onEditedBlockSaved() {}, onProfileActivated() {}, requestRender() {}, notify() {}, reportError() {}
   };
   const documentController = new DocumentController(port);
-  documentController.replaceLoadedState(loaded);
   Object.assign(view, {
     baseState: { file: "A.md", unknownHostField: 42 }, file: { path: "A.md" },
     plugin: { settings, getBranchViews: () => [view] }, documentController, work: new ViewWorkScope(), loadGeneration: 0,
@@ -72,6 +72,7 @@ function viewFixture(settings = fixtureSettings()) {
       geometry = buildOverviewLayout(fixtureTree(), { orientation: view.getOverviewOrientation() });
     }
   });
+  documentController.replaceLoadedState(loaded);
   return { view, settings, documentController, port, get source() { return source; }, get publication() { return publication; }, get geometry() { return geometry; }, get savedState() { return savedState; } };
 }
 

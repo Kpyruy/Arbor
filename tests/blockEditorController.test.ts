@@ -14,7 +14,7 @@ function createPort(): BlockEditorPort {
   const metadata = fixtureTree();
   return {
     getState: () => ({
-      metadata, frontmatter: "", outputState: fixtureOutput(), outputRaw: "", outputError: null,
+      metadata, diskText: "", frontmatter: "", outputState: fixtureOutput(), outputRaw: "", outputError: null,
       selectedBlockId: "first", staleMetadata: null, origin: "metadata", linearized: linearizeTree(metadata)
     }),
     usesTouchControls: () => false,
@@ -31,6 +31,45 @@ function createPort(): BlockEditorPort {
 }
 
 describe("BlockEditorController", () => {
+  it("keeps the exact draft after a rejecting save and retries once", async () => {
+    const port = createPort();
+    port.saveEdit = async () => { throw Error("disk full"); };
+    const editor = new BlockEditorController(port);
+    editor.beginEditingBlock("first");
+    const session = editor.getSession()!;
+    session.value = "Unsaved\nexact text";
+    await expect(editor.commitEditIfNeeded()).rejects.toThrow("disk full");
+    expect(editor.getSession()).toBe(session);
+    expect(editor.getSession()!.value).toBe("Unsaved\nexact text");
+    let saves = 0;
+    port.saveEdit = async () => { saves += 1; };
+    await editor.commitEditIfNeeded();
+    expect(saves).toBe(1);
+    expect(editor.getSession()).toBeNull();
+  });
+
+  it("deduplicates pending commits and retains edits made while saving", async () => {
+    const port = createPort();
+    const pending = deferred<void>();
+    const saved: string[] = [];
+    port.saveEdit = async session => { saved.push(session.value); await pending.promise; };
+    const editor = new BlockEditorController(port);
+    editor.beginEditingBlock("first");
+    const session = editor.getSession()!;
+    session.value = "First draft";
+    const first = editor.commitEditingSession(session);
+    const second = editor.commitEditingSession(session);
+    session.value = "Newer draft";
+    pending.resolve();
+    await Promise.all([first, second]);
+    expect(saved).toEqual(["First draft"]);
+    expect(editor.getSession()?.value).toBe("Newer draft");
+    expect(editor.getSession()?.originalContent).toBe("First draft");
+    await editor.commitEditIfNeeded();
+    expect(saved).toEqual(["First draft", "Newer draft"]);
+    expect(editor.getSession()).toBeNull();
+  });
+
   it("cancels blur work through its original window after the view migrates", async () => {
     const first = timerWindow();
     const second = timerWindow();
@@ -173,12 +212,10 @@ describe("BlockEditorController", () => {
 
     save.resolve();
     await save.promise;
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise<void>(resolve => setImmediate(resolve));
 
     expect(saves).toEqual(["leaf"]);
-    expect(editor.getSession()?.blockId).toBe("root");
+    expect(editor.getSession()).toBeNull();
   });
 
   it("commits an active session once without beginning after the tree becomes empty", async () => {

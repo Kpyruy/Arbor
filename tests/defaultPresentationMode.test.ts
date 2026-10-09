@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readSource, sourceClass, sourceMethod } from "./helpers/viewSource";
+import { DocumentController, type DocumentPort } from "../src/view/state/DocumentController";
+import { buildBranchDocument, parseBranchDocument } from "../src/storage/document";
+import { fixtureLoaded, fixtureOutput } from "./helpers/arborFixtures";
 
 describe("default presentation mode", () => {
   it("defaults to the branch editor and restores the selected startup mode when a note opens", () => {
@@ -96,14 +99,26 @@ describe("default presentation mode", () => {
     expect(modal).toContain('this.addQualityChoice(qualityGroup, "ultra", "Ultra — 4×")');
   });
 
-  it("refreshes the same Output Preview when the active profile changes", () => {
-    const wrapper = sourceMethod("src/view/ArborView.ts", "ArborView", "applyActiveOutputProfile");
-    const switchProfile = sourceMethod("src/view/state/DocumentController.ts", "DocumentController", "applyActiveOutputProfile");
+  it("refreshes output presentation from the persisted active profile", async () => {
+    const loaded = fixtureLoaded();
+    const file = { path: "Profiles.md" } as never;
+    let disk = buildBranchDocument("", loaded.linearized.body, loaded.metadata, loaded.outputState);
+    const renderedProfiles: string[] = [];
+    const port: DocumentPort = {
+      getFile: () => file, cachedRead: async () => disk,
+      process: async (_file, transform) => { disk = transform(disk); return disk; },
+      markOwnWrite() {}, rememberManagedNote() {}, commitEditIfNeeded: async () => {},
+      clearEditingSession() {}, beforeOverviewEditSave() {}, onMutationPrepared() {}, onSelectionRestored() {},
+      onEditedBlockSaved() {}, onProfileActivated() {}, notify() {}, reportError() {},
+      requestRender: () => { renderedProfiles.push(controller.getState()!.outputState.activeProfileId); }
+    };
+    const controller = new DocumentController(port);
+    controller.replaceLoadedState((await controller.readLoadedFileState(file, "first")).state);
 
-    expect(wrapper).toContain("this.documentController.applyActiveOutputProfile(next)");
-    expect(switchProfile).toContain('await this.persistState("Switch output profile")');
-    expect(switchProfile).toContain("this.port.requestRender();");
-    expect(switchProfile).not.toContain("this.presentationMode =");
+    await controller.applyActiveOutputProfile(fixtureOutput("draft"));
+
+    expect(renderedProfiles).toEqual(["draft"]);
+    expect(parseBranchDocument(disk).outputState.activeProfileId).toBe("draft");
   });
 
   it("places the overview switch in the canvas and relies on one accessible tooltip", () => {

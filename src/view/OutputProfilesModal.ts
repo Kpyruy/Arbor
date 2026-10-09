@@ -1,3 +1,4 @@
+import { runAsyncAction } from "./runtime/asyncActions";
 import { App, ButtonComponent, Menu, Modal } from "obsidian";
 import {
   createProfile,
@@ -357,7 +358,7 @@ class OutputProfilesConfirmModal extends Modal {
     this.confirmButton = new ButtonComponent(actions)
       .setButtonText(this.confirmText)
       .setWarning()
-      .onClick(() => void this.confirm());
+      .onClick(() => runAsyncAction(this.confirm()));
   }
 
   override close(): void {
@@ -457,13 +458,13 @@ class OutputProfileNameModal extends Modal {
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.isComposing) {
         event.preventDefault();
-        void this.save();
+        runAsyncAction(this.save());
       }
     });
     this.errorEl = contentEl.createDiv({ cls: "arbor-output-profile-name-error" });
     const actions = contentEl.createDiv({ cls: "arbor-output-profile-name-actions" });
     this.cancelButton = new ButtonComponent(actions).setButtonText("Cancel").onClick(() => this.close());
-    this.saveButton = new ButtonComponent(actions).setButtonText("Save").setCta().onClick(() => void this.save());
+    this.saveButton = new ButtonComponent(actions).setButtonText("Save").setCta().onClick(() => runAsyncAction(this.save()));
     window.requestAnimationFrame(() => input.focus());
   }
 
@@ -641,11 +642,11 @@ export class OutputProfilesModal extends Modal {
 
   private runProfileAction(action: OutputProfileActionId, profileId: string): void {
     if (action === "activate") {
-      void this.activate(profileId);
+      runAsyncAction(this.activate(profileId));
       return;
     }
     if (action === "duplicate") {
-      void this.duplicate(profileId);
+      runAsyncAction(this.duplicate(profileId));
       return;
     }
     if (action === "rename") {
@@ -663,7 +664,7 @@ export class OutputProfilesModal extends Modal {
       this.confirmPreset(profileId, action);
       return;
     }
-    void this.applyPreset(profileId, action);
+    runAsyncAction(this.applyPreset(profileId, action));
   }
 
   private confirmPreset(profileId: string, action: OutputProfilePresetActionModel): void {

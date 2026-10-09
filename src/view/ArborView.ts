@@ -1,3 +1,4 @@
+import { runAsyncAction } from "./runtime/asyncActions";
 import {
   App,
   ButtonComponent,
@@ -71,6 +72,7 @@ import type {
   BranchViewContext,
   EditingOrigin,
   EditingSession,
+  LoadedFileIdentity,
   LoadedFileState,
   LoadingOverlayState,
   OverviewEditorSelectionSnapshot
@@ -103,7 +105,7 @@ import { SearchController } from "./chrome/SearchController";
 import { BreadcrumbsController } from "./chrome/BreadcrumbsController";
 import { ViewShell } from "./chrome/ViewShell";
 import { ViewMenus } from "./chrome/ViewMenus";
-import { DocumentController } from "./state/DocumentController";
+import { DocumentController, DocumentLoadChangedError } from "./state/DocumentController";
 import { ViewWorkScope } from "./runtime/ViewWorkScope";
 import { normalizeOverviewOrientation, resolveOverviewOrientation } from "../overviewOrientation";
 export {
@@ -246,6 +248,11 @@ export class ArborView extends FileView {
       reportError: (message, error) => console.error(message, error)
     });
     this.editor = new BlockEditorController({
+      getFilePath: () => this.file?.path ?? "",
+      getLoadedFileIdentity: () => this.documentController.getLoadedFileIdentity(),
+      recoveryStore: this.plugin.draftRecoveryStore,
+      onCommitted: (session) => this.onEditorCommitted(session),
+      onError: (error) => this.reportActionError(error),
       getState: () => this.state,
       getWindow: () => this.contentEl.win,
       usesTouchControls: () => this.usesTouchControls,
@@ -592,7 +599,7 @@ export class ArborView extends FileView {
     const doc = this.contentEl.ownerDocument;
     this.registerDomEvent(doc, "visibilitychange", () => {
       if (doc.visibilityState === "hidden" && Platform.isMobile) {
-        void this.commitEditIfNeeded();
+        runAsyncAction(this.commitEditIfNeeded(), error => this.reportActionError(error));
       }
     });
     const observer = new ResizeObserver(() => this.handleMobileResize());
@@ -674,14 +681,17 @@ export class ArborView extends FileView {
   }
 
   private async applyActiveOutputProfile(next: ArborOutputState): Promise<ArborOutputState> {
+    await this.awaitDeferredReload();
     return this.documentController.applyActiveOutputProfile(next);
   }
 
   private async applyOutputProfileMutation(label: string, next: ArborOutputState): Promise<ArborOutputState> {
+    await this.awaitDeferredReload();
     return this.documentController.applyOutputProfileMutation(label, next);
   }
 
   private async resetInvalidOutputProfiles(): Promise<ArborOutputState> {
+    await this.awaitDeferredReload();
     return this.documentController.resetInvalidOutputProfiles();
   }
 
@@ -731,7 +741,7 @@ export class ArborView extends FileView {
       return;
     }
 
-    this.documentController.replaceLoadedState(prepared);
+    this.documentController.replaceLoadedState(prepared, file);
     const state = this.state;
     if (state?.origin === "reconciled") {
       new Notice("The tree was rebuilt from the visible Markdown body to avoid losing plain editor changes.");
@@ -739,6 +749,7 @@ export class ArborView extends FileView {
 
     this.resetLoadedUiState(state?.selectedBlockId ?? null);
     this.render();
+    this.showDraftRecovery();
   }
 
   async onUnloadFile(): Promise<void> {
@@ -746,9 +757,11 @@ export class ArborView extends FileView {
     this.clearHeadingSubscription();
     this.invalidatePendingLoads();
     const generation = this.loadGeneration;
-    await this.commitEditIfNeeded();
-    if (generation !== this.loadGeneration) return;
-    this.resetViewState();
+    try {
+      await this.commitEditIfNeeded();
+    } finally {
+      if (generation === this.loadGeneration) this.resetViewState();
+    }
   }
 
   clear(): void {
@@ -778,7 +791,10 @@ export class ArborView extends FileView {
     this.headingLinks?.cancelPending();
     this.clearHeadingSubscription();
     this.invalidatePendingLoads();
-    await this.commitEditIfNeeded();
+    let saveError: unknown;
+    let saveFailed = false;
+    try { await this.commitEditIfNeeded(); }
+    catch (error) { saveFailed = true; saveError = error; this.editor.retainCurrentDraft(); }
     this.work.dispose();
     this.navigationController.clearNumericNavigation();
     this.zoomController.reset();
@@ -799,7 +815,8 @@ export class ArborView extends FileView {
     this.loadingState = null;
     this.presentationMode = "editor";
     this.teardownShell();
-    return super.onClose();
+    await super.onClose();
+    if (saveFailed) throw saveError;
   }
 
   async handleFileModified(file: TFile): Promise<void> {
@@ -807,9 +824,7 @@ export class ArborView extends FileView {
       return;
     }
 
-    if (this.plugin.consumeOwnWrite(file.path) || this.documentController.isWriting()) {
-      return;
-    }
+    this.plugin.consumeOwnWrite(file.path);
 
     const state = this.state;
     const text = await this.app.vault.cachedRead(file);
@@ -820,7 +835,8 @@ export class ArborView extends FileView {
       return;
     }
 
-    if (this.editingSession) {
+    if (this.editingSession || this.documentController.isWriting()) {
+      this.reloadRequired = true;
       new Notice("The note changed on disk while a block was being edited. Finish or cancel the card edit before reloading.");
       return;
     }
@@ -845,7 +861,7 @@ export class ArborView extends FileView {
     }
 
     const directionChanged = this.renderedLayoutDirection !== this.plugin.settings.layoutDirection;
-    this.documentController.replaceLoadedState(prepared);
+    this.documentController.replaceLoadedState(prepared, file);
     const state = this.state;
     this.shouldSnapViewportAfterDirectionChange = directionChanged;
     if (directionChanged && this.presentationMode === "overview") {
@@ -920,7 +936,7 @@ export class ArborView extends FileView {
     if (!this.isCurrentLoad(generation, file)) {
       return null;
     }
-    this.documentController.replaceLoadedState(initial.state);
+    this.documentController.replaceLoadedState(initial.state, file);
 
     if (!initial.loaded.needsVisibleMarkerMigration) {
       return initial.state;
@@ -957,7 +973,7 @@ export class ArborView extends FileView {
         return null;
       }
 
-      this.documentController.replaceLoadedState(migrated.state);
+      this.documentController.replaceLoadedState(migrated.state, file);
       if (!this.isCurrentLoad(generation, file)) {
         return null;
       }
@@ -972,6 +988,7 @@ export class ArborView extends FileView {
 
   private beginLoad(): number {
     const generation = ++this.loadGeneration;
+    this.documentController.invalidateLoad();
     this.overview.invalidate();
     if (this.loadingState) {
       this.loadingState = null;
@@ -1006,10 +1023,12 @@ export class ArborView extends FileView {
   }
 
   private async openCurrentFileInMarkdown(): Promise<void> {
-    if (!this.file) {
+    const loadedFileIdentity = this.documentController.getLoadedFileIdentity();
+    if (!this.file || !loadedFileIdentity) {
       return;
     }
     await this.commitEditIfNeeded();
+    if (!this.isSameLoadedFile(loadedFileIdentity)) return;
     await this.openFileInMarkdownView(this.file);
   }
 
@@ -1054,12 +1073,12 @@ export class ArborView extends FileView {
   async setOverviewOrientationOverride(value: ArborOverviewOrientation | null): Promise<void> {
     if (value === this.getOverviewOrientationOverride() && this.overviewOrientationWrites === 0) return;
     const file = this.file;
-    const state = this.state;
+    const load = this.loadGeneration;
     const requested = ++this.overviewOrientationChangeGeneration;
     this.overviewOrientationWrites += 1;
     try { await this.documentController.saveOverviewOrientation(value); }
     finally { this.overviewOrientationWrites -= 1; }
-    if (this.file !== file || this.state !== state || requested !== this.overviewOrientationChangeGeneration) return;
+    if (this.file !== file || this.loadGeneration !== load || requested !== this.overviewOrientationChangeGeneration) return;
     for (const view of this.plugin.getBranchViews()) {
       if (view.file?.path !== file?.path) continue;
       view.documentController.acceptOverviewOrientation(value);
@@ -1161,18 +1180,22 @@ export class ArborView extends FileView {
   }
 
   openTreeOverview(): void {
-    void this.commitEditIfNeeded().then(() => {
+    const loadedFileIdentity = this.documentController.getLoadedFileIdentity();
+    runAsyncAction(this.commitEditIfNeeded().then(() => {
+      if (!this.isSameLoadedFile(loadedFileIdentity)) return;
       this.overview.requestCenterOnNextRender();
       this.presentationMode = "overview";
       this.render();
-    });
+    }), error => this.reportActionError(error));
   }
 
   closeTreeOverview(): void {
-    void this.commitEditIfNeeded().then(() => {
+    const loadedFileIdentity = this.documentController.getLoadedFileIdentity();
+    runAsyncAction(this.commitEditIfNeeded().then(() => {
+      if (!this.isSameLoadedFile(loadedFileIdentity)) return;
       this.presentationMode = "editor";
       this.render();
-    });
+    }), error => this.reportActionError(error));
   }
 
   openOutputPreview(): void {
@@ -1195,11 +1218,12 @@ export class ArborView extends FileView {
     const nextSelectedBlockId = ensureSelectedBlock(this.state.metadata, blockId);
     if (this.editingSession && this.editingSession.blockId !== nextSelectedBlockId) {
       const pendingSession = this.editingSession;
-      void this.commitEditingSession(pendingSession).then(() => {
-        if (this.state) {
+      const loadedFileIdentity = this.documentController.getLoadedFileIdentity();
+      runAsyncAction(this.commitEditingSession(pendingSession).then(() => {
+        if (this.isSameLoadedFile(loadedFileIdentity) && this.state) {
           this.selectBlock(nextSelectedBlockId, options);
         }
-      });
+      }), error => this.reportActionError(error));
       return;
     }
 
@@ -1378,7 +1402,7 @@ export class ArborView extends FileView {
     }
 
     if (this.editingSession?.blockId === this.state.selectedBlockId) {
-      void this.editor.commitEditingSession();
+      runAsyncAction(this.editor.commitEditingSession(), error => this.reportActionError(error));
       return;
     }
 
@@ -1454,11 +1478,13 @@ export class ArborView extends FileView {
   }
 
   async revealCurrentBlockInMarkdown(): Promise<void> {
-    if (!this.file || !this.state?.selectedBlockId) {
+    const loadedFileIdentity = this.documentController.getLoadedFileIdentity();
+    if (!this.file || !loadedFileIdentity || !this.state?.selectedBlockId) {
       return;
     }
 
     await this.commitEditIfNeeded();
+    if (!this.isSameLoadedFile(loadedFileIdentity)) return;
 
     const location = this.state.linearized.locations.get(this.state.selectedBlockId);
     if (!location) {
@@ -1481,8 +1507,14 @@ export class ArborView extends FileView {
   }
 
   async rebuildLinearMarkdownFromTree(): Promise<void> {
+    const loadedFileIdentity = this.documentController.getLoadedFileIdentity();
     await this.commitEditIfNeeded();
-      await this.persistState("Rebuild linear Markdown from tree");
+    if (!this.isSameLoadedFile(loadedFileIdentity)) return;
+    await this.persistState("Rebuild linear Markdown from tree");
+  }
+
+  private isSameLoadedFile(identity: LoadedFileIdentity | null): boolean {
+    return identity !== null && this.documentController.getLoadedFileIdentity() === identity;
   }
 
   async rebuildTreeFromMetadata(): Promise<void> {
@@ -1507,7 +1539,7 @@ export class ArborView extends FileView {
     this.cancelRenderFrame?.();
     this.cancelRenderFrame = this.work.frame(window, () => {
       this.cancelRenderFrame = null;
-      void this.renderNow();
+      runAsyncAction(this.renderNow(), error => this.reportActionError(error));
     });
   }
 
@@ -1837,6 +1869,7 @@ export class ArborView extends FileView {
     mutate: (metadata: BranchTreeMetadata) => BranchTreeMutationResult,
     autofocusSelection = false
   ): Promise<void> {
+    await this.awaitDeferredReload();
     await this.documentController.applyMutation(label, mutate, autofocusSelection);
   }
 
@@ -1859,7 +1892,9 @@ export class ArborView extends FileView {
   }
 
   private async commitEditIfNeeded(): Promise<void> {
+    if (this.reloadRequired && !this.editingSession) await this.reloadAfterEdit();
     await this.editor.commitEditIfNeeded();
+    if (this.reloadRequired && !this.editingSession) await this.reloadAfterEdit();
   }
 
   private cancelEditingSession(): void {
@@ -1892,10 +1927,12 @@ export class ArborView extends FileView {
   }
 
   private onEditorCancel(session: EditingSession | null): void {
+    this.reloadRequired = true;
+    void this.reloadAfterEdit().catch(error => this.reportActionError(error));
     this.pendingFocusBlockId = this.state?.selectedBlockId ?? null;
     this.syncTouchDock();
     if (session?.origin === "overview") {
-      void this.overview.restoreOverviewCardContentInPlace(session.blockId);
+      void this.overview.restoreOverviewCardContentInPlace(session.blockId).catch(error => this.reportActionError(error));
       return;
     }
     this.render();
@@ -1913,6 +1950,81 @@ export class ArborView extends FileView {
 
   private async saveEditorSession(session: EditingSession): Promise<void> {
     await this.documentController.commitEditedBlock(session);
+  }
+
+  private onEditorCommitted(session: EditingSession): void {
+    this.pendingFocusBlockId = session.blockId;
+    this.syncTouchDock();
+    this.render();
+  }
+
+  private reloadRequired = false;
+  private reloadPending: Promise<void> | null = null;
+
+  private async awaitDeferredReload(): Promise<void> {
+    const file = this.file;
+    if (this.reloadRequired && !this.editingSession) await this.reloadAfterEdit();
+    if (this.file !== file) throw new DocumentLoadChangedError();
+  }
+
+  private reloadAfterEdit(): Promise<void> {
+    if (this.reloadPending) return this.reloadPending;
+    const file = this.file;
+    const generation = this.loadGeneration;
+    const reload = (async () => {
+      if (!file) return;
+      const text = await this.app.vault.cachedRead(file);
+      if (this.file !== file || this.loadGeneration !== generation) return;
+      if (!this.documentController.syncOrientationOnlyChange(text)) await this.onLoadFile(file);
+      this.reloadRequired = false;
+    })().finally(() => { if (this.reloadPending === reload) this.reloadPending = null; });
+    this.reloadPending = reload;
+    return reload;
+  }
+
+  private reportActionError(error: unknown): void {
+    console.error("[Arbor] Action failed", error);
+    new Notice("Arbor could not complete the action. Unsaved drafts are retained.");
+  }
+
+  private showDraftRecovery(): void {
+    const file = this.file;
+    const store = this.plugin.draftRecoveryStore;
+    if (!file || !store || !this.state || this.editingSession) return;
+    const drafts = store.getForFile(file.path);
+    if (!drafts.length) return;
+    const generation = this.loadGeneration;
+    const modal = new Modal(this.app);
+    modal.contentEl.createEl("h3", { text: "Recover unsaved drafts" });
+    modal.contentEl.createEl("p", { text: "Restore opens a draft for review; it does not save or overwrite the note. Each draft is a separate editing session." });
+    for (const draft of drafts) {
+      const row = modal.contentEl.createDiv();
+      row.createEl("h4", { text: `Block ${draft.blockId} · draft ${draft.draftId}` });
+      const block = getBlock(this.state.metadata, draft.blockId);
+      const current = row.createEl("textarea", { attr: { readonly: "", "aria-label": "Current block content" } });
+      current.value = block?.content ?? "This block no longer exists. Copy the draft to keep its text.";
+      const recovered = row.createEl("textarea", { attr: { readonly: "", "aria-label": "Recovered draft" } });
+      recovered.value = draft.value;
+      new ButtonComponent(row).setButtonText("Restore").setDisabled(!block).onClick(() => {
+        if (this.file !== file || this.loadGeneration !== generation) {
+          new Notice("The note changed. Reopen recovery to review the current content.");
+          return;
+        }
+        if (this.editor.restoreDraft(draft.draftId, draft.blockId, this.presentationMode === "overview" ? "overview" : "card")) modal.close();
+        else new Notice("Finish or cancel the current draft before restoring another.");
+      });
+      new ButtonComponent(row).setButtonText("Copy").onClick(async () => {
+        try { await this.contentEl.win.navigator.clipboard.writeText(draft.value); }
+        catch (error) { this.reportActionError(error); }
+      });
+      new ButtonComponent(row).setButtonText("Discard").onClick(() => {
+        store.remove(draft.draftId);
+        row.remove();
+        if (!store.getForFile(file.path).length) modal.close();
+      });
+    }
+    new ButtonComponent(modal.contentEl).setButtonText("Later").onClick(() => modal.close());
+    modal.open();
   }
 
   private resetViewState(): void {
@@ -1943,6 +2055,7 @@ export class ArborView extends FileView {
     label: string,
     mutate: (profile: ArborOutputProfile) => ArborOutputProfile
   ): Promise<void> {
+    await this.awaitDeferredReload();
     await this.documentController.applyOutputMutation(label, mutate);
   }
 

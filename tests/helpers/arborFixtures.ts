@@ -43,6 +43,7 @@ export function fixtureLoaded(active = "full"): LoadedFileState {
   const metadata = fixtureTree();
   return {
     metadata,
+    diskText: "",
     frontmatter: "",
     outputState: fixtureOutput(active),
     outputRaw: "",

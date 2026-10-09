@@ -66,7 +66,7 @@ describe("DocumentController", () => {
       fixture.port.getFile = () => replacementFile;
     }
     pending.resolve();
-    await mutation;
+    await expect(mutation).rejects.toMatchObject({ name: "DocumentLoadChangedError" });
     expect(controller.getState()!.metadata.blocks[0].appearance).toBeUndefined();
     expect(fixture.source).toBe("");
     expect(fixture.order).not.toContain("persist");
@@ -108,15 +108,15 @@ describe("DocumentController", () => {
     }, true);
 
     expect(fixture.order).toEqual([
-      "commit", "preserve-overview", "edited", "mark", "persist", "remember", "render",
-      "prepared:true", "mark", "persist", "remember", "render"
+      "commit", "preserve-overview", "persist", "mark", "remember", "edited", "render",
+      "persist", "mark", "remember", "prepared:true", "render"
     ]);
     expect(editor.getSession()).toBeNull();
     const afterMutation = structuredClone(controller.getState()!);
     const serialized = fixture.source;
     fixture.order.length = 0;
     await controller.undo();
-    expect(fixture.order).toEqual(["commit", "clear-edit", "selection-restored", "mark", "persist", "remember", "render"]);
+    expect(fixture.order).toEqual(["commit", "persist", "mark", "remember", "clear-edit", "selection-restored", "render"]);
     expect(controller.getState()!.metadata.blocks.some((block) => block.id === createdId)).toBe(false);
     expect(controller.getState()!.metadata.blocks.find((block) => block.id === "first")?.content).toBe("Edited first");
     expect(controller.getState()!.selectedBlockId).toBe("first");
@@ -133,6 +133,7 @@ describe("DocumentController", () => {
     const controller = new DocumentController(fixture.port);
     const loaded = fixtureLoaded("draft");
     loaded.staleMetadata = fixtureTree();
+    loaded.diskText = fixture.source;
     loaded.metadata = { ...loaded.metadata, blocks: loaded.metadata.blocks.filter((block) => block.id !== "leaf") };
     loaded.origin = "reconciled";
     controller.replaceLoadedState(loaded);
@@ -142,15 +143,17 @@ describe("DocumentController", () => {
 
     expect(controller.getState()!.metadata).toEqual(fixtureTree());
     expect(controller.getState()!.outputState).toEqual(expectedRules);
-    expect(fixture.order).toEqual(["commit", "clear-edit", "selection-restored", "mark", "persist", "remember", "render"]);
+    expect(fixture.order).toEqual(["commit", "clear-edit", "selection-restored", "persist", "mark", "remember", "render"]);
   });
 
-  it("makes an activated profile visible before deferred persistence", async () => {
+  it("makes an activated profile visible only after deferred persistence", async () => {
     const fixture = createFixturePort();
     const pending = deferred<string>();
+    const entered = deferred<void>();
     fixture.setProcess(async (_file, transform) => {
       fixture.order.push("persist");
       transform("");
+      entered.resolve();
       return pending.promise;
     });
     const controller = new DocumentController(fixture.port);
@@ -160,11 +163,14 @@ describe("DocumentController", () => {
     );
 
     const switching = controller.applyActiveOutputProfile(fixtureOutput("draft"));
-    await Promise.resolve();
+    await entered.promise;
 
-    expect(fixture.order).toEqual(["commit", "visible:draft", "render", "mark", "persist"]);
+    expect(controller.getState()!.outputState.activeProfileId).toBe("full");
+    expect(fixture.order).toEqual(["commit", "persist"]);
     pending.resolve("");
     await switching;
+    expect(controller.getState()!.outputState.activeProfileId).toBe("draft");
+    expect(fixture.order).toEqual(["commit", "persist", "mark", "remember", "visible:draft", "render"]);
   });
 
   it("preserves malformed output metadata byte-for-byte while persisting a tree mutation", async () => {
@@ -191,7 +197,8 @@ describe("DocumentController", () => {
 
     await controller.undo();
 
-    expect(fixture.order.slice(0, 3)).toEqual(["commit", "clear-edit", "selection-restored"]);
+    expect(fixture.order.indexOf("clear-edit")).toBeGreaterThan(fixture.order.indexOf("remember"));
+    expect(fixture.order.indexOf("selection-restored")).toBeGreaterThan(fixture.order.indexOf("clear-edit"));
     expect(fixture.order).not.toContain("prepared:false");
   });
 
@@ -274,7 +281,7 @@ describe("DocumentController", () => {
     const controller = new DocumentController(fixture.port);
     controller.replaceLoadedState(fixtureLoaded());
 
-    await controller.persistState("Save fixture");
+    await expect(controller.persistState("Save fixture")).rejects.toThrow("disk full");
 
     expect(fixture.notices).toEqual(['Arbor could not save the note after "Save fixture".']);
     expect(fixture.errors).toHaveLength(1);

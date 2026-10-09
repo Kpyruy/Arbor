@@ -1,3 +1,4 @@
+import { runAsyncAction } from "../runtime/asyncActions";
 import { Menu, Notice } from "obsidian";
 import { buildArborBlockLink } from "../../blockLinks";
 import { getChildArrowIcon, getParentArrowIcon } from "../../layoutDirection";
@@ -108,7 +109,7 @@ export class ViewMenus {
       );
     }
     menu.addItem((item) =>
-      item.setTitle("Open in Markdown").setIcon("file-text").onClick(() => void this.port.openCurrentFileInMarkdown())
+      item.setTitle("Open in Markdown").setIcon("file-text").onClick(() => runAsyncAction(this.port.openCurrentFileInMarkdown(), error => this.port.reportError("[Arbor] Menu action failed", error)))
     );
     menu.addItem((item) =>
       this.port.read.getMode() === "output"
@@ -116,10 +117,10 @@ export class ViewMenus {
         : item.setTitle("Output preview").setIcon("file-check-2").onClick(() => this.port.commands.openOutputPreview())
     );
     menu.addItem((item) =>
-      item.setTitle("Export clean copy…").setIcon("file-output").onClick(() => void this.port.commands.exportCleanCopy())
+      item.setTitle("Export clean copy…").setIcon("file-output").onClick(() => runAsyncAction(this.port.commands.exportCleanCopy(), error => this.port.reportError("[Arbor] Menu action failed", error)))
     );
     menu.addItem((item) =>
-      item.setTitle("Export tree overview…").setIcon("image-down").onClick(() => void this.port.commands.exportTreeOverview())
+      item.setTitle("Export tree overview…").setIcon("image-down").onClick(() => runAsyncAction(this.port.commands.exportTreeOverview(), error => this.port.reportError("[Arbor] Menu action failed", error)))
     );
     menu.addItem((item) =>
       this.port.read.getMode() === "overview"
@@ -190,7 +191,7 @@ export class ViewMenus {
           .setTitle(profile.name)
           .setIcon(profile.id === this.port.read.getState()?.outputState.activeProfileId ? "check" : "circle")
           .setDisabled(Boolean(this.port.read.getState()?.outputError))
-          .onClick(() => void this.port.activateOutputProfile(profile.id))
+          .onClick(() => runAsyncAction(this.port.activateOutputProfile(profile.id), error => this.port.reportError("[Arbor] Menu action failed", error)))
       );
     });
     menu.addSeparator();
@@ -218,24 +219,24 @@ export class ViewMenus {
     const direction = this.port.read.getSettings().layoutDirection;
     menu.addItem((item) =>
       item.setTitle("Create child").setIcon(getChildArrowIcon(direction)).onClick(() =>
-        void this.port.runWithSelectedBlock(blockId, () => this.port.commands.createChild())
+        runAsyncAction(this.port.runWithSelectedBlock(blockId, () => this.port.commands.createChild()), error => this.port.reportError("[Arbor] Menu action failed", error))
       )
     );
     if (canCreateLeft) {
       menu.addItem((item) =>
         item.setTitle("Create at parent level").setIcon(getParentArrowIcon(direction)).onClick(() =>
-          void this.port.runWithSelectedBlock(blockId, () => this.port.commands.createParentLevelBlock())
+          runAsyncAction(this.port.runWithSelectedBlock(blockId, () => this.port.commands.createParentLevelBlock()), error => this.port.reportError("[Arbor] Menu action failed", error))
         )
       );
     }
     menu.addItem((item) =>
       item.setTitle("Create sibling above").setIcon("arrow-up").onClick(() =>
-        void this.port.runWithSelectedBlock(blockId, () => this.port.commands.createSiblingAbove())
+        runAsyncAction(this.port.runWithSelectedBlock(blockId, () => this.port.commands.createSiblingAbove()), error => this.port.reportError("[Arbor] Menu action failed", error))
       )
     )
       .addItem((item) =>
         item.setTitle("Create sibling below").setIcon("arrow-down").onClick(() =>
-          void this.port.runWithSelectedBlock(blockId, () => this.port.commands.createSiblingBelow())
+          runAsyncAction(this.port.runWithSelectedBlock(blockId, () => this.port.commands.createSiblingBelow()), error => this.port.reportError("[Arbor] Menu action failed", error))
         )
       )
       .addSeparator()
@@ -264,7 +265,7 @@ export class ViewMenus {
         item
           .setTitle(block.collapsed ? "Expand branch" : "Collapse branch")
           .setIcon(block.collapsed ? "chevrons-down-up" : "chevrons-up-down")
-          .onClick(() => void this.port.runWithSelectedBlock(blockId, () => this.port.commands.toggleCollapsedState(blockId)))
+          .onClick(() => runAsyncAction(this.port.runWithSelectedBlock(blockId, () => this.port.commands.toggleCollapsedState(blockId)), error => this.port.reportError("[Arbor] Menu action failed", error)))
       );
     }
     menu.addSeparator();
@@ -272,12 +273,12 @@ export class ViewMenus {
     menu.addSeparator();
     this.addBlockOutputMenuItems(menu, blockId);
     menu.addSeparator()
-      .addItem((item) => item.setTitle("Copy block link").setIcon("link").onClick(() => void this.copyBlockLink(blockId)))
-      .addItem((item) => item.setTitle("Duplicate subtree").setIcon("copy-plus").onClick(() => void this.port.runWithSelectedBlock(blockId, () => this.port.commands.duplicateSelectedSubtree())))
-      .addItem((item) => item.setTitle("Reveal in Markdown").setIcon("file-text").onClick(() => void this.port.runWithSelectedBlock(blockId, () => this.port.commands.revealCurrentBlockInMarkdown())))
+      .addItem((item) => item.setTitle("Copy block link").setIcon("link").onClick(() => runAsyncAction(this.copyBlockLink(blockId), error => this.port.reportError("[Arbor] Menu action failed", error))))
+      .addItem((item) => item.setTitle("Duplicate subtree").setIcon("copy-plus").onClick(() => runAsyncAction(this.port.runWithSelectedBlock(blockId, () => this.port.commands.duplicateSelectedSubtree()), error => this.port.reportError("[Arbor] Menu action failed", error))))
+      .addItem((item) => item.setTitle("Reveal in Markdown").setIcon("file-text").onClick(() => runAsyncAction(this.port.runWithSelectedBlock(blockId, () => this.port.commands.revealCurrentBlockInMarkdown()), error => this.port.reportError("[Arbor] Menu action failed", error))))
       .addSeparator()
-      .addItem((item) => item.setTitle("Delete block").setIcon("trash").setWarning(true).onClick(() => void this.port.runWithSelectedBlock(blockId, () => this.port.commands.deleteSelectedBlock())))
-      .addItem((item) => item.setTitle("Delete subtree").setIcon("trash-2").setWarning(true).onClick(() => void this.port.runWithSelectedBlock(blockId, () => this.port.commands.deleteSelectedSubtree())));
+      .addItem((item) => item.setTitle("Delete block").setIcon("trash").setWarning(true).onClick(() => runAsyncAction(this.port.runWithSelectedBlock(blockId, () => this.port.commands.deleteSelectedBlock()), error => this.port.reportError("[Arbor] Menu action failed", error))))
+      .addItem((item) => item.setTitle("Delete subtree").setIcon("trash-2").setWarning(true).onClick(() => runAsyncAction(this.port.runWithSelectedBlock(blockId, () => this.port.commands.deleteSelectedSubtree()), error => this.port.reportError("[Arbor] Menu action failed", error))));
     this.applyDangerMenuItemStyles(menu);
     return menu;
   }
@@ -291,11 +292,11 @@ export class ViewMenus {
     for (const scope of ["card", "branch"] as const) {
       const title = scope === "card" ? "Card" : "Branch";
       menu.addItem(item => item.setTitle(`${title} color…`).setIcon("palette").onClick(() => {
-        if (current()) void this.openBlockColour(id, scope);
+        if (current()) runAsyncAction(this.openBlockColour(id, scope), error => this.port.reportError("[Arbor] Menu action failed", error));
       }));
       const own = scope === "card" ? block?.appearance?.cardColor : block?.appearance?.branchColor;
       menu.addItem(item => item.setTitle(`Reset ${title.toLowerCase()} color`).setIcon("rotate-ccw").setDisabled(!own).onClick(() => {
-        if (current() && own) void this.port.applyBlockColor(id, scope, null);
+        if (current() && own) runAsyncAction(this.port.applyBlockColor(id, scope, null), error => this.port.reportError("[Arbor] Menu action failed", error));
       }));
     }
   }
@@ -340,7 +341,7 @@ export class ViewMenus {
   }
 
   private addViewToggleMenuItem(menu: Menu, title: string, enabled: boolean, callback: () => void | Promise<void>): void {
-    menu.addItem((item) => item.setTitle(title).setIcon(enabled ? "check" : "circle").onClick(() => void callback()));
+    menu.addItem((item) => item.setTitle(title).setIcon(enabled ? "check" : "circle").onClick(() => runAsyncAction(callback(), error => this.port.reportError("[Arbor] Menu action failed", error))));
   }
 
   private addBlockOutputMenuItems(menu: Menu, blockId: BranchBlockId): void {
@@ -358,7 +359,7 @@ export class ViewMenus {
           item.onClick(() => this.openOutputProfilesManager());
           return;
         }
-        item.onClick(() => void this.port.applyOutputMutation(action.label, (profile) => {
+        item.onClick(() => runAsyncAction(this.port.applyOutputMutation(action.label, (profile) => {
           const current = this.port.read.getState();
           if (!action.state || !action.scope || !current) {
             return profile;
@@ -366,7 +367,7 @@ export class ViewMenus {
           return action.scope === "block"
             ? setBlockOnlyState(current.metadata, profile, blockId, action.state)
             : setSubtreeState(current.metadata, profile, blockId, action.state);
-        }));
+        }), error => this.port.reportError("[Arbor] Menu action failed", error)));
       });
     });
   }
@@ -404,9 +405,9 @@ export class ViewMenus {
   }
 
   private runNavigation(blockId: BranchBlockId, action: () => void): void {
-    void this.port.runWithSelectedBlock(blockId, () => {
+    runAsyncAction(this.port.runWithSelectedBlock(blockId, () => {
       action();
       return Promise.resolve();
-    });
+    }), error => this.port.reportError("[Arbor] Menu action failed", error));
   }
 }
