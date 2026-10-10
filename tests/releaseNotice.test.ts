@@ -4,6 +4,13 @@ import { fileURLToPath } from "node:url";
 import { getReleaseNote, shouldShowReleaseNotice } from "../src/releaseNotice";
 
 describe("release notice", () => {
+  it("announces 0.3.1 once after updating from 0.3.0", () => {
+    expect(shouldShowReleaseNotice("0.3.0", "0.3.1", false)).toBe(true);
+    expect(getReleaseNote("0.3.1")?.changes.join(" ")).toMatch(/active zoom/i);
+    expect(shouldShowReleaseNotice("0.3.1", "0.3.1", false)).toBe(false);
+    expect(shouldShowReleaseNotice(undefined, "0.3.1", true)).toBe(false);
+    expect(shouldShowReleaseNotice("0.3.1", "0.3.0", false)).toBe(false);
+  });
   it("announces 0.3.0 to existing users without repeating it or notifying fresh installs", () => {
     expect(shouldShowReleaseNotice("0.2.9", "0.3.0", false)).toBe(true);
     expect(getReleaseNote("0.3.0")?.changes.join(" ")).toMatch(/vertical/i);

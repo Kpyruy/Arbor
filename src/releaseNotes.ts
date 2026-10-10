@@ -10,6 +10,20 @@ export interface ArborReleaseNote {
 
 export const ARBOR_RELEASE_NOTES: readonly ArborReleaseNote[] = [
   {
+    version: "0.3.1",
+    title: "Capture, connect, focus",
+    changes: [
+      "Drop text, source links or images into cards, or create a new sibling or child using the visible drop targets.",
+      "Active zoom follows the selected card and adapts while editing; configure zoom limits within 25–500%.",
+      "Focus on one branch in either view, then use Stop focus to return to the complete tree.",
+      "Smoother camera motion and safer saves keep current edits and recoverable drafts in view."
+    ],
+    action: {
+      label: "Open Arbor settings",
+      id: "open-settings"
+    }
+  },
+  {
     version: "0.3.0",
     title: "Grow in every direction",
     changes: [

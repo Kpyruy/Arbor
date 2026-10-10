@@ -4,6 +4,44 @@ All notable changes to Arbor should be documented in this file.
 
 ## Unreleased
 
+## 0.3.1 - 2026-10-11
+
+Capture, connect, focus: bring content into the right branch and stay with the idea you are working on.
+
+![Drop text, links and images into a new sibling or child block](https://github.com/Kpyruy/Arbor/releases/download/0.3.1/arbor-content-capture.png)
+
+### Added
+
+- added text and source-reference drops onto cards, with Paste content into card in block menus and the Command Palette
+- added visible New block beside and New child block drop targets in Branch Editor and every Tree Overview orientation
+- added image-file drops into existing cards and new blocks, using Obsidian's attachment location and reusing existing vault images
+- preserved supported reader-generated excerpts and source references, including PDF++ annotation links, without modifying the source
+- added Active zoom in both views: fit the selected card, follow navigation and adapt to editing and pane resizing
+- added configurable minimum and maximum zoom within 25–500%, shared by wheel, pinch, menu controls and automatic fitting
+- added temporary Focus on branch in both views, with Stop focus and shared focus across view switches
+
+![Active zoom fits and follows the selected card](https://github.com/Kpyruy/Arbor/releases/download/0.3.1/arbor-active-zoom.png)
+
+### Improved
+
+- kept Stop zoom and Stop focus together beneath the profile/view controls, with icons and consistent hover states
+- smoothed active-zoom camera navigation and retained the horizontal anchor when selecting differently sized sibling cards
+- refined draft recovery with readable previews, clear Copy/Restore/Discard/Later actions and narrow-screen touch targets
+- refreshed installation, feature and contributor documentation and the pull request template
+
+![Focus on one branch and return to the full tree](https://github.com/Kpyruy/Arbor/releases/download/0.3.1/arbor-branch-focus.png)
+
+### Fixed
+
+- stopped active zoom at 100% within configured limits while keeping the selected card visible instead of jumping to the bottom
+- prevented competing camera animations during horizontal navigation and sideways jumps during vertical sibling navigation
+- rejected conflicting document saves and retained recoverable drafts instead of silently replacing newer content
+- kept delayed incoming content from overwriting a changed draft or being inserted into a stale selection
+- preserved editing selections, caret updates and owning-window input events in popout windows
+- rendered image embeds created by external drops correctly and kept new-block creation/content in one safe mutation
+
+Draft recovery is in memory for the current plugin lifetime, not a crash/restart backup. Physical-device acceptance, minimum-host checks, and exact Book Note CFI navigation remain separate verification work; this release does not claim universal reader-plugin compatibility.
+
 ## 0.3.0 - 2026-10-05
 
 Grow in every direction: vertical Tree Overview, card and branch colors, and faster ways to find and connect ideas.
