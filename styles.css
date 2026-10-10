@@ -2909,3 +2909,8 @@
   .arbor-block-colour-inputs input[type="text"] { font-size: 16px; }
   .arbor-block-colour-swatch, .arbor-block-colour-modal .arbor-confirm-actions button { min-height: 44px; }
 }
+.arbor-card.is-content-drop-target,
+.arbor-overview-card.is-content-drop-target {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+}

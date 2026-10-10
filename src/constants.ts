@@ -23,6 +23,7 @@ export const COMMANDS = {
   childRight: "create-child-right",
   parentLevelLeft: "create-parent-level-block-left",
   openBlockMenu: "open-block-actions-menu",
+  pasteContentIntoCard: "paste-content-into-card",
   selectParent: "select-parent-block",
   selectPreviousSibling: "select-previous-sibling-block",
   selectNextSibling: "select-next-sibling-block",

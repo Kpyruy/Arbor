@@ -29,6 +29,37 @@ function fixture() {
 }
 
 describe("ContentIngestionController", () => {
+  it("awaits the original editor before announcing system Paste", async () => {
+    const test = fixture();
+    const opened = deferred<void>();
+    const started = deferred<void>();
+    test.port.readClipboardText = async () => { throw Error("denied"); };
+    test.port.openEditorForPaste = () => { started.resolve(); return opened.promise; };
+    const paste = test.controller.paste("first");
+    await started.promise;
+    expect(test.port.notify).not.toHaveBeenCalled();
+    opened.resolve();
+    expect((await paste).kind).toBe("paste-fallback");
+    expect(test.port.notify).toHaveBeenCalledOnce();
+  });
+
+  it.each(["reject", "reload", "mode"])("does not advertise system Paste when asynchronous editor opening %s", async change => {
+    const test = fixture();
+    const opened = deferred<void>();
+    const started = deferred<void>();
+    test.port.readClipboardText = async () => { throw Error("denied"); };
+    test.port.openEditorForPaste = () => { started.resolve(); return opened.promise; };
+    const paste = test.controller.paste("first");
+    await started.promise;
+    if (change === "reload") test.reload();
+    if (change === "mode") test.controller.cancelPending();
+    if (change === "reject") opened.reject(Error("prior save failed"));
+    else opened.resolve();
+    expect((await paste).kind).toBe("retained");
+    expect(test.controller.getRetained()[0].target.blockId).toBe("first");
+    expect(test.port.notify).not.toHaveBeenCalledWith(expect.stringContaining("Use system Paste"));
+  });
+
   it("freezes target and transfer before awaiting native text, independent of later selection", async () => {
     const { controller, port } = fixture();
     const pending = deferred<string | null>();

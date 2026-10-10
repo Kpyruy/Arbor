@@ -24,7 +24,7 @@ export interface CardEvents {
   dragOver(event: DragEvent): void;
   drop(event: DragEvent): void;
   columnDragOver(event: DragEvent): void;
-  columnDrop(column: BranchColumnModel): Promise<void>;
+  columnDrop(event: DragEvent, column: BranchColumnModel): Promise<void>;
 }
 
 export interface BranchRendererPort {
@@ -220,10 +220,9 @@ export class BranchRenderer {
     const cardsEl = columnEl.createDiv({ cls: "arbor-card-list" });
     cardsEl.addEventListener("dragover", (event) => this.port.events.columnDragOver(event));
     cardsEl.addEventListener("drop", (event) => {
-      event.preventDefault();
       const column = this.getColumn(cardsEl.dataset.columnKey ?? "");
       if (column) {
-        runAsyncAction(this.port.events.columnDrop(column));
+        runAsyncAction(this.port.events.columnDrop(event, column));
       }
     });
     this.columnElementMap.set(columnKey, columnEl);
@@ -447,7 +446,7 @@ export class BranchRenderer {
       const session = this.port.editor.getSession();
       if (!session) return;
       this.work.frame(window, () => {
-        if (this.port.editor.getSession() !== session || !editorEl.isConnected) return;
+        if (this.port.editor.getSession() !== session || !editorEl.isConnected || !session.autofocus) return;
         editorEl.focus({ preventScroll: true });
         editorEl.setSelectionRange(editorEl.value.length, editorEl.value.length);
         this.port.editor.resizeEditor(editorEl);

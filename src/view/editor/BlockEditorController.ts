@@ -6,6 +6,13 @@ import type { EditingOrigin, EditingSession, LoadedFileIdentity, LoadedFileState
 import { DocumentLoadChangedError } from "../state/DocumentController";
 import type { EditorPort } from "../state/viewTypes";
 import { DraftRecoveryStore } from "./DraftRecoveryStore";
+import { generateBlockId } from "../../utils";
+
+let sessionSequence = 0;
+
+function generateSessionId(): string {
+  return `${generateBlockId()}-session-${++sessionSequence}`;
+}
 
 export interface BlockEditorPort {
   getFilePath?(): string;
@@ -78,7 +85,7 @@ export class BlockEditorController implements EditorPort {
     this.retainCurrentDraft();
     this.sessionFilePath = this.port.getFilePath?.() ?? "";
     this.session = {
-      draftId: crypto.randomUUID(),
+      draftId: generateSessionId(),
       filePath: this.sessionFilePath || undefined,
       loadedFile: this.port.getLoadedFileIdentity?.() ?? undefined,
       blockId: block.id,

@@ -1,8 +1,12 @@
 import { build } from "esbuild";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { buildColumnModels } from "../src/model/tree";
 import { fixtureLoaded, fixtureSettings } from "./helpers/arborFixtures";
+import { ingestionHarness, loadIngestionView } from "./helpers/ingestionHarness";
+
+beforeAll(loadIngestionView);
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 type BranchRendererModule = typeof import("../src/view/branch/BranchRenderer");
 type RouteBranchViewportWheel = BranchRendererModule["routeBranchViewportWheel"];
@@ -98,5 +102,22 @@ describe("routeBranchViewportWheel", () => {
     expect(actions.updateZoomLevel).not.toHaveBeenCalled();
     expect(actions.next).not.toHaveBeenCalled();
     expect(actions.previous).not.toHaveBeenCalled();
+  });
+});
+
+describe("BranchRenderer content receiver", () => {
+  it("claims a nested content drop before the column move handler without replacing its card", async () => {
+    const test = await ingestionHarness();
+    const card = test.card();
+    const nested = card.querySelector("a")!.createEl("span", { text: "Source" });
+    let columnDrops = 0;
+    card.parentElement!.addEventListener("drop", () => { columnDrops++; });
+    nested.dispatchEvent(test.event("drop", test.transfer("nested branch quote")));
+    await test.settle();
+    await test.render();
+    expect(test.card()).toBe(card);
+    expect(test.content()).toBe("First\n\nnested branch quote");
+    expect(test.writes).toHaveLength(1);
+    expect(columnDrops).toBe(0);
   });
 });

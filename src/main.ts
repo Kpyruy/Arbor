@@ -379,6 +379,19 @@ export default class ArborPlugin extends Plugin {
 
   private registerCommands(): void {
     this.addCommand({
+      id: COMMANDS.pasteContentIntoCard,
+      name: "Paste content into card",
+      checkCallback: checking => {
+        const view = this.getActiveBranchView();
+        if (!view?.canPasteContentIntoCard()) return false;
+        if (!checking) void view.pasteContentIntoCard().catch(error => {
+          console.error("[Arbor] Paste failed", error);
+          new Notice("Arbor could not paste content. Unsaved drafts are retained.");
+        });
+        return true;
+      }
+    });
+    this.addCommand({
       id: COMMANDS.openView,
       name: "Open view for current note",
       checkCallback: (checking) => {

@@ -2,6 +2,7 @@ import type { TFile } from "obsidian";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BlockEditorController, type BlockEditorPort } from "../src/view/editor/BlockEditorController";
 import { EditorAttachments } from "../src/view/editor/EditorAttachments";
+import { DraftRecoveryStore } from "../src/view/editor/DraftRecoveryStore";
 import { deferred, fixtureOutput, fixtureTree } from "./helpers/arborFixtures";
 import { linearizeTree } from "../src/storage/serializer";
 import { ensureSelectedBlock } from "../src/model/tree";
@@ -31,6 +32,29 @@ function createPort(): BlockEditorPort {
 }
 
 describe("BlockEditorController", () => {
+  it.each([undefined, {}])("retains two distinct failed sessions without a crypto API (%s)", async cryptoApi => {
+    vi.stubGlobal("crypto", cryptoApi);
+    vi.spyOn(Date, "now").mockReturnValue(123);
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const port = createPort();
+    const recovery = new DraftRecoveryStore();
+    port.recoveryStore = recovery;
+    port.getFilePath = () => "fixture.md";
+    port.saveEdit = async () => { throw Error("disk full"); };
+    const editor = new BlockEditorController(port);
+    editor.beginEditingBlock("first");
+    editor.getSession()!.value = "first failed draft";
+    await expect(editor.commitEditIfNeeded()).rejects.toThrow("disk full");
+    editor.cancelEditingSession();
+    editor.beginEditingBlock("first");
+    editor.getSession()!.value = "second failed draft";
+    await expect(editor.commitEditIfNeeded()).rejects.toThrow("disk full");
+    const retained = recovery.getForFile("fixture.md");
+    expect(retained.map(draft => draft.value)).toEqual(["first failed draft", "second failed draft"]);
+    expect(new Set(retained.map(draft => draft.draftId)).size).toBe(2);
+    vi.restoreAllMocks();
+  });
+
   it("keeps the exact draft after a rejecting save and retries once", async () => {
     const port = createPort();
     port.saveEdit = async () => { throw Error("disk full"); };

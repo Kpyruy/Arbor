@@ -10,7 +10,7 @@ function controllerForTree() {
   const controller = new DragDropController({
     read: { getState: () => state, getSettings: fixtureSettings, getMode: () => "editor", getFilePath: () => "fixture.md" },
     getDocument: () => ({ addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as Document),
-    getRoot: () => ({ querySelectorAll: () => [] } as unknown as HTMLElement),
+    getRoot: () => ({ querySelectorAll: () => [], createEl: () => ({ remove() {} }) } as unknown as HTMLElement),
     getStage: () => null,
     getColumn: (key) => {
       if (key === "root") {
@@ -30,7 +30,31 @@ function controllerForTree() {
   return { controller, requestRender, state };
 }
 
+function startDrag(controller: DragDropController, blockId: string) {
+  const payload = new Map<string, string>();
+  const transfer = { types: ["application/x-arbor-card-move", "text/plain"], setData: (type: string, value: string) => payload.set(type, value),
+    getData: (type: string) => payload.get(type) ?? "", setDragImage() {} };
+  const card = { dataset: { blockId, columnKey: "depth-1", blockIndex: "0" }, addClass() {} };
+  controller.handleCardDragStart({ currentTarget: card, target: card, dataTransfer: transfer } as unknown as DragEvent);
+  return transfer;
+}
+
 describe("DragDropController", () => {
+  it("does not infer a card movement from ID-looking external text", async () => {
+    const { controller, state } = controllerForTree();
+    const before = JSON.stringify(state.metadata);
+    const preventDefault = vi.fn();
+    controller.handleCardDragOver({
+      currentTarget: { dataset: { columnKey: "depth-1", blockIndex: "1" }, getBoundingClientRect: () => ({ top: 0, height: 20 }) },
+      dataTransfer: { types: ["text/plain"], getData: () => "first" },
+      clientY: 0, preventDefault
+    } as unknown as DragEvent);
+    await controller.applyDrop({ key: "depth-1", label: "Root children", parentId: "root", blocks: [] });
+    expect(JSON.stringify(state.metadata)).toBe(before);
+    expect(controller.getDragState()).toBeNull();
+    expect(preventDefault).not.toHaveBeenCalled();
+  });
+
   it("leaves link dragging native without starting a card move", () => {
     const { controller } = controllerForTree();
     const content = {};
@@ -54,9 +78,10 @@ describe("DragDropController", () => {
 
   it("moves a leaf to root children at index 1 through the real move mutation callback", async () => {
     const { controller, state } = controllerForTree();
+    const transfer = startDrag(controller, "leaf");
     controller.handleCardDragOver({
       currentTarget: { dataset: { columnKey: "depth-1", blockIndex: "1" }, getBoundingClientRect: () => ({ top: 0, height: 20 }) },
-      dataTransfer: { getData: () => "leaf" },
+      dataTransfer: transfer,
       clientY: 0,
       preventDefault: () => {}
     } as unknown as DragEvent);
@@ -73,7 +98,7 @@ describe("DragDropController", () => {
     const controllerWithMoveOrder = new DragDropController({
       read: { getState: () => state, getSettings: fixtureSettings, getMode: () => "editor", getFilePath: () => "fixture.md" },
       getDocument: () => ({ addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as Document),
-      getRoot: () => ({ querySelectorAll: () => [] } as unknown as HTMLElement),
+      getRoot: () => ({ querySelectorAll: () => [], createEl: () => ({ remove() {} }) } as unknown as HTMLElement),
       getStage: () => null,
       getColumn: (key) => {
         if (key === "depth-1") return { key, label: "First", parentId: "first", blocks: [] };
@@ -89,16 +114,18 @@ describe("DragDropController", () => {
       },
       requestRender: () => {}
     });
+    let transfer = startDrag(controllerWithMoveOrder, "first");
     controllerWithMoveOrder.handleCardDragOver({
       currentTarget: { dataset: { columnKey: "depth-1", blockIndex: "0" }, getBoundingClientRect: () => ({ top: 0, height: 20 }) },
-      dataTransfer: { getData: () => "first" },
+      dataTransfer: transfer,
       clientY: 0,
       preventDefault: () => {}
     } as unknown as DragEvent);
     await controllerWithMoveOrder.applyDrop({ key: "depth-1", label: "First", parentId: "first", blocks: [] });
+    transfer = startDrag(controllerWithMoveOrder, "first");
     controllerWithMoveOrder.handleCardDragOver({
       currentTarget: { dataset: { columnKey: "depth-2", blockIndex: "0" }, getBoundingClientRect: () => ({ top: 0, height: 20 }) },
-      dataTransfer: { getData: () => "first" },
+      dataTransfer: transfer,
       clientY: 0,
       preventDefault: () => {}
     } as unknown as DragEvent);
@@ -126,7 +153,7 @@ describe("DragDropController", () => {
     const textarea = { tagName: "TEXTAREA" } as unknown as EventTarget;
     const card = { dataset: { blockId: "first", columnKey: "root", blockIndex: "0" } } as unknown as HTMLElement;
     controller.handleCardDragStart({ currentTarget: card, target: textarea, preventDefault } as unknown as DragEvent);
-    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(preventDefault).not.toHaveBeenCalled();
     expect(controller.getDragState()).toBeNull();
   });
 

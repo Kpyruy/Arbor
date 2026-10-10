@@ -133,6 +133,8 @@ async function fixture() {
   let editorVisible = false;
   Object.assign(view, {
     file, loadGeneration: 1, documentController: controller, editor, presentationMode: "editor",
+    ingestion: { cancelPending() {}, close() {} },
+    ingestionRouting: { clearGesture() {} },
     contentEl: { win: { navigator: { clipboard: { writeText: async (text: string) => { clipboard.push(text); } } } } },
     reportActionError: (error: unknown) => errors.push(error),
     onLoadFile: async () => { view.loadGeneration += 1; editor.reset(); controller.reset(); view.file = file; controller.replaceLoadedState((await controller.readLoadedFileState(file, "first")).state); },

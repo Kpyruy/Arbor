@@ -4,6 +4,10 @@ import { moveBlockToParentAtIndex } from "../../model/tree";
 import { findRenderedCardLink } from "../navigation/CardLinkController";
 import type { BranchBlockId, BranchColumnModel, BranchTreeMetadata, BranchTreeMutationResult } from "../../types";
 import type { SelectionOptions, ViewReadPort } from "../state/viewTypes";
+import { generateBlockId } from "../../utils";
+
+export const ARBOR_CARD_DRAG_MIME = "application/x-arbor-card-move";
+let dragSequence = 0;
 
 export interface DragState {
   draggedBlockId: BranchBlockId;
@@ -23,10 +27,12 @@ export interface DragDropPort {
   selectBlock(id: BranchBlockId | null, options?: SelectionOptions): void;
   move(label: string, mutate: (tree: BranchTreeMetadata) => BranchTreeMutationResult): Promise<void>;
   requestRender(): void;
+  onError?(error: unknown): void;
 }
 
 export class DragDropController {
   private dragState: DragState | null = null;
+  private dragSession: string | null = null;
   private dragPreviewEl: HTMLElement | null = null;
   private dragPreviewPoint: { x: number; y: number } | null = null;
   private dragPreviewOffset = { x: 0, y: 0 };
@@ -43,11 +49,12 @@ export class DragDropController {
 
   reset(): void {
     this.dragState = null;
+    this.dragSession = null;
     this.cleanupDragPreview();
   }
 
   handleColumnDragOver(event: DragEvent): void {
-    if (!this.port.read.getSettings().dragAndDrop) {
+    if (!this.port.read.getSettings().dragAndDrop || !this.isOwnDrag(event)) {
       return;
     }
 
@@ -84,6 +91,7 @@ export class DragDropController {
 
   handleCardDragStart(event: DragEvent): void {
     const card = event.currentTarget as HTMLElement;
+    if ((event.target as HTMLElement | null)?.tagName === "TEXTAREA") return;
     if (findRenderedCardLink(event.target, card)) return;
     const blockId = card.dataset.blockId;
     if (!canStartCardDrag(this.port.read.getSettings().dragAndDrop, this.port.isEditing(blockId ?? "") ? blockId ?? null : null, blockId)) {
@@ -98,6 +106,8 @@ export class DragDropController {
       return;
     }
 
+    this.dragSession = `${generateBlockId()}-drag-${++dragSequence}`;
+    event.dataTransfer?.setData(ARBOR_CARD_DRAG_MIME, this.dragSession);
     event.dataTransfer?.setData("text/plain", blockId);
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = "move";
@@ -115,7 +125,7 @@ export class DragDropController {
   }
 
   handleCardDragOver(event: DragEvent): void {
-    if (!this.port.read.getSettings().dragAndDrop) {
+    if (!this.port.read.getSettings().dragAndDrop || !this.isOwnDrag(event)) {
       return;
     }
 
@@ -144,26 +154,33 @@ export class DragDropController {
   }
 
   handleCardDrop(event: DragEvent): void {
+    if (!this.port.read.getSettings().dragAndDrop || !this.isOwnDrag(event)) return;
     event.preventDefault();
+    event.stopPropagation();
     const column = this.port.getColumn((event.currentTarget as HTMLElement).dataset.columnKey ?? "");
     if (column) {
-      runAsyncAction(this.applyDrop(column));
+      runAsyncAction(this.applyDrop(column, event), error => this.port.onError?.(error));
     }
   }
 
   handleCardDragEnd(): void {
     this.dragState = null;
+    this.dragSession = null;
     this.cleanupDragPreview();
     this.port.requestRender();
   }
 
-  async applyDrop(_column: BranchColumnModel): Promise<void> {
-    if (!this.dragState || !this.port.read.getState()) {
+  async applyDrop(_column: BranchColumnModel, event?: DragEvent): Promise<void> {
+    if (!this.port.read.getSettings().dragAndDrop || event && !this.isOwnDrag(event)
+      || !this.dragState || !this.port.read.getState()) {
       return;
     }
 
+    event?.preventDefault();
+
     const { draggedBlockId, targetIndex, targetParentId } = this.dragState;
     this.dragState = null;
+    this.dragSession = null;
     this.cleanupDragPreview();
     await this.port.move("Move block", (metadata) => ({
       metadata: moveBlockToParentAtIndex(metadata, draggedBlockId, targetParentId, targetIndex),
@@ -176,7 +193,14 @@ export class DragDropController {
   }
 
   private readDraggedBlockId(event: DragEvent): BranchBlockId | null {
-    return event.dataTransfer?.getData("text/plain") || this.dragState?.draggedBlockId || null;
+    return this.isOwnDrag(event) ? this.dragState!.draggedBlockId : null;
+  }
+
+  isOwnDrag(event: DragEvent): boolean {
+    if (!this.dragSession || !this.dragState || !event.dataTransfer) return false;
+    const value = event.dataTransfer.getData(ARBOR_CARD_DRAG_MIME);
+    return value === this.dragSession || event.type === "dragover" && !value
+      && Array.from(event.dataTransfer.types).includes(ARBOR_CARD_DRAG_MIME);
   }
 
   private getTransparentDragImage(): HTMLCanvasElement {

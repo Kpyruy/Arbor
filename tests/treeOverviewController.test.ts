@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TreeOverviewController, type TreeOverviewPort } from "../src/view/overview/TreeOverviewController";
 import { readSource, sourceClass, sourceMethod } from "./helpers/viewSource";
+import { ingestionHarness, loadIngestionView } from "./helpers/ingestionHarness";
+
+beforeAll(loadIngestionView);
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("TreeOverviewController", () => {
   it("drops the old focus request on reset and accepts a fresh mounted lifetime", () => {
@@ -120,5 +124,43 @@ describe("TreeOverviewController", () => {
     expect(source).toContain("this.shouldCenterOverviewOnNextRender = requested;");
     expect(source).toContain("requestKeyboardFocusAfterMutation(requested = true): void");
     expect(source).toContain("this.shouldRestoreOverviewKeyboardFocusAfterMutation = requested;");
+  });
+});
+
+describe("TreeOverviewController content receiver", () => {
+  it.each(["horizontal", "vertical-top-down", "vertical-bottom-up"] as const)("persists exactly one nested card drop in %s", async orientation => {
+    const test = await ingestionHarness("overview", orientation);
+    const state = test.view.documentController.getState()!;
+    const topology = state.metadata.blocks.map(({ id, parentId, order }) => ({ id, parentId, order }));
+    const output = structuredClone(state.outputState);
+    test.card().querySelector("a")!.dispatchEvent(test.event("drop", test.transfer("overview quote")));
+    await test.settle();
+    expect(test.content()).toBe("First\n\noverview quote");
+    expect(test.writes).toHaveLength(1);
+    const after = test.view.documentController.getState()!;
+    expect(after.metadata.blocks.map(({ id, parentId, order }) => ({ id, parentId, order }))).toEqual(topology);
+    expect(after.metadata.blocks.find(block => block.id === "first")!.appearance).toEqual({ cardColor: "#123456", branchColor: "#abcdef" });
+    expect(after.outputState).toEqual(output);
+  });
+
+  it("routes an overview textarea Paste through input and saves only on explicit Enter", async () => {
+    const test = await ingestionHarness("overview", "vertical-bottom-up");
+    test.view.editor.beginEditingBlock("first", "overview");
+    test.view.editor.getSession()!.value = "ABC";
+    await test.render();
+    const textarea = test.card().querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.setSelectionRange(1, 2);
+    textarea.dispatchEvent(test.event("paste", test.transfer("quote")));
+    await test.settle();
+    expect(textarea.value).toBe("AquoteC");
+    expect(textarea.selectionStart).toBe(6);
+    expect(textarea.selectionEnd).toBe(6);
+    expect(test.view.editor.getSession()?.value).toBe("AquoteC");
+    expect(test.writes).toEqual([]);
+    textarea.dispatchEvent(new test.win.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await test.settle();
+    expect(test.content()).toBe("AquoteC");
+    expect(test.writes).toHaveLength(1);
+    expect(test.view.editor.getSession()).toBeNull();
   });
 });

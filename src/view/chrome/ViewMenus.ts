@@ -36,6 +36,9 @@ export interface MenuCommands {
 }
 
 export interface ViewMenusPort {
+  pasteContentIntoCard(id: BranchBlockId): Promise<void>;
+  hasRetainedIncomingContent(): boolean;
+  recoverIncomingContent(): void;
   read: ViewReadPort;
   getOverviewOrientation(): ArborOverviewOrientation;
   getOverviewOrientationOverride(): ArborOverviewOrientation | null;
@@ -208,6 +211,13 @@ export class ViewMenus {
   buildBlockMenu(blockId: BranchBlockId): Menu {
     const menu = new Menu();
     const state = this.port.read.getState();
+    menu.addItem(item => item.setTitle("Paste content into card").setIcon("clipboard-paste")
+      .setDisabled(this.port.read.getMode() === "output" || !state || !getBlock(state.metadata, blockId))
+      .onClick(() => runAsyncAction(this.port.pasteContentIntoCard(blockId), error => this.port.reportError("[Arbor] Paste failed", error))));
+    if (this.port.hasRetainedIncomingContent()) {
+      menu.addItem(item => item.setTitle("Recover incoming content").setIcon("rotate-ccw")
+        .onClick(() => this.port.recoverIncomingContent()));
+    }
     menu.addItem((item) =>
       item.setTitle("Edit block").setIcon("pencil").onClick(() => {
         this.port.editor.beginEditingBlock(blockId, this.port.read.getMode() === "overview" ? "overview" : "card");

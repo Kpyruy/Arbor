@@ -23,6 +23,9 @@ export interface IngestionTarget {
   readonly blockId: string;
   readonly loadEpoch: number;
   readonly editingSessionId?: string;
+  readonly selectionStart?: number;
+  readonly selectionEnd?: number;
+  readonly selectionDraftValue?: string;
 }
 
 export interface NativeDragReader {

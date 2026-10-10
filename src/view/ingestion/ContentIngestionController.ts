@@ -9,7 +9,7 @@ export interface ContentIngestionPort {
   append(target: IngestionTarget, markdown: string): Promise<void>;
   readNative(value: unknown, destinationPath: string): Promise<string | null>;
   readClipboardText(): Promise<string>;
-  openEditorForPaste(target: IngestionTarget): void;
+  openEditorForPaste(target: IngestionTarget): void | Promise<void>;
   notify(message: string): void;
 }
 
@@ -105,7 +105,12 @@ export class ContentIngestionController {
       decoded = await gesture.read();
     } catch {
       if (!this.isCurrentGesture(gesture)) return { kind: "ignored", reason: "stale-target" };
-      this.port.openEditorForPaste(target);
+      try {
+        await this.port.openEditorForPaste(target);
+        if (!this.isCurrentGesture(gesture)) throw new Error("The original Paste target changed while opening its editor");
+      } catch (error) {
+        return this.retain(gesture, null, error);
+      }
       this.port.notify("Clipboard access failed. Use system Paste in the original card editor.");
       return { kind: "paste-fallback" };
     }

@@ -319,7 +319,7 @@ export class TreeOverviewController {
     const state = this.port.read.getState();
     const filePath = this.port.read.getFilePath();
     this.work.frame(window, () => {
-      if (this.port.editor.getSession() !== session || this.port.read.getState() !== state
+      if (this.port.editor.getSession() !== session || !session.autofocus || this.port.read.getState() !== state
         || this.port.read.getFilePath() !== filePath || !card.isConnected || !this.overviewSurfaceEl?.contains(card)) {
         return;
       }

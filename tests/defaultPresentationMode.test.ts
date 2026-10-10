@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { readSource, sourceClass, sourceMethod } from "./helpers/viewSource";
 import { DocumentController, type DocumentPort } from "../src/view/state/DocumentController";
 import { buildBranchDocument, parseBranchDocument } from "../src/storage/document";
 import { fixtureLoaded, fixtureOutput } from "./helpers/arborFixtures";
+import { ingestionHarness, loadIngestionView } from "./helpers/ingestionHarness";
+
+beforeAll(loadIngestionView);
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("default presentation mode", () => {
   it("defaults to the branch editor and restores the selected startup mode when a note opens", () => {
@@ -128,14 +132,41 @@ describe("default presentation mode", () => {
     expect(source).toContain('attr: { type: "button", "aria-label": "Open tree overview" }');
   });
 
-  it("centres the selected block only when opening the overview", () => {
-    const source = readSource("src/view/ArborView.ts");
-
-    const overview = readSource("src/view/overview/TreeOverviewController.ts");
-
-    expect(overview).toContain("private shouldCenterOverviewOnNextRender = false;");
-    expect(source).toContain("this.overview.requestCenterOnNextRender();\n      this.presentationMode = \"overview\";");
-    expect(overview).toContain("if (this.shouldCenterOverviewOnNextRender) {");
+  it("centres the selected block on overview opening but not on content import", async () => {
+    const test = await ingestionHarness("overview");
+    const viewport = test.root.querySelector<HTMLElement>(".arbor-overview-viewport")!;
+    for (const [property, value] of Object.entries({ clientWidth: 100, clientHeight: 100, scrollWidth: 1000, scrollHeight: 1000 })) {
+      Object.defineProperty(viewport, property, { configurable: true, value });
+    }
+    for (const [property, value] of Object.entries({ offsetLeft: 200, offsetTop: 150, offsetWidth: 100, offsetHeight: 80 })) {
+      Object.defineProperty(test.win.HTMLElement.prototype, property, {
+        configurable: true,
+        get(this: HTMLElement) { return this.classList.contains("arbor-overview-card") ? value : 0; }
+      });
+    }
+    viewport.scrollTo = (options?: ScrollToOptions | number, top?: number) => {
+      viewport.scrollLeft = typeof options === "number" ? options : options?.left ?? viewport.scrollLeft;
+      viewport.scrollTop = typeof options === "number" ? top ?? viewport.scrollTop : options?.top ?? viewport.scrollTop;
+    };
+    viewport.scrollLeft = 400;
+    viewport.scrollTop = 300;
+    test.view.closeTreeOverview();
+    await test.settle();
+    test.view.openTreeOverview();
+    await test.settle();
+    await test.render();
+    await test.settle();
+    expect(viewport.scrollLeft).toBe(200);
+    expect(viewport.scrollTop).toBe(140);
+    viewport.scrollLeft = 400;
+    viewport.scrollTop = 300;
+    test.card().dispatchEvent(test.event("drop", test.transfer("no recenter")));
+    await test.settle();
+    await test.render();
+    await test.settle();
+    expect(test.content()).toBe("First\n\nno recenter");
+    expect(viewport.scrollLeft).toBe(400);
+    expect(viewport.scrollTop).toBe(300);
   });
 
   it("places floating controls opposite the reading direction", () => {

@@ -108,6 +108,11 @@ import { ViewMenus } from "./chrome/ViewMenus";
 import { DocumentController, DocumentLoadChangedError } from "./state/DocumentController";
 import { ViewWorkScope } from "./runtime/ViewWorkScope";
 import { normalizeOverviewOrientation, resolveOverviewOrientation } from "../overviewOrientation";
+import { appendIncomingContent } from "../model/ingestContent";
+import { ContentIngestionController } from "./ingestion/ContentIngestionController";
+import { ContentIngestionRouting } from "./ingestion/ContentIngestionRouting";
+import { getNativeDraggable, ObsidianDragAdapter } from "./ingestion/ObsidianDragAdapter";
+import type { IngestionTarget } from "./ingestion/ingestionTypes";
 export {
   getBlockOutputMenuActions,
   getOutputCardPresentation
@@ -123,6 +128,8 @@ export class ArborView extends FileView {
 
   private readonly documentController: DocumentController;
   private readonly editor: BlockEditorController;
+  private readonly ingestion: ContentIngestionController;
+  private readonly ingestionRouting: ContentIngestionRouting;
   private readonly attachments: EditorAttachments;
   private readonly navigationController: NavigationController;
   private readonly cardLinks: CardLinkController;
@@ -270,6 +277,43 @@ export class ArborView extends FileView {
       paste: (event, textarea) => this.attachments.handleEditorPaste(event, textarea),
       drop: (event, textarea) => this.attachments.handleEditorDrop(event, textarea)
     });
+    const nativeDrag = new ObsidianDragAdapter<TFile>({
+      resolveFile: value => value instanceof TFile && this.app.vault.getAbstractFileByPath(value.path) === value ? value : null,
+      resolveLink: (linkpath, sourcePath) => this.app.metadataCache.getFirstLinkpathDest(linkpath, sourcePath),
+      generateMarkdownLink: (file, destinationPath, subpath, alias) => this.app.fileManager.generateMarkdownLink(file, destinationPath, subpath, alias)
+    });
+    this.ingestion = new ContentIngestionController({
+      captureTarget: blockId => {
+        const loaded = this.documentController.getLoadedFileIdentity();
+        if (!loaded || this.presentationMode === "output" || !this.state || !getBlock(this.state.metadata, blockId)) return null;
+        const session = this.editor.getSession();
+        const editor = session?.blockId === blockId ? this.findIncomingEditor(blockId) : null;
+        if (session && editor) this.editor.consumeAutofocus(session);
+        return { filePath: loaded.path, loadEpoch: loaded.epoch, blockId,
+          ...(session?.blockId === blockId ? { editingSessionId: session.draftId } : {}),
+          ...(editor ? { selectionStart: editor.selectionStart, selectionEnd: editor.selectionEnd, selectionDraftValue: editor.value } : {}) };
+      },
+      isCurrent: target => this.isCurrentIngestionTarget(target),
+      getEditingBlockId: () => this.editor.getSession()?.blockId ?? null,
+      insertDraft: (target, markdown) => this.insertIncomingDraft(target, markdown),
+      append: (target, markdown) => this.applyMutation("Append incoming content", metadata => {
+        if (!this.ingestion.isCurrent(target)) throw new DocumentLoadChangedError();
+        return appendIncomingContent(metadata, target.blockId, markdown);
+      }),
+      readNative: (value, destinationPath) => nativeDrag.read(value, destinationPath),
+      readClipboardText: () => this.contentEl.win.navigator.clipboard.readText(),
+      openEditorForPaste: target => this.openEditorForPaste(target),
+      notify: message => new Notice(message)
+    });
+    this.ingestionRouting = new ContentIngestionRouting({
+      getRoot: () => this.contentEl,
+      getMode: () => this.presentationMode,
+      getSession: () => this.editor.getSession(),
+      getNativeDraggable: () => getNativeDraggable((this.app as App & { dragManager?: unknown }).dragManager),
+      isOwnDrag: event => this.dragDropController.isOwnDrag(event),
+      suspendBlurCommit: () => this.editor.suspendBlurCommit(),
+      reportError: error => this.reportActionError(error)
+    }, this.ingestion, nativeDrag);
     this.localHeadingLinks = new LocalHeadingLinks((path) => this.getLocalHeadingProvider(path));
     const selectLinkTarget = (blockId: string): boolean => {
       if (!this.state || !getBlock(this.state.metadata, blockId)) return false;
@@ -382,7 +426,8 @@ export class ArborView extends FileView {
       isEditing: (id) => this.editor.getSession()?.blockId === id,
       selectBlock: (id, options) => this.selectBlock(id, options),
       move: (label, mutate) => this.applyMutation(label, mutate),
-      requestRender: () => this.render()
+      requestRender: () => this.render(),
+      onError: error => this.reportActionError(error)
     });
     this.branchRenderer = new BranchRenderer({
       read: {
@@ -406,7 +451,7 @@ export class ArborView extends FileView {
         dragOver: (event) => this.dragDropController.handleCardDragOver(event),
         drop: (event) => this.dragDropController.handleCardDrop(event),
         columnDragOver: (event) => this.dragDropController.handleColumnDragOver(event),
-        columnDrop: (column) => this.dragDropController.applyDrop(column)
+        columnDrop: (event, column) => this.dragDropController.applyDrop(column, event)
       },
       getColumnsRoot: () => this.columnsEl,
       getContext: () => this.viewContext,
@@ -553,6 +598,9 @@ export class ArborView extends FileView {
       () => this.file?.basename ?? ""
     );
     this.menus = new ViewMenus({
+      pasteContentIntoCard: id => this.pasteContentIntoCard(id),
+      hasRetainedIncomingContent: () => this.ingestion.getRetained().length > 0,
+      recoverIncomingContent: () => this.showIncomingContentRecovery(),
       getOverviewOrientation: () => this.getOverviewOrientation(),
       getOverviewOrientationOverride: () => this.getOverviewOrientationOverride(),
       setOverviewOrientationOverride: (value) => this.setOverviewOrientationOverride(value),
@@ -653,6 +701,7 @@ export class ArborView extends FileView {
   private buildBlockMenu(blockId: BranchBlockId): Menu { return this.menus.buildBlockMenu(blockId); }
 
   private teardownShell(): void {
+    this.ingestionRouting?.unbind();
     this.dragDropController.reset();
     this.cleanupViewportPan();
     this.cleanupOverviewPan();
@@ -788,6 +837,7 @@ export class ArborView extends FileView {
   }
 
   async onClose(): Promise<void> {
+    this.ingestion?.close();
     this.headingLinks?.cancelPending();
     this.clearHeadingSubscription();
     this.invalidatePendingLoads();
@@ -998,6 +1048,8 @@ export class ArborView extends FileView {
   }
 
   private invalidatePendingLoads(): void {
+    this.ingestion?.cancelPending();
+    this.ingestionRouting?.clearGesture();
     this.loadGeneration += 1;
     this.overview.invalidate();
   }
@@ -1184,6 +1236,8 @@ export class ArborView extends FileView {
     runAsyncAction(this.commitEditIfNeeded().then(() => {
       if (!this.isSameLoadedFile(loadedFileIdentity)) return;
       this.overview.requestCenterOnNextRender();
+      this.ingestion.cancelPending();
+      this.ingestionRouting.clearGesture();
       this.presentationMode = "overview";
       this.render();
     }), error => this.reportActionError(error));
@@ -1193,17 +1247,23 @@ export class ArborView extends FileView {
     const loadedFileIdentity = this.documentController.getLoadedFileIdentity();
     runAsyncAction(this.commitEditIfNeeded().then(() => {
       if (!this.isSameLoadedFile(loadedFileIdentity)) return;
+      this.ingestion.cancelPending();
+      this.ingestionRouting.clearGesture();
       this.presentationMode = "editor";
       this.render();
     }), error => this.reportActionError(error));
   }
 
   openOutputPreview(): void {
+    this.ingestion.cancelPending();
+    this.ingestionRouting.clearGesture();
     this.presentationMode = "output";
     this.render();
   }
 
   closeOutputPreview(): void {
+    this.ingestion.cancelPending();
+    this.ingestionRouting.clearGesture();
     this.presentationMode = "editor";
     this.render();
   }
@@ -1650,6 +1710,122 @@ export class ArborView extends FileView {
 
   private ensureShell(): void {
     this.shell.ensureShell();
+    this.ingestionRouting.bind();
+  }
+
+  canPasteContentIntoCard(): boolean {
+    return Boolean(this.presentationMode !== "output" && this.documentController.getLoadedFileIdentity()
+      && this.state?.selectedBlockId && getBlock(this.state.metadata, this.state.selectedBlockId));
+  }
+
+  async pasteContentIntoCard(blockId = this.state?.selectedBlockId ?? ""): Promise<void> {
+    const resume = this.editor.suspendBlurCommit();
+    try { await this.ingestion.paste(blockId); }
+    finally { resume(); }
+  }
+
+  private showIncomingContentRecovery(): void {
+    const retained = this.ingestion.getRetained();
+    if (!retained.length) return;
+    const modal = new Modal(this.app);
+    modal.contentEl.createEl("h3", { text: "Recover incoming content" });
+    for (const incoming of retained) {
+      const row = modal.contentEl.createDiv();
+      row.createEl("h4", { text: `${incoming.target.filePath} · block ${incoming.target.blockId}` });
+      const reason = row.createEl("p", { text: incoming.reason });
+      const text = row.createEl("textarea", { attr: { readonly: "", "aria-label": "Retained incoming content" } });
+      text.value = incoming.markdown ?? "Native content could not be read. Retry uses the original source, never the displayed title.";
+      new ButtonComponent(row).setButtonText("Retry").setDisabled(!this.isCurrentIngestionTarget(incoming.target)).onClick(() => {
+        const resume = this.editor.suspendBlurCommit();
+        runAsyncAction(this.ingestion.retry(incoming.id).then(result => {
+          if (result.kind === "appended" || result.kind === "draft") row.remove();
+          else reason.setText(this.ingestion.getRetained().find(item => item.id === incoming.id)?.reason ?? "Incoming content was not inserted.");
+          if (!this.ingestion.getRetained().length) modal.close();
+        }).finally(resume), error => this.reportActionError(error));
+      });
+      new ButtonComponent(row).setButtonText("Copy").setDisabled(incoming.markdown === null).onClick(() => {
+        runAsyncAction(this.contentEl.win.navigator.clipboard.writeText(incoming.markdown!).catch(() => {
+          text.focus();
+          text.select();
+          new Notice("Clipboard access failed. Use system copy on the selected retained text.");
+        }), error => this.reportActionError(error));
+      });
+    }
+    new ButtonComponent(modal.contentEl).setButtonText("Later").onClick(() => modal.close());
+    modal.open();
+  }
+
+  private isCurrentIngestionTarget(target: IngestionTarget): boolean {
+    const loaded = this.documentController.getLoadedFileIdentity();
+    const session = this.editor.getSession();
+    return Boolean(this.presentationMode !== "output" && loaded && loaded.path === target.filePath
+      && loaded.epoch === target.loadEpoch && this.state && getBlock(this.state.metadata, target.blockId)
+      && (!target.editingSessionId || session?.blockId === target.blockId && session.draftId === target.editingSessionId));
+  }
+
+  private insertIncomingDraft(target: IngestionTarget, markdown: string): boolean {
+    if (!this.isCurrentIngestionTarget(target) || !target.editingSessionId) return false;
+    const session = this.editor.getSession();
+    const editor = this.findIncomingEditor(target.blockId);
+    if (!editor || session?.draftId !== target.editingSessionId || target.selectionDraftValue === undefined) return false;
+    const ensureCapturedDraft = () => {
+      if (editor.value !== target.selectionDraftValue) {
+        throw new Error("The draft changed after the incoming selection was captured; the original range is stale. Copy the incoming content and paste it explicitly into the current draft. Retry keeps the original selection and cannot insert into a changed draft.");
+      }
+    };
+    ensureCapturedDraft();
+    this.editor.consumeAutofocus(session);
+    const before = editor.value;
+    const start = Math.max(0, Math.min(before.length, target.selectionStart ?? editor.selectionStart));
+    const end = Math.max(start, Math.min(before.length, target.selectionEnd ?? editor.selectionEnd));
+    editor.focus({ preventScroll: true });
+    if (!this.isCurrentIngestionTarget(target) || this.findIncomingEditor(target.blockId) !== editor) return false;
+    ensureCapturedDraft();
+    editor.setSelectionRange(start, end);
+    const expectedValue = before.slice(0, start) + markdown + before.slice(end);
+    const nativeDocument = editor.ownerDocument as unknown as { execCommand?: (command: string, showUi: boolean, value: string) => boolean };
+    let receivedInput = false;
+    const onInput = () => { receivedInput = true; };
+    editor.addEventListener("input", onInput);
+    try {
+      if (editor.ownerDocument.activeElement === editor && typeof nativeDocument.execCommand === "function") {
+        nativeDocument.execCommand("insertText", false, markdown);
+      }
+    } catch {
+      receivedInput = receivedInput && (editor.value !== before || expectedValue === before);
+    } finally {
+      editor.removeEventListener("input", onInput);
+    }
+    if (editor.value === before && !(receivedInput && expectedValue === before)) {
+      editor.setRangeText(markdown, start, end, "end");
+      receivedInput = false;
+    }
+    const insertedLength = Math.max(0, editor.value.length - (before.length - (end - start)));
+    const caret = Math.min(editor.value.length, start + insertedLength);
+    editor.setSelectionRange(caret, caret);
+    const owner = this.contentEl.win as Window & typeof globalThis;
+    if (!receivedInput) editor.dispatchEvent(new owner.Event("input", { bubbles: true }));
+    return true;
+  }
+
+  private findIncomingEditor(blockId: string): HTMLTextAreaElement | null {
+    const selector = this.presentationMode === "overview" ? ".arbor-overview-card" : ".arbor-card";
+    const card = Array.from(this.contentEl.querySelectorAll<HTMLElement>(selector)).find(card => card.dataset.blockId === blockId);
+    return card?.querySelector<HTMLTextAreaElement>("textarea.arbor-editor") ?? null;
+  }
+
+  private async openEditorForPaste(target: IngestionTarget): Promise<void> {
+    if (!this.ingestion.isCurrent(target)) throw new DocumentLoadChangedError();
+    if (this.editor.getSession()?.blockId !== target.blockId) {
+      await this.editor.commitEditIfNeeded();
+      if (!this.ingestion.isCurrent(target)) throw new DocumentLoadChangedError();
+      this.editor.beginEditingBlock(target.blockId, this.presentationMode === "overview" ? "overview" : "card");
+    }
+    await this.renderNow();
+    if (!this.ingestion.isCurrent(target)) throw new DocumentLoadChangedError();
+    const editor = this.findIncomingEditor(target.blockId);
+    if (!editor || this.editor.getSession()?.blockId !== target.blockId) throw new Error("The original card editor is unavailable");
+    editor.focus({ preventScroll: true });
   }
 
   private bindBranchViewport(viewport: HTMLElement): () => void {
