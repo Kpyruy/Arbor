@@ -2030,7 +2030,7 @@ export class ArborView extends FileView {
     const insertedLength = Math.max(0, editor.value.length - (before.length - (end - start)));
     const caret = Math.min(editor.value.length, start + insertedLength);
     editor.setSelectionRange(caret, caret);
-    const owner = this.contentEl.win as Window & typeof globalThis;
+    const owner = this.contentEl.win as Window & { Event: typeof Event };
     if (!receivedInput) editor.dispatchEvent(new owner.Event("input", { bubbles: true }));
     return true;
   }
