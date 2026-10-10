@@ -188,6 +188,10 @@ Notes:
 
 ### Search and zoom
 
+Set **Minimum zoom** and **Maximum zoom** in Arbor settings; both stay within **25–500%**. Wheel, pinch, menu controls and automatic fitting use the same limits.
+
+Right-click a card and choose **Active zoom** to fit the selected card closely at the center of its pane. It follows your selection and adapts when editing or resizing the pane. Long content stays scrollable inside the card. Manual zoom stops automatic fitting at your chosen scale. Click **Stop zoom** or the zoom indicator to stop fitting and reset to **100%** (within your configured zoom limits). The mode and automatic scale are local to that view, not saved as a note setting.
+
 | Shortcut | Effect |
 | --- | --- |
 | `Ctrl/Cmd + F` | Open Arbor search overlay |
@@ -195,13 +199,15 @@ Notes:
 | `Ctrl/Cmd + Shift + Z` | Redo the last undone Arbor change |
 | `Ctrl/Cmd + Mouse wheel` | Zoom the scene if zoom is enabled in settings |
 | Mouse wheel over a branch column | Move through sibling blocks, or enter the visible parent/child column under the pointer |
-| Click zoom indicator | Reset zoom to `100%` |
+| Click zoom indicator | Stop active zoom and reset to `100%` |
 
 ### Tree overview
 
 Use **Tree overview** from the view menu or Command Palette to see every block in one connected map. Drag empty space to pan; Ctrl/Cmd + mouse wheel changes zoom. Cards render normal Obsidian Markdown and grow to fit their content. Select a card, then press `Enter` or double-click it to edit directly in place; Arbor smoothly reveals the editor when it is outside the viewport. Export the whole map as a PNG or one-page PDF from the overview menu. Overview always shows collapsed descendants and does not support drag-and-drop reparenting.
 
 Set **Tree overview layout** in Arbor settings to **Horizontal** (the default), **Vertical — root at bottom** (children grow upward), or **Vertical — root at top** (children grow downward). The same choices in the view menu save the layout for the current note. Notes without their own choice follow the plugin setting.
+
+In either **Branch Editor** or **Tree Overview**, choose **Focus on branch** from a card's menu to show only that card and its descendants, with the card as the visual root. Your current view stays open and the focus carries across view switches. Click **Stop focus** beneath the profile/view controls to return. This temporary view does not change parent links, Output Profiles or exports; image/PDF and clean Markdown exports still use the full tree. Search or a link to a block outside the focused branch returns to the full tree automatically.
 
 The note's layout is stored in its hidden Arbor metadata, so it survives closing the tab, restarting Obsidian, renaming the note and syncing it to another device. It applies to every tab showing that note, independently of other notes and Output Profiles. Changing orientation preserves the Markdown body, an active editor draft and content undo/redo history. **Return to branch editor** keeps Branch Editor horizontal.
 
@@ -294,6 +300,8 @@ For **Card color…**, **Branch color…**, or **Copy block link**, open a card'
 | Horizontal spacing | `20 px` | Gap between columns |
 | Vertical spacing | `12 px` | Gap between sibling cards |
 | Default zoom | `100%` | Initial scene scale when Arbor opens |
+| Minimum zoom | `25%` | Lower zoom limit; cannot be below 25% or above the maximum |
+| Maximum zoom | `500%` | Upper zoom limit; cannot exceed 500% or fall below the minimum |
 | Preview snippet length | `220` chars | Maximum preview text for compact card snippets |
 | Drag and drop | `On` | Enable drag reorder and reparent; desktop only |
 | Ctrl/Cmd + wheel zoom | `On` | Allow scene zoom with `Ctrl/Cmd + mouse wheel` |
