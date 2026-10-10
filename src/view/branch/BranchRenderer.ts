@@ -7,6 +7,7 @@ import { extractSnippet, hashString } from "../../utils";
 import { getOutputCardPresentation, syncOutputCardPresentation } from "../output/outputPresentation";
 import { ViewWorkScope } from "../runtime/ViewWorkScope";
 import { syncCardColour } from "../appearance/cardColours";
+import { hasMeaningfulRenderedContent } from "../renderedContent";
 import type { BranchBlock, BranchBlockId, BranchColumnModel } from "../../types";
 import type { DragState } from "./DragDropController";
 import type { BranchViewContext, EditorPort, MarkdownPort, SelectionOptions, ViewReadPort } from "../state/viewTypes";
@@ -466,7 +467,7 @@ export class BranchRenderer {
       content = card.createDiv({ cls: "arbor-card-content markdown-rendered" });
       await this.port.markdown.render(block.content, content, this.port.read.getFilePath());
       if (!isCurrent()) return;
-      if (content.innerText.trim().length === 0) {
+      if (!hasMeaningfulRenderedContent(content)) {
         content.setText(extractSnippet(block.content, this.port.read.getSettings().previewSnippetLength));
       }
       content.querySelectorAll("img").forEach((image) => {

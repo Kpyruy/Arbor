@@ -19,6 +19,8 @@ function fixture() {
     getEditingBlockId: () => editing?.blockId ?? null,
     insertDraft: vi.fn(() => true),
     append: vi.fn(async () => undefined),
+    create: vi.fn(async () => undefined),
+    saveImage: vi.fn(async () => "![[image.png]]"),
     readNative: vi.fn(async () => null),
     readClipboardText: vi.fn(async () => "clipboard"),
     openEditorForPaste: vi.fn(),

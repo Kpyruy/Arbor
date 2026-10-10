@@ -6,6 +6,7 @@ export interface TransferSnapshot {
   readonly uriList: string;
   readonly hasFiles: boolean;
   readonly ownArborDrag: boolean;
+  readonly imageFiles?: readonly File[];
 }
 
 export interface IncomingContent {
@@ -26,6 +27,8 @@ export interface IngestionTarget {
   readonly selectionStart?: number;
   readonly selectionEnd?: number;
   readonly selectionDraftValue?: string;
+  readonly newBlock?: "sibling" | "child";
+  readonly anchorParentId?: string | null;
 }
 
 export interface NativeDragReader {
@@ -40,4 +43,5 @@ export interface NativeDragPorts<File> {
   resolveFile(value: unknown): File | null;
   resolveLink?(linkpath: string, sourcePath: string): File | null;
   generateMarkdownLink(file: File, destinationPath: string, subpath?: string, alias?: string): string;
+  isImageFile?(file: File): boolean;
 }

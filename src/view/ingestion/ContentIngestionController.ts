@@ -1,12 +1,15 @@
 import { decodeTransfer, validateIncoming } from "./IncomingContent";
 import type { DecodeResult, IngestionTarget, TransferSnapshot } from "./ingestionTypes";
+import { isImageAttachment } from "../editor/EditorAttachments";
 
 export interface ContentIngestionPort {
-  captureTarget(blockId: string): IngestionTarget | null;
+  captureTarget(blockId: string, newBlock?: IngestionTarget["newBlock"]): IngestionTarget | null;
   isCurrent(target: IngestionTarget): boolean;
   getEditingBlockId(): string | null;
   insertDraft(target: IngestionTarget, markdown: string): boolean;
   append(target: IngestionTarget, markdown: string): Promise<void>;
+  create(target: IngestionTarget, markdown: string): Promise<void>;
+  saveImage(file: File, target: IngestionTarget): Promise<string>;
   readNative(value: unknown, destinationPath: string): Promise<string | null>;
   readClipboardText(): Promise<string>;
   openEditorForPaste(target: IngestionTarget): void | Promise<void>;
@@ -14,7 +17,7 @@ export interface ContentIngestionPort {
 }
 
 export type IngestionResult =
-  | { kind: "appended" | "draft" | "paste-fallback" }
+  | { kind: "appended" | "created" | "draft" | "paste-fallback" }
   | { kind: "ignored" | "rejected"; reason: string }
   | { kind: "retained"; id: number };
 
@@ -27,7 +30,7 @@ export interface RetainedIncomingContent {
 
 interface Gesture {
   readonly target: IngestionTarget;
-  readonly route: "draft" | "append";
+  readonly route: "draft" | "append" | "create";
   readonly version: number;
   readonly read: () => Promise<DecodeResult>;
 }
@@ -66,12 +69,22 @@ export class ContentIngestionController {
     return Boolean(gesture && this.isCurrentGesture(gesture));
   }
 
-  drop(event: object, blockId: string, snapshot: TransferSnapshot, nativeValue?: unknown): Promise<IngestionResult> {
+  drop(event: object, blockId: string, snapshot: TransferSnapshot, nativeValue?: unknown, newBlock?: IngestionTarget["newBlock"]): Promise<IngestionResult> {
     const previous = this.events.get(event);
     if (previous) return previous;
-    const transfer: TransferSnapshot = { ...snapshot, types: [...snapshot.types] };
+    const transfer: TransferSnapshot = { ...snapshot, types: [...snapshot.types], imageFiles: [...snapshot.imageFiles ?? []] };
+    const images = transfer.imageFiles!;
+    const savedImages: string[] = [];
     let nativeRequired = false;
     const read = async (): Promise<DecodeResult> => {
+      if (images.length) {
+        for (let index = 0; index < images.length; index++) {
+          if (savedImages[index] !== undefined) continue;
+          if (!this.isCurrent(target!)) throw new Error("The original image receiver changed");
+          savedImages[index] = await this.port.saveImage(images[index], target!);
+        }
+        return validateIncoming(savedImages.join("\n\n"), "native");
+      }
       if (nativeValue !== undefined && nativeValue !== null) {
         try {
           const native = await this.port.readNative(nativeValue, target!.filePath);
@@ -87,9 +100,10 @@ export class ContentIngestionController {
       }
       return decodeTransfer(transfer);
     };
-    const target = this.capture(blockId);
+    const target = this.capture(blockId, newBlock);
     const gesture = target ? this.gesture(target, read) : null;
-    const result = !target || transfer.ownArborDrag || transfer.hasFiles
+    const unsupportedFiles = images.some(file => !isImageAttachment(file)) || transfer.hasFiles && !images.length;
+    const result = !target || transfer.ownArborDrag || unsupportedFiles
       ? Promise.resolve<IngestionResult>({ kind: "ignored", reason: !target ? "unavailable-target" : transfer.ownArborDrag ? "internal" : "files" })
       : Promise.resolve().then(() => this.receive(gesture!));
     this.events.set(event, result);
@@ -130,14 +144,18 @@ export class ContentIngestionController {
     return retained.retry;
   }
 
-  private capture(blockId: string): IngestionTarget | null {
+  private capture(blockId: string, newBlock?: IngestionTarget["newBlock"]): IngestionTarget | null {
     if (this.closed) return null;
-    const target = this.port.captureTarget(blockId);
-    return target ? Object.freeze({ ...target }) : null;
+    const target = this.port.captureTarget(blockId, newBlock);
+    if (!target) return null;
+    // Creation is anchored to a block, never to a textarea selection/session.
+    return Object.freeze(newBlock ? { filePath: target.filePath, loadEpoch: target.loadEpoch,
+      blockId: target.blockId, anchorParentId: target.anchorParentId, newBlock } : { ...target });
   }
 
   private gesture(target: IngestionTarget, read: Gesture["read"]): Gesture {
-    const gesture: Gesture = { target, read, version: this.version, route: this.port.getEditingBlockId() === target.blockId ? "draft" : "append" };
+    const gesture: Gesture = { target, read, version: this.version,
+      route: target.newBlock ? "create" : this.port.getEditingBlockId() === target.blockId ? "draft" : "append" };
     this.gestures.set(target, gesture);
     return gesture;
   }
@@ -179,6 +197,8 @@ export class ContentIngestionController {
     try {
       if (gesture.route === "draft") {
         if (!this.port.insertDraft(gesture.target, markdown)) return this.retain(gesture, markdown, "The original draft insertion was not accepted", retainedId);
+      } else if (gesture.route === "create") {
+        await this.port.create(gesture.target, markdown);
       } else {
         await this.port.append(gesture.target, markdown);
       }
@@ -186,6 +206,6 @@ export class ContentIngestionController {
       return this.retain(gesture, markdown, error, retainedId);
     }
     if (retainedId !== undefined) this.retained.delete(retainedId);
-    return { kind: gesture.route === "draft" ? "draft" : "appended" };
+    return { kind: gesture.route === "draft" ? "draft" : gesture.route === "create" ? "created" : "appended" };
   }
 }

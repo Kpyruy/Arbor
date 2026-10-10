@@ -8,6 +8,7 @@ import { applyOverviewLayout } from "../overview/overviewDom";
 import type { MarkdownPort } from "../state/viewTypes";
 import { resolveBlockColors } from "../../model/blockAppearance";
 import { syncCardColour } from "../appearance/cardColours";
+import { hasMeaningfulRenderedContent } from "../renderedContent";
 
 export interface OverviewSnapshotInput {
   document: Document;
@@ -71,7 +72,7 @@ export async function createOverviewSnapshot(input: OverviewSnapshotInput): Prom
       });
       const content = card.createDiv({ cls: "arbor-overview-card-content markdown-rendered" });
       await input.markdown.render(block.content, content, sourcePath);
-      if (content.innerText.trim().length === 0) {
+      if (!hasMeaningfulRenderedContent(content)) {
         content.setText(extractSnippet(block.content, snippetLength));
       }
       cardsById.set(node.id, card);

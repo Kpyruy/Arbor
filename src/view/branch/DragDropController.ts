@@ -92,6 +92,9 @@ export class DragDropController {
   handleCardDragStart(event: DragEvent): void {
     const card = event.currentTarget as HTMLElement;
     if ((event.target as HTMLElement | null)?.tagName === "TEXTAREA") return;
+    const source = event.target as Node | null;
+    const sourceElement = source?.nodeType === 1 ? source as Element : source?.parentElement;
+    if (sourceElement?.closest(".arbor-card-content img, .arbor-card-content .internal-embed")) return;
     if (findRenderedCardLink(event.target, card)) return;
     const blockId = card.dataset.blockId;
     if (!canStartCardDrag(this.port.read.getSettings().dragAndDrop, this.port.isEditing(blockId ?? "") ? blockId ?? null : null, blockId)) {

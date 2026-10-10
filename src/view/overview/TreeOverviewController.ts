@@ -6,6 +6,7 @@ import type { ArborOverviewOrientation, BranchBlock, BranchBlockId } from "../..
 import { applyOverviewLayout } from "./overviewDom";
 import { ViewWorkScope } from "../runtime/ViewWorkScope";
 import { findRenderedCardLink } from "../navigation/CardLinkController";
+import { hasMeaningfulRenderedContent } from "../renderedContent";
 import type { BranchViewContext, EditingSession, EditorPort, MarkdownPort, OverviewEditorSelectionSnapshot, SelectionPort, ViewReadPort } from "../state/viewTypes";
 
 export interface TreeOverviewPort {
@@ -140,7 +141,7 @@ export class TreeOverviewController {
           surface.remove();
           return;
         }
-        if (content.innerText.trim().length === 0) {
+        if (!hasMeaningfulRenderedContent(content)) {
           content.setText(extractSnippet(block.content, settings.previewSnippetLength));
         }
         content.querySelectorAll("img").forEach((image) => {
@@ -350,7 +351,7 @@ export class TreeOverviewController {
     if (!this.work.isCurrent(workToken) || this.port.read.getState() !== state || this.port.read.getFilePath() !== filePath || !this.overviewSurfaceEl?.contains(card)) {
       return;
     }
-    if (content.innerText.trim().length === 0) {
+    if (!hasMeaningfulRenderedContent(content)) {
       content.setText(extractSnippet(block.content, this.port.read.getSettings().previewSnippetLength));
     }
     content.querySelectorAll("img").forEach((image) => {

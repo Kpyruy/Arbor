@@ -125,6 +125,10 @@ In Branch Editor (left-to-right or right-to-left) and Tree Overview, drop suppor
 
 Use **Paste content into card** from a card's actions menu (including the mobile block-actions menu), or run **Paste content into card** from the Command Palette for the currently selected Arbor card. It has no default hotkey. Output Preview and empty background are not targets. If clipboard access is denied, Arbor opens the original card editor so you can use the system Paste command; the current draft is kept.
 
+To create a block instead, drag text or a source reference over a card: two dashed targets appear beside it. **New block beside** creates a sibling at the same level; **New child block** adds it inside that branch. Drop onto the card itself to append as before. These targets work in both Branch Editor and Tree Overview, including vertical layouts.
+
+You can also drop an image file onto a rendered card or either new-block target. New files are saved to Obsidian's configured attachment location; an existing image dragged from the vault is embedded without copying it.
+
 Raw binary payloads, HTML-only content, and full Arbor documents are not imported as card text. Supported Obsidian file/link drags can insert a reference; images keep their existing editor attachment path. For cross-folder references, use a reader-generated link or copy a Markdown link; ambiguous raw relative links are not guaranteed to resolve. If a failed import leaves incoming content available, Retry and Copy are view-local for the current view session, not disk or crash recovery. Copy it before reloading if you need to preserve it. Native text Undo depends on the host's edit-history support.
 
 ## Mobile controls

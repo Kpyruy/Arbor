@@ -1,4 +1,5 @@
 .arbor-view {
+  position: relative;
   --bw-card-width: 300px;
   --bw-card-min-height: 120px;
   --bw-column-gap: 68px;
@@ -2913,4 +2914,49 @@
 .arbor-overview-card.is-content-drop-target {
   outline: 2px solid var(--interactive-accent);
   outline-offset: -2px;
+}
+
+.arbor-content-drop-options {
+  position: absolute;
+  z-index: 40;
+  left: var(--arbor-drop-options-x);
+  top: var(--arbor-drop-options-y);
+  width: var(--arbor-drop-options-width, 232px);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: auto;
+}
+
+.arbor-content-drop-zone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 10px;
+  border: 1px dashed color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
+  border-radius: 8px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.arbor-content-drop-zone.is-content-drop-target {
+  border-color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 16%, var(--background-primary));
+}
+
+.arbor-content-drop-label { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.arbor-content-drop-title { font-size: 12px; font-weight: 600; }
+.arbor-content-drop-detail { font-size: 11px; color: var(--text-muted); }
+.arbor-content-drop-icon, .arbor-content-drop-plus { display: flex; flex-shrink: 0; color: var(--interactive-accent); }
+.arbor-content-drop-options svg { width: 16px; height: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .arbor-content-drop-zone { transition: none; }
 }

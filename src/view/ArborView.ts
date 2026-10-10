@@ -88,7 +88,7 @@ import { TreeOverviewController } from "./overview/TreeOverviewController";
 import { ExportController, type OverviewSnapshot } from "./export/ExportController";
 import { createOverviewSnapshot } from "./export/overviewSnapshot";
 import { BlockEditorController } from "./editor/BlockEditorController";
-import { EditorAttachments } from "./editor/EditorAttachments";
+import { EditorAttachments, isImageAttachment } from "./editor/EditorAttachments";
 import { NavigationController } from "./navigation/NavigationController";
 import { CardLinkController } from "./navigation/CardLinkController";
 import { HeadingLinkController } from "./navigation/HeadingLinkController";
@@ -108,7 +108,7 @@ import { ViewMenus } from "./chrome/ViewMenus";
 import { DocumentController, DocumentLoadChangedError } from "./state/DocumentController";
 import { ViewWorkScope } from "./runtime/ViewWorkScope";
 import { normalizeOverviewOrientation, resolveOverviewOrientation } from "../overviewOrientation";
-import { appendIncomingContent } from "../model/ingestContent";
+import { appendIncomingContent, createIncomingBlock } from "../model/ingestContent";
 import { ContentIngestionController } from "./ingestion/ContentIngestionController";
 import { ContentIngestionRouting } from "./ingestion/ContentIngestionRouting";
 import { getNativeDraggable, ObsidianDragAdapter } from "./ingestion/ObsidianDragAdapter";
@@ -280,16 +280,18 @@ export class ArborView extends FileView {
     const nativeDrag = new ObsidianDragAdapter<TFile>({
       resolveFile: value => value instanceof TFile && this.app.vault.getAbstractFileByPath(value.path) === value ? value : null,
       resolveLink: (linkpath, sourcePath) => this.app.metadataCache.getFirstLinkpathDest(linkpath, sourcePath),
-      generateMarkdownLink: (file, destinationPath, subpath, alias) => this.app.fileManager.generateMarkdownLink(file, destinationPath, subpath, alias)
+      generateMarkdownLink: (file, destinationPath, subpath, alias) => this.app.fileManager.generateMarkdownLink(file, destinationPath, subpath, alias),
+      isImageFile: file => isImageAttachment({ name: file.path, type: "" })
     });
     this.ingestion = new ContentIngestionController({
-      captureTarget: blockId => {
+      captureTarget: (blockId, newBlock) => {
         const loaded = this.documentController.getLoadedFileIdentity();
         if (!loaded || this.presentationMode === "output" || !this.state || !getBlock(this.state.metadata, blockId)) return null;
         const session = this.editor.getSession();
         const editor = session?.blockId === blockId ? this.findIncomingEditor(blockId) : null;
         if (session && editor) this.editor.consumeAutofocus(session);
         return { filePath: loaded.path, loadEpoch: loaded.epoch, blockId,
+          ...(newBlock ? { anchorParentId: getBlock(this.state.metadata, blockId)!.parentId } : {}),
           ...(session?.blockId === blockId ? { editingSessionId: session.draftId } : {}),
           ...(editor ? { selectionStart: editor.selectionStart, selectionEnd: editor.selectionEnd, selectionDraftValue: editor.value } : {}) };
       },
@@ -300,6 +302,11 @@ export class ArborView extends FileView {
         if (!this.ingestion.isCurrent(target)) throw new DocumentLoadChangedError();
         return appendIncomingContent(metadata, target.blockId, markdown);
       }),
+      create: (target, markdown) => this.applyMutation("Import into new block", metadata => {
+        if (!this.ingestion.isCurrent(target) || !target.newBlock) throw new DocumentLoadChangedError();
+        return createIncomingBlock(metadata, target.blockId, target.newBlock, markdown);
+      }),
+      saveImage: (file, target) => this.attachments.saveImageFile(file, target.filePath, () => this.ingestion.isCurrent(target)),
       readNative: (value, destinationPath) => nativeDrag.read(value, destinationPath),
       readClipboardText: () => this.contentEl.win.navigator.clipboard.readText(),
       openEditorForPaste: target => this.openEditorForPaste(target),
@@ -308,6 +315,8 @@ export class ArborView extends FileView {
     this.ingestionRouting = new ContentIngestionRouting({
       getRoot: () => this.contentEl,
       getMode: () => this.presentationMode,
+      getOrientation: () => this.presentationMode === "overview" ? this.getOverviewOrientation() : "horizontal",
+      getDirection: () => this.plugin.settings.layoutDirection,
       getSession: () => this.editor.getSession(),
       getNativeDraggable: () => getNativeDraggable((this.app as App & { dragManager?: unknown }).dragManager),
       isOwnDrag: event => this.dragDropController.isOwnDrag(event),
@@ -1738,7 +1747,7 @@ export class ArborView extends FileView {
       new ButtonComponent(row).setButtonText("Retry").setDisabled(!this.isCurrentIngestionTarget(incoming.target)).onClick(() => {
         const resume = this.editor.suspendBlurCommit();
         runAsyncAction(this.ingestion.retry(incoming.id).then(result => {
-          if (result.kind === "appended" || result.kind === "draft") row.remove();
+          if (result.kind === "appended" || result.kind === "created" || result.kind === "draft") row.remove();
           else reason.setText(this.ingestion.getRetained().find(item => item.id === incoming.id)?.reason ?? "Incoming content was not inserted.");
           if (!this.ingestion.getRetained().length) modal.close();
         }).finally(resume), error => this.reportActionError(error));
@@ -1760,6 +1769,7 @@ export class ArborView extends FileView {
     const session = this.editor.getSession();
     return Boolean(this.presentationMode !== "output" && loaded && loaded.path === target.filePath
       && loaded.epoch === target.loadEpoch && this.state && getBlock(this.state.metadata, target.blockId)
+      && (!target.newBlock || target.anchorParentId === getBlock(this.state.metadata, target.blockId)?.parentId)
       && (!target.editingSessionId || session?.blockId === target.blockId && session.draftId === target.editingSessionId));
   }
 

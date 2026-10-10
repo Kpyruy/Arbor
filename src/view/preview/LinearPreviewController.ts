@@ -4,6 +4,7 @@ import { extractSnippet } from "../../utils";
 import type { BranchBlock, BranchBlockId } from "../../types";
 import type { BranchViewContext, EditingSession, EditorPort, MarkdownPort, SelectionPort, ViewReadPort } from "../state/viewTypes";
 import { ViewWorkScope } from "../runtime/ViewWorkScope";
+import { hasMeaningfulRenderedContent } from "../renderedContent";
 
 export interface LinearPreviewPort {
   read: ViewReadPort;
@@ -242,7 +243,7 @@ export class LinearPreviewController {
         const bodyEl = previewBlockEl.createDiv({ cls: "arbor-preview-block-body markdown-rendered" });
         await this.port.markdown.render(block.content, bodyEl, this.port.read.getFilePath());
         if (!isCurrent()) return;
-        if (bodyEl.innerText.trim().length === 0) {
+        if (!hasMeaningfulRenderedContent(bodyEl)) {
           bodyEl.setText(extractSnippet(block.content, this.port.read.getSettings().previewSnippetLength));
         }
       }

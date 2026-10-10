@@ -95,6 +95,7 @@ export async function loadIngestionView(): Promise<void> {
           }
           export class Notice { constructor(message) { globalThis.__ingestionNotices.push(message); } }
           export const MarkdownRenderer = { render: async (app, markdown, target) => {
+            if (app.renderMarkdown) return app.renderMarkdown(markdown, target);
             target.createEl("a", { cls: "internal-link", text: markdown, attr: { "data-href": "Book.pdf#page=7" } });
           } };
           export const Keymap = { isModEvent: () => false };
@@ -177,6 +178,7 @@ export async function ingestionHarness(mode: "editor" | "overview" = "editor", o
   Object.defineProperty(win.navigator, "clipboard", { value: clipboard, configurable: true });
   const app = {
     root, dragManager: { draggable: null as unknown },
+    renderMarkdown: null as null | ((markdown: string, target: HTMLElement) => void | Promise<void>),
     vault: { read: async () => disk, cachedRead: async () => disk, process: async (_file: unknown, transform: (text: string) => string) => { disk = transform(disk); writes.push(disk); return disk; },
       getAbstractFileByPath: (path: string) => files.get(path) ?? null,
       createBinary: async (path: string) => { attachments.push(path); return new loaded.TFile(path); } },

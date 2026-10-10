@@ -8,7 +8,7 @@ import { DocumentController, type DocumentPort } from "../src/view/state/Documen
 import { BlockEditorController } from "../src/view/editor/BlockEditorController";
 import type { TFile } from "obsidian";
 import { fixtureLoaded, fixtureOutput, fixtureTree, deferred } from "./helpers/arborFixtures";
-import { appendIncomingContent } from "../src/model/ingestContent";
+import { appendIncomingContent, createIncomingBlock } from "../src/model/ingestContent";
 import { ContentIngestionController, type ContentIngestionPort } from "../src/view/ingestion/ContentIngestionController";
 import { loadImportedBranchDocument } from "../src/storage/reconcile";
 import { StorageAmbiguityError } from "../src/storage/sourceMap";
@@ -30,10 +30,15 @@ function ingestionFixture() {
         && document.getState()!.metadata.blocks.some(block => block.id === target.blockId));
     },
     getEditingBlockId: () => null,
+    saveImage: async () => "![[image.png]]",
     insertDraft: () => false,
     append: async (target, markdown) => document.applyMutation("Append incoming content", metadata => {
       if (!ingestion.isCurrent(target)) throw new Error("Original ingestion gesture changed");
       return appendIncomingContent(metadata, target.blockId, markdown);
+    }),
+    create: async (target, markdown) => document.applyMutation("Import into new block", metadata => {
+      if (!ingestion.isCurrent(target) || !target.newBlock) throw new Error("Original ingestion gesture changed");
+      return createIncomingBlock(metadata, target.blockId, target.newBlock, markdown);
     }),
     readNative: async () => null,
     readClipboardText: async () => "quote\n[[Book.pdf#page=7|source]]",

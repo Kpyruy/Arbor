@@ -73,7 +73,7 @@ export class ObsidianDragAdapter<File> implements NativeDragReader {
       const alias = parts?.alias ?? (parts && typeof native.title === "string" ? native.title : undefined);
       const markdown: unknown = this.ports.generateMarkdownLink(file, destinationPath, parts?.subpath, alias);
       if (typeof markdown !== "string") throw new Error("Native link generator did not return text");
-      return markdown;
+      return this.ports.isImageFile?.(file) && !markdown.startsWith("!") ? `!${markdown}` : markdown;
     } catch (error) {
       throw new NativeDragReadError(error);
     }

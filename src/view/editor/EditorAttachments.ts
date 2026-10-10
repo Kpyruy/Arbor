@@ -1,5 +1,9 @@
 import type { TFile } from "obsidian";
 
+export function isImageAttachment(file: Pick<File, "name" | "type">): boolean {
+  return file.type.toLowerCase().startsWith("image/") || /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(file.name);
+}
+
 export interface EditorAttachmentsPort {
   getFilePath(): string;
   hasSession(): boolean;
@@ -12,7 +16,23 @@ export interface EditorAttachmentsPort {
 }
 
 export class EditorAttachments {
+  private imageWrites: Promise<void> = Promise.resolve();
   constructor(private readonly port: EditorAttachmentsPort) {}
+
+  /** Save to the captured note's attachment destination, never the current selection. */
+  saveImageFile(file: File, sourcePath: string, isCurrent: () => boolean): Promise<string> {
+    const operation = this.imageWrites.then(async () => {
+      if (!isImageAttachment(file) || !isCurrent()) throw new Error("The original image receiver changed");
+      const attachmentPath = await this.port.getAvailablePath(this.buildAttachmentName(file), sourcePath);
+      const bytes = await file.arrayBuffer();
+      if (!isCurrent()) throw new Error("The original image receiver changed while reading the file");
+      const created = await this.port.createBinary(attachmentPath, bytes);
+      const link = this.port.generateLink(created, sourcePath);
+      return link.startsWith("!") ? link : `!${link}`;
+    });
+    this.imageWrites = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
 
   async handleEditorPaste(event: ClipboardEvent, textarea: HTMLTextAreaElement): Promise<void> {
     const items = Array.from(event.clipboardData?.items ?? []).filter((item) => item.kind === "file" && item.type.startsWith("image/"));
