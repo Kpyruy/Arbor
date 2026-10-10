@@ -40,7 +40,7 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - Horizontal branching editor for one Markdown note, with left-to-right or right-to-left layout
 - Stable block tree with inline editing
 - Normal readable Markdown body as the source document
-- Visible block markers plus a readable in-note structure footer for exact recovery
+- Visible block markers plus a readable in-note structure footer, with optional evidence for locating card text
 - Selected block panel with focused preview and inline editing
 - Context-aware dimming so the active branch stays readable
 - Drag-and-drop reorder and reparent
@@ -59,7 +59,7 @@ Arbor is not a canvas, mind map, or whiteboard. It is still note editing, just w
 - File Explorer labels that mark managed notes with `ARBOR`
 - Clean Markdown export copies with an optional YAML frontmatter
 - Named Output Profiles for producing several clean versions from one complete tree
-- Safe rebuild when the note changed in plain Markdown mode
+- Reconcile unambiguous edits made in normal Markdown mode
 
 Use a clean export copy as the Markdown handoff for Pandoc or another DOCX converter; Arbor does not generate DOCX directly.
 
@@ -118,6 +118,14 @@ For updates, use **Check for updates** in Community Plugins. For a manual update
 Rendered links in Branch Editor and Tree Overview are clickable: internal links open their note, heading, block, or PDF destination. Ctrl/Cmd-click or middle-click opens a new tab. A link click stays separate from card selection and editing; double-click the card's ordinary text to edit it.
 
 When [Heading Linker](https://github.com/max-fluff/obsidian-heading-linker) is enabled, Arbor can also turn indexed terms and aliases into links to headings in other cards of the **same note**. Include that note in Heading Linker's glossary sources and highlighting scope, and enable Reading highlighting. Arbor preserves your Markdown, skips headings, code, math and existing links, and leaves ambiguous local targets unlinked. An ordinary click reveals the target card in the current view; Ctrl/Cmd-click and middle-click retain Obsidian's normal new-pane behavior.
+
+### Bring content into a card
+
+In Branch Editor (left-to-right or right-to-left) and Tree Overview, drop supported text or a source link onto a card to append it after a blank line. When editing a card, drop or paste at the textarea caret; selected text is replaced. The edit remains a draft until you use the normal save action. Arbor copies the provided content without cutting or editing the original source. Generated source links are retained with imported Markdown; plain text does not gain a citation automatically.
+
+Use **Paste content into card** from a card's actions menu (including the mobile block-actions menu), or run **Paste content into card** from the Command Palette for the currently selected Arbor card. It has no default hotkey. Output Preview and empty background are not targets. If clipboard access is denied, Arbor opens the original card editor so you can use the system Paste command; the current draft is kept.
+
+Raw binary payloads, HTML-only content, and full Arbor documents are not imported as card text. Supported Obsidian file/link drags can insert a reference; images keep their existing editor attachment path. For cross-folder references, use a reader-generated link or copy a Markdown link; ambiguous raw relative links are not guaranteed to resolve. If a failed import leaves incoming content available, Retry and Copy are view-local for the current view session, not disk or crash recovery. Copy it before reloading if you need to preserve it. Native text Undo depends on the host's edit-history support.
 
 ## Mobile controls
 
@@ -219,6 +227,7 @@ All of these are exposed as normal Obsidian commands. By default, they have no b
 | Open tree overview | `open-tree-overview` | Arbor view | None |
 | Return to branch editor | `close-tree-overview` | Arbor view | None |
 | Open block actions menu | `open-block-actions-menu` | Arbor view | None |
+| Paste content into card | `paste-content-into-card` | Active selected Arbor card | None |
 | Create new root block | `new-root-block` | Arbor view | None |
 | Create sibling above | `create-sibling-above` | Arbor view | None |
 | Create sibling below | `create-sibling-below` | Arbor view | None |
@@ -300,9 +309,9 @@ Each Arbor note contains:
 - the visible Markdown body
 - machine-written block markers before each block in the visible body
 - an optional `%% arbor:output` comment for custom Output Profiles
-- one readable structure footer at the end of the same note
+- one readable structure footer at the end of the same note; structure-v2 may also include optional source-location evidence
 
-Example shape:
+Minimal compatible note shape (optional source-location evidence is omitted):
 
 ````md
 <!-- arbor:block:v1 id="root-1" parent="" order="0" -->
@@ -326,9 +335,10 @@ Important behavior:
 - frontmatter is preserved
 - the visible body stays readable if the plugin is disabled
 - Arbor keeps stable block IDs in both visible markers and the readable structure footer
-- if the structure footer is stale, Arbor recovers the exact block tree from the visible markers
+- optional `sourceMap` evidence records body ranges and a fingerprint, not a second copy of note content or a sidecar; visible Markdown remains the source of text
+- when evidence is stale, unambiguous visible markers can still be reconciled; if marker boundaries are ambiguous, Arbor refuses to guess
 - if you open an older Arbor note without visible markers, Arbor upgrades it automatically to the precise marker format
-- if you edit the note in normal Markdown mode, Arbor will safely rebuild the tree from the visible note body instead of silently dropping content
+- older plugin versions ignore optional evidence. A downgrade is not guaranteed to preserve notes whose content makes visible marker boundaries ambiguous (for example, literal markers or unfinished code fences); make a clean copy before opening such a note with an older version
 
 Beautiful blocks in the `> [!note]` style are still normal Markdown callouts. In the screenshots and demo notes, that styling comes from [Callout Manager](https://github.com/eth-p/obsidian-callout-manager).
 
