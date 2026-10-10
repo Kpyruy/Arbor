@@ -7,6 +7,7 @@ import { canExportCleanCopy, canExportTreeOverview } from "./exportCommand";
 import { FILE_EXPLORER_CREATION_SECTION, shouldShowNewArborMenuItem } from "./fileExplorerMenu";
 import { captureOriginalSetViewState, invokeOriginalSetViewState } from "./leafOpenInterception";
 import { resolveInitialLayoutDirection } from "./layoutDirection";
+import { clampZoomLevel, normalizeZoomBounds } from "./mobile";
 import { buildAvailableMarkdownPath } from "./markdownPaths";
 import { buildAvailableTreeOverviewExportPath, TreeOverviewExportFormat } from "./treeOverviewExport";
 import { createEmptyTree } from "./model/tree";
@@ -133,6 +134,10 @@ export default class ArborPlugin extends Plugin {
     delete settings.themeMode;
     delete settings.customTheme;
     this.settings = settings;
+    const bounds = normalizeZoomBounds(settings.minZoomLevel, settings.maxZoomLevel);
+    this.settings.minZoomLevel = bounds.min;
+    this.settings.maxZoomLevel = bounds.max;
+    this.settings.zoomLevel = clampZoomLevel(settings.zoomLevel, bounds);
     this.settings.overviewOrientation = normalizeOverviewOrientation(settings.overviewOrientation) ?? "horizontal";
     this.settings.layoutDirection = resolveInitialLayoutDirection({
       hasStoredPluginData: !this.isFreshPluginInstall,

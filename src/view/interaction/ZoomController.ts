@@ -1,7 +1,10 @@
-import { clampZoomLevel } from "../../mobile";
+import { clampZoomLevel, type ZoomBounds } from "../../mobile";
 
 export interface ZoomPort {
+  onManualZoom?(): void;
   getZoom(): number;
+  getZoomBounds?(): ZoomBounds;
+  getWindow?(): Window;
   setZoom(value: number): void;
   saveSettings(): Promise<void>;
   applyZoom(): void;
@@ -10,18 +13,21 @@ export interface ZoomPort {
   afterZoom(): void;
 }
 
+interface OwnedRequest { owner: Window; id: number }
+
 export class ZoomController {
-  private zoomPersistTimer: number | null = null;
-  private zoomIndicatorTimer: number | null = null;
-  private overviewZoomFrame: number | null = null;
+  private zoomPersistTimer: OwnedRequest | null = null;
+  private zoomIndicatorTimer: OwnedRequest | null = null;
+  private overviewZoomFrame: OwnedRequest | null = null;
   private pendingOverviewZoom: number | null = null;
-  private touchZoomFrame: number | null = null;
+  private touchZoomFrame: OwnedRequest | null = null;
   private pendingTouchZoom: number | null = null;
 
   constructor(private readonly port: ZoomPort) {}
 
   updateZoomLevel(nextZoomLevel: number): void {
-    const clamped = clampZoomLevel(Number(nextZoomLevel.toFixed(3)));
+    this.port.onManualZoom?.();
+    const clamped = clampZoomLevel(Number(nextZoomLevel.toFixed(3)), this.port.getZoomBounds?.());
     if (Math.abs(clamped - this.port.getZoom()) < 0.001) {
       return;
     }
@@ -38,7 +44,10 @@ export class ZoomController {
     if (this.touchZoomFrame !== null) {
       return;
     }
-    this.touchZoomFrame = window.requestAnimationFrame(() => {
+    const request = { owner: this.port.getWindow?.() ?? window, id: 0 };
+    this.touchZoomFrame = request;
+    request.id = request.owner.requestAnimationFrame(() => {
+      if (this.touchZoomFrame !== request) return;
       this.touchZoomFrame = null;
       const zoom = this.pendingTouchZoom;
       this.pendingTouchZoom = null;
@@ -55,7 +64,10 @@ export class ZoomController {
     if (this.overviewZoomFrame !== null) {
       return;
     }
-    this.overviewZoomFrame = window.requestAnimationFrame(() => {
+    const request = { owner: this.port.getWindow?.() ?? window, id: 0 };
+    this.overviewZoomFrame = request;
+    request.id = request.owner.requestAnimationFrame(() => {
+      if (this.overviewZoomFrame !== request) return;
       this.overviewZoomFrame = null;
       const nextZoom = this.pendingOverviewZoom;
       this.pendingOverviewZoom = null;
@@ -68,7 +80,7 @@ export class ZoomController {
 
   clearOverviewZoomFrame(): void {
     if (this.overviewZoomFrame !== null) {
-      window.cancelAnimationFrame(this.overviewZoomFrame);
+      this.overviewZoomFrame.owner.cancelAnimationFrame(this.overviewZoomFrame.id);
       this.overviewZoomFrame = null;
     }
     this.pendingOverviewZoom = null;
@@ -76,7 +88,7 @@ export class ZoomController {
 
   clearTouchZoomFrame(): void {
     if (this.touchZoomFrame !== null) {
-      window.cancelAnimationFrame(this.touchZoomFrame);
+      this.touchZoomFrame.owner.cancelAnimationFrame(this.touchZoomFrame.id);
       this.touchZoomFrame = null;
     }
     this.pendingTouchZoom = null;
@@ -84,14 +96,14 @@ export class ZoomController {
 
   clearZoomPersistTimer(): void {
     if (this.zoomPersistTimer !== null) {
-      window.clearTimeout(this.zoomPersistTimer);
+      this.zoomPersistTimer.owner.clearTimeout(this.zoomPersistTimer.id);
       this.zoomPersistTimer = null;
     }
   }
 
   clearZoomIndicatorTimer(): void {
     if (this.zoomIndicatorTimer !== null) {
-      window.clearTimeout(this.zoomIndicatorTimer);
+      this.zoomIndicatorTimer.owner.clearTimeout(this.zoomIndicatorTimer.id);
       this.zoomIndicatorTimer = null;
     }
   }
@@ -105,7 +117,10 @@ export class ZoomController {
 
   private scheduleZoomPersist(): void {
     this.clearZoomPersistTimer();
-    this.zoomPersistTimer = window.setTimeout(() => {
+    const request = { owner: this.port.getWindow?.() ?? window, id: 0 };
+    this.zoomPersistTimer = request;
+    request.id = request.owner.setTimeout(() => {
+      if (this.zoomPersistTimer !== request) return;
       this.zoomPersistTimer = null;
       void this.port.saveSettings();
     }, 180);
@@ -114,7 +129,10 @@ export class ZoomController {
   private flashZoomIndicator(): void {
     this.port.flashIndicator();
     this.clearZoomIndicatorTimer();
-    this.zoomIndicatorTimer = window.setTimeout(() => {
+    const request = { owner: this.port.getWindow?.() ?? window, id: 0 };
+    this.zoomIndicatorTimer = request;
+    request.id = request.owner.setTimeout(() => {
+      if (this.zoomIndicatorTimer !== request) return;
       this.zoomIndicatorTimer = null;
       this.port.hideIndicator();
     }, 1100);

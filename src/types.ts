@@ -118,6 +118,8 @@ export interface BranchColumnModel {
   label: string;
   parentId: BranchBlockId | null;
   blocks: BranchBlock[];
+  /** Starting sibling index when the column is a view-only subset. */
+  indexOffset?: number;
   collapsedBlockId?: BranchBlockId | null;
   collapsedCount?: number;
   collapsedPreviewLabels?: string[];
@@ -188,6 +190,8 @@ export interface ArborSettings {
   horizontalSpacing: number;
   verticalSpacing: number;
   zoomLevel: number;
+  minZoomLevel: number;
+  maxZoomLevel: number;
   previewSnippetLength: number;
   dragAndDrop: boolean;
   dimNonPathBlocks: boolean;

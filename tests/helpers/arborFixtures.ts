@@ -32,6 +32,7 @@ export function fixtureSettings(): ArborSettings {
     layoutDirection: "ltr", overviewOrientation: "horizontal", activeThemeId: "automatic", customThemes: [],
     defaultPresentationMode: "editor", splitDirection: "vertical", cardWidth: 300,
     cardMinHeight: 120, horizontalSpacing: 20, verticalSpacing: 12, zoomLevel: 1,
+    minZoomLevel: 0.25, maxZoomLevel: 5,
     previewSnippetLength: 220, dragAndDrop: true, dimNonPathBlocks: false,
     enableCtrlWheelZoom: true, autoOpenManagedNotes: true, showBreadcrumb: true,
     showBreadcrumbFlow: true, breadcrumbLabelPreferredPrefix: "#",

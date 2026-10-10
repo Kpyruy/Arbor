@@ -1206,6 +1206,15 @@
   margin-inline: max(60px, calc((100% - var(--arbor-overview-width, 224px)) / 2));
 }
 
+/* Reachable midpoint for every card, including the first and last branches. */
+.arbor-view.is-active-zoom .arbor-overview-scene {
+  margin: calc(var(--arbor-active-viewport-height) / 2) calc(var(--arbor-active-viewport-width) / 2);
+}
+
+.arbor-view.is-active-zoom .arbor-columns {
+  padding-inline: calc(var(--arbor-active-viewport-width) / 2);
+}
+
 .arbor-overview-surface {
   position: relative;
   width: var(--arbor-overview-surface-width, 224px);
@@ -1479,6 +1488,81 @@
 
 .arbor-view.is-rtl .arbor-output-preview-actions {
   justify-content: flex-start;
+}
+
+.arbor-view-focus-controls {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 40px));
+  pointer-events: none;
+}
+
+.arbor-view-focus-controls[hidden] { display: none; }
+
+.arbor-view-focus-controls button {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  border-radius: 9px;
+  padding: 6px 10px;
+  min-height: 30px;
+  font-size: var(--font-ui-small);
+  background: color-mix(in srgb, var(--background-secondary) 94%, var(--interactive-accent) 6%);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: none;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.arbor-focus-control-icon {
+  display: flex;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  opacity: 0.85;
+}
+
+.arbor-focus-control-icon svg { width: 14px; height: 14px; }
+.arbor-focus-control-label { white-space: nowrap; }
+
+.arbor-view-focus-controls button:hover,
+.arbor-view-focus-controls button:focus-visible {
+  background: color-mix(in srgb, var(--background-secondary) 82%, var(--interactive-accent) 18%);
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+
+.arbor-view-focus-controls button:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+.arbor-view-focus-controls .arbor-active-zoom-exit {
+  color: var(--text-accent);
+  border-color: var(--interactive-accent);
+}
+
+.arbor-view.has-touch-controls .arbor-view-focus-controls {
+  right: 12px;
+  max-width: min(240px, calc(100vw - 24px));
+}
+
+.arbor-view.is-rtl .arbor-view-focus-controls {
+  right: auto;
+  left: 0;
+}
+
+.arbor-view.is-rtl.has-touch-controls .arbor-view-focus-controls {
+  left: 12px;
 }
 
 .arbor-columns-stage {
@@ -1915,6 +1999,15 @@
 .arbor-card.is-active > .arbor-card-content {
   margin-inline-end: calc(-8px * var(--bw-zoom));
   padding-inline-end: calc(8px * var(--bw-zoom));
+}
+
+/* Active fit uses the actual pane, not the full app window. Long content remains
+   scrollable inside a fully visible card, including short desktop split panes. */
+.arbor-view.is-active-zoom .arbor-card.is-active .arbor-card-content,
+.arbor-view.is-active-zoom .arbor-card.is-editing .arbor-editor {
+  min-height: 0;
+  max-height: max(24px, calc(var(--arbor-active-viewport-height) - 48px - 24px * var(--bw-zoom) - 2px));
+  overflow-y: auto;
 }
 
 .arbor-card.is-active:is(.is-output-excluded-direct, .is-output-excluded-inherited) > .arbor-card-content {
@@ -2793,7 +2886,58 @@
 .arbor-view.is-compact .arbor-search-footer { flex-wrap: wrap; }
 .arbor-search-footer button { min-height: 36px; }
 
+.modal.arbor-recovery-modal {
+  width: min(760px, calc(100% - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 24px;
+  border-radius: 16px;
+}
+
+.arbor-recovery-modal .modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  margin: 0;
+  overflow-y: auto;
+}
+
+.arbor-recovery-modal h3 { margin: 0; }
+.arbor-recovery-summary { margin: 0; color: var(--text-muted); font-size: var(--font-ui-small); line-height: 1.5; }
+.arbor-recovery-list { display: grid; gap: 20px; }
+.arbor-recovery-row { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.arbor-recovery-row + .arbor-recovery-row { padding-top: 20px; border-top: 1px solid var(--background-modifier-border); }
+.arbor-recovery-number { color: var(--text-faint); font-size: var(--font-ui-smaller); white-space: nowrap; }
+.arbor-recovery-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.arbor-recovery-pane { display: grid; gap: 6px; min-width: 0; }
+.arbor-recovery-pane label { color: var(--text-muted); font-size: var(--font-ui-small); font-weight: var(--font-semibold); }
+.arbor-recovery-pane textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: clamp(128px, 16dvh, 176px);
+  padding: 12px;
+  resize: none;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--background-secondary);
+}
+.arbor-recovery-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.arbor-recovery-action-group { display: flex; gap: 8px; min-width: 0; }
+.arbor-recovery-actions button { min-width: 80px; min-height: 36px; box-shadow: none; }
+.arbor-recovery-actions .arbor-recovery-discard { color: var(--text-error); background: transparent; border: 1px solid var(--background-modifier-border); }
+.arbor-recovery-actions .arbor-recovery-discard:hover { background: var(--background-modifier-error-hover); }
+
 @media (max-width: 600px) {
+  .modal.arbor-recovery-modal { width: calc(100% - 24px); max-height: calc(100dvh - 32px); padding: 16px; }
+  .arbor-recovery-comparison { grid-template-columns: minmax(0, 1fr); }
+  .arbor-recovery-pane textarea { height: 128px; }
+  .arbor-recovery-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .arbor-recovery-action-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .arbor-recovery-actions button { min-width: 0; min-height: 44px; }
   .modal.arbor-theme-studio-modal,
   .modal.arbor-theme-studio-editor-modal,
   .modal.arbor-theme-studio-confirm-modal,

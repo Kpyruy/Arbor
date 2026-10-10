@@ -5,7 +5,7 @@ import {
   AUTOMATIC_THEME_ID,
   BUILT_IN_THEMES
 } from "./theme";
-import { MIN_ZOOM_LEVEL } from "./mobile";
+import { clampZoomLevel, normalizeZoomBounds, MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL } from "./mobile";
 import { normalizeOverviewOrientation } from "./overviewOrientation";
 
 const OVERVIEW_ORIENTATION_OPTIONS = {
@@ -38,6 +38,8 @@ export const DEFAULT_SETTINGS: ArborSettings = {
   horizontalSpacing: 20,
   verticalSpacing: 12,
   zoomLevel: 1,
+  minZoomLevel: MIN_ZOOM_LEVEL,
+  maxZoomLevel: MAX_ZOOM_LEVEL,
   previewSnippetLength: 220,
   dragAndDrop: true,
   dimNonPathBlocks: false,
@@ -111,7 +113,9 @@ export class ArborSettingTab extends PluginSettingTab {
       this.sliderDefinition("Card minimum height", "Minimum card height in pixels.", "cardMinHeight", 80, 300, 10),
       this.sliderDefinition("Horizontal spacing", "Space between columns in pixels.", "horizontalSpacing", 8, 48, 2),
       this.sliderDefinition("Vertical spacing", "Space between cards in pixels.", "verticalSpacing", 4, 32, 2),
-      this.sliderDefinition("Default zoom", "Default scene zoom level.", "zoomLevel", MIN_ZOOM_LEVEL * 100, 160, 5, "%"),
+      this.sliderDefinition("Minimum zoom", "Lowest scene zoom, between 25% and the maximum zoom.", "minZoomLevel", 25, this.plugin.settings.maxZoomLevel * 100, 5, "%"),
+      this.sliderDefinition("Maximum zoom", "Highest scene zoom, between the minimum zoom and 500%.", "maxZoomLevel", this.plugin.settings.minZoomLevel * 100, 500, 5, "%"),
+      this.sliderDefinition("Default zoom", "Default scene zoom level.", "zoomLevel", this.plugin.settings.minZoomLevel * 100, this.plugin.settings.maxZoomLevel * 100, 5, "%"),
       this.sliderDefinition("Preview snippet length", "Maximum characters to show in card preview.", "previewSnippetLength", 80, 600, 10),
       this.toggleDefinition("Drag and drop", "Enable drag-and-drop reordering across columns.", "dragAndDrop"),
       this.toggleDefinition("Ctrl/Cmd + wheel zoom", "Zoom the branching scene with Ctrl/Cmd + mouse wheel.", "enableCtrlWheelZoom"),
@@ -146,8 +150,8 @@ export class ArborSettingTab extends PluginSettingTab {
   }
 
   getControlValue(key: string): unknown {
-    if (key === "zoomLevel") {
-      return Math.round(this.plugin.settings.zoomLevel * 100);
+    if (key === "zoomLevel" || key === "minZoomLevel" || key === "maxZoomLevel") {
+      return Math.round(this.plugin.settings[key] * 100);
     }
     return (this.plugin.settings as unknown as Record<string, unknown>)[key];
   }
@@ -158,10 +162,20 @@ export class ArborSettingTab extends PluginSettingTab {
     }
 
     const settings = this.plugin.settings as unknown as Record<string, unknown>;
+    if (key === "zoomLevel" || key === "minZoomLevel" || key === "maxZoomLevel") {
+      const bounds = normalizeZoomBounds(this.plugin.settings.minZoomLevel, this.plugin.settings.maxZoomLevel);
+      const next = typeof value === "number" ? value / 100 : NaN;
+      if (key === "minZoomLevel") bounds.min = clampZoomLevel(next, { min: MIN_ZOOM_LEVEL, max: bounds.max });
+      if (key === "maxZoomLevel") bounds.max = clampZoomLevel(next, { min: bounds.min, max: MAX_ZOOM_LEVEL });
+      this.plugin.settings.minZoomLevel = bounds.min;
+      this.plugin.settings.maxZoomLevel = bounds.max;
+      this.plugin.settings.zoomLevel = clampZoomLevel(key === "zoomLevel" ? next : this.plugin.settings.zoomLevel, bounds);
+      await this.plugin.saveSettings();
+      this.plugin.refreshAllBranchViews();
+      return;
+    }
     settings[key] = key === "overviewOrientation"
       ? normalizeOverviewOrientation(value) ?? "horizontal"
-      : key === "zoomLevel" && typeof value === "number"
-      ? value / 100
       : key === "breadcrumbLabelPreferredPrefix" && typeof value === "string"
         ? value.trim()
         : value;
@@ -241,7 +255,9 @@ export class ArborSettingTab extends PluginSettingTab {
     this.addNumericSetting(containerEl, "Card minimum height", "Minimum card height in pixels.", "cardMinHeight", 80, 300, 10);
     this.addNumericSetting(containerEl, "Horizontal spacing", "Space between columns in pixels.", "horizontalSpacing", 8, 48, 2);
     this.addNumericSetting(containerEl, "Vertical spacing", "Space between cards in pixels.", "verticalSpacing", 4, 32, 2);
-    this.addNumericSetting(containerEl, "Default zoom", "Default scene zoom level.", "zoomLevel", MIN_ZOOM_LEVEL * 100, 160, 5, "%");
+    this.addNumericSetting(containerEl, "Minimum zoom", "Lowest scene zoom, between 25% and the maximum zoom.", "minZoomLevel", 25, this.plugin.settings.maxZoomLevel * 100, 5, "%");
+    this.addNumericSetting(containerEl, "Maximum zoom", "Highest scene zoom, between the minimum zoom and 500%.", "maxZoomLevel", this.plugin.settings.minZoomLevel * 100, 500, 5, "%");
+    this.addNumericSetting(containerEl, "Default zoom", "Default scene zoom level.", "zoomLevel", this.plugin.settings.minZoomLevel * 100, this.plugin.settings.maxZoomLevel * 100, 5, "%");
     this.addNumericSetting(containerEl, "Preview snippet length", "Maximum characters to show in card preview.", "previewSnippetLength", 80, 600, 10);
 
     if (!Platform.isMobile) {
@@ -385,7 +401,7 @@ export class ArborSettingTab extends PluginSettingTab {
     description: string,
     key: keyof Pick<
       ArborSettings,
-      "cardWidth" | "cardMinHeight" | "horizontalSpacing" | "verticalSpacing" | "zoomLevel" | "previewSnippetLength"
+      "cardWidth" | "cardMinHeight" | "horizontalSpacing" | "verticalSpacing" | "zoomLevel" | "minZoomLevel" | "maxZoomLevel" | "previewSnippetLength"
     >,
     min: number,
     max: number,
@@ -399,12 +415,10 @@ export class ArborSettingTab extends PluginSettingTab {
         slider
           .setLimits(min, max, step)
           .setDynamicTooltip()
-          .setValue(key === "zoomLevel" ? Math.round(this.plugin.settings[key] * 100) : this.plugin.settings[key])
+          .setValue(this.getControlValue(key) as number)
           .onChange(async (value) => {
-            const nextValue = key === "zoomLevel" ? value / 100 : value;
-            this.plugin.settings[key] = nextValue;
-            await this.plugin.saveSettings();
-            this.plugin.refreshAllBranchViews();
+            await this.setControlValue(key, value);
+            if (key === "minZoomLevel" || key === "maxZoomLevel") this.display();
           })
       );
   }
@@ -412,13 +426,13 @@ export class ArborSettingTab extends PluginSettingTab {
   private sliderDefinition(
     name: string,
     desc: string,
-    key: Extract<keyof ArborSettings, "cardWidth" | "cardMinHeight" | "horizontalSpacing" | "verticalSpacing" | "zoomLevel" | "previewSnippetLength">,
+    key: Extract<keyof ArborSettings, "cardWidth" | "cardMinHeight" | "horizontalSpacing" | "verticalSpacing" | "zoomLevel" | "minZoomLevel" | "maxZoomLevel" | "previewSnippetLength">,
     min: number,
     max: number,
     step: number,
     suffix = "px"
   ): ArborSettingDefinition {
-    const defaultValue = key === "zoomLevel" ? DEFAULT_SETTINGS.zoomLevel * 100 : DEFAULT_SETTINGS[key];
+    const defaultValue = suffix === "%" ? DEFAULT_SETTINGS[key] * 100 : DEFAULT_SETTINGS[key];
     return {
       name,
       desc,

@@ -5,6 +5,7 @@ import type { EditingSession } from "../src/view/state/viewTypes";
 import { fixtureLoaded, fixtureSettings } from "./helpers/arborFixtures";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -128,8 +129,9 @@ function branchCamera(elements: Partial<{
   viewport: HTMLElement | null;
   columns: HTMLElement | null;
   previewContent: HTMLElement | null;
-}>, session: EditingSession | null = null) {
+}>, session: EditingSession | null = null, activeZoom = false) {
   return new BranchViewportController({
+    isActiveZoom: () => activeZoom,
     read: {
       getState: () => null,
       getSettings: fixtureSettings,
@@ -151,6 +153,64 @@ function branchCamera(elements: Partial<{
 }
 
 describe("BranchViewportController", () => {
+  it("centers active fit without queuing motion when reduced motion is requested", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("window", { requestAnimationFrame: (cb: FrameRequestCallback) => { frames.push(cb); return frames.length; },
+      cancelAnimationFrame: () => {}, matchMedia: () => ({ matches: true }) });
+    const viewport = { scrollLeft: 0, clientWidth: 800, scrollWidth: 2000, classList: { remove: () => {} } } as unknown as HTMLElement;
+    const camera = branchCamera({ viewport });
+    camera.centerActiveTarget(viewport, 600);
+    expect(viewport.scrollLeft).toBe(600);
+    expect(frames).toHaveLength(0);
+    camera.reset();
+  });
+
+  it("leaves horizontal camera ownership to active fit while retaining selection focus", () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let id = 0;
+    vi.stubGlobal("window", {
+      requestAnimationFrame: (cb: FrameRequestCallback) => { frames.set(++id, cb); return id; },
+      cancelAnimationFrame: (key: number) => frames.delete(key),
+      matchMedia: () => ({ matches: true })
+    });
+    let focused = false;
+    const card = { focus: () => { focused = true; }, querySelector: () => null,
+      getBoundingClientRect: () => ({ left: 900, right: 1000 }) } as unknown as HTMLElement;
+    const viewport = { scrollLeft: 0, clientWidth: 800, scrollWidth: 2000, classList: { remove: () => {} },
+      getBoundingClientRect: () => ({ left: 0, right: 800 }) } as unknown as HTMLElement;
+    const columns = { querySelector: () => card, setCssProps: () => {} } as unknown as HTMLElement;
+    const camera = branchCamera({ viewport, columns }, null, true);
+    camera.applyPendingFocusAndScroll({ focusBlockId: "first", scrollBlockId: "first", snap: false, preservedSceneWidth: 2000 });
+    for (const [key, cb] of [...frames]) { frames.delete(key); cb(performance.now()); }
+    for (const [key, cb] of [...frames]) { frames.delete(key); cb(performance.now() + 1000); }
+    expect(focused).toBe(true);
+    expect(viewport.scrollLeft).toBe(0);
+    camera.reset();
+  });
+
+  it("does not restart an identical in-flight horizontal destination on a refit", () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let id = 0;
+    vi.stubGlobal("window", {
+      requestAnimationFrame: (cb: FrameRequestCallback) => { frames.set(++id, cb); return id; },
+      cancelAnimationFrame: (key: number) => frames.delete(key)
+    });
+    let clock = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => clock);
+    const viewport = { scrollLeft: 0, classList: { remove: () => {} } } as unknown as HTMLElement;
+    const camera = branchCamera({ viewport });
+    const pan = camera as unknown as { animateViewportScrollTo(viewport: HTMLElement, left: number, deduplicate: boolean): void };
+    pan.animateViewportScrollTo(viewport, 600, true);
+    clock = 100;
+    for (const [key, cb] of [...frames]) { frames.delete(key); cb(clock); }
+    expect(viewport.scrollLeft).toBeGreaterThan(0);
+    pan.animateViewportScrollTo(viewport, 600, true);
+    clock = 320;
+    for (const [key, cb] of [...frames]) { frames.delete(key); cb(clock); }
+    expect(viewport.scrollLeft).toBe(600);
+    camera.reset();
+  });
+
   it("snaps layout compensation for an unchanged ancestor during child selection", () => {
     vi.stubGlobal("HTMLElement", class {});
     const state = fixtureLoaded();

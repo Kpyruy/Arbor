@@ -61,6 +61,7 @@ export interface DockActions {
 }
 
 export interface ShellPort {
+  isActiveZoom?(): boolean;
   read: ViewReadPort;
   getOverviewOrientation(): ArborOverviewOrientation;
   getSession(): EditingSession | null;
@@ -437,7 +438,9 @@ export class ViewShell {
     const isDefaultZoom = Math.abs(zoom - 1) < 0.001;
     button.textContent = `${Math.round(zoom * 100)}%`;
     button.classList.toggle("is-default", isDefaultZoom);
-    button.title = isDefaultZoom ? "Zoom 100%. Ctrl/Cmd + wheel to zoom." : "Click to reset zoom to 100%. Ctrl/Cmd + wheel to zoom.";
+    const active = this.port.isActiveZoom?.() ?? false;
+    button.setAttr("aria-label", active ? "Stop active zoom and reset to 100%" : "Reset zoom to 100%");
+    button.title = active ? "Stop active zoom and reset to 100%." : isDefaultZoom ? "Zoom 100%. Ctrl/Cmd + wheel to zoom." : "Click to reset zoom to 100%. Ctrl/Cmd + wheel to zoom.";
   }
 
   private emptyElements(): ShellElements {

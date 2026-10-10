@@ -75,11 +75,12 @@ export async function loadIngestionView(): Promise<void> {
             register() {} registerDomEvent() {} onClose() { return Promise.resolve(); }
           }
           export class MarkdownView {}
-          export class Modal { constructor(app) { this.contentEl = app.root.createDiv(); } open() {} close() { this.contentEl.remove(); } }
+          export class Modal { constructor(app) { this.modalEl = app.root.createDiv(); this.contentEl = this.modalEl.createDiv(); } open() {} close() { this.modalEl.remove(); } }
           export class ButtonComponent {
             constructor(root) { this.buttonEl = root.createEl("button"); }
             setButtonText(text) { this.buttonEl.textContent = text; return this; }
             setDisabled(value) { this.buttonEl.disabled = value; return this; }
+            setCta() { this.buttonEl.addClass("mod-cta"); return this; }
             onClick(action) { this.buttonEl.addEventListener("click", action); return this; }
           }
           export class Menu {

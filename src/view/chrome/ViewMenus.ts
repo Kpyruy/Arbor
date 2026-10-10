@@ -36,6 +36,8 @@ export interface MenuCommands {
 }
 
 export interface ViewMenusPort {
+  startActiveZoom?(id: BranchBlockId): void;
+  focusOverviewBranch?(id: BranchBlockId): Promise<void>;
   pasteContentIntoCard(id: BranchBlockId): Promise<void>;
   hasRetainedIncomingContent(): boolean;
   recoverIncomingContent(): void;
@@ -211,6 +213,12 @@ export class ViewMenus {
   buildBlockMenu(blockId: BranchBlockId): Menu {
     const menu = new Menu();
     const state = this.port.read.getState();
+    if (this.port.startActiveZoom) menu.addItem(item => item.setTitle("Active zoom").setIcon("scan")
+      .setDisabled(this.port.read.getMode() === "output" || !state || !getBlock(state.metadata, blockId))
+      .onClick(() => this.port.startActiveZoom?.(blockId)));
+    if (this.port.focusOverviewBranch) menu.addItem(item => item.setTitle("Focus on branch").setIcon("git-branch")
+      .setDisabled(!state || !getBlock(state.metadata, blockId))
+      .onClick(() => runAsyncAction(this.port.focusOverviewBranch!(blockId), error => this.port.reportError("[Arbor] Branch focus failed", error))));
     menu.addItem(item => item.setTitle("Paste content into card").setIcon("clipboard-paste")
       .setDisabled(this.port.read.getMode() === "output" || !state || !getBlock(state.metadata, blockId))
       .onClick(() => runAsyncAction(this.port.pasteContentIntoCard(blockId), error => this.port.reportError("[Arbor] Paste failed", error))));

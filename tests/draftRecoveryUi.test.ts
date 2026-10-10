@@ -69,11 +69,12 @@ beforeAll(async () => {
           return { text, value: '', children: [], removed: false,
             createEl(tag, options = {}) { const child = element(options.text); child.tag = tag; this.children.push(child); return child; },
             createDiv(options = {}) { return this.createEl('div', options); },
-            addClass() {}, empty() { this.children = []; }, remove() { this.removed = true; }
+            createSpan(options = {}) { return this.createEl('span', options); },
+            addClass() {}, focus() {}, empty() { this.children = []; }, remove() { this.removed = true; }
           };
         }
         export class Modal { static instances = []; constructor() { this.contentEl = element(); this.modalEl = element(); Modal.instances.push(this); } open() { this.opened = true; } close() { this.closed = true; } }
-        export class ButtonComponent { static instances = []; constructor(container) { this.text = ''; this.disabled = false; this.container = container; ButtonComponent.instances.push(this); } setButtonText(text) { this.text = text; return this; } setDisabled(value) { this.disabled = value; return this; } setCta() { return this; } setWarning() { return this; } onClick(action) { this.action = action; return this; } }
+        export class ButtonComponent { static instances = []; constructor(container) { this.text = ''; this.disabled = false; this.container = container; this.buttonEl = container.createEl('button'); ButtonComponent.instances.push(this); } setButtonText(text) { this.text = text; return this; } setDisabled(value) { this.disabled = value; return this; } setCta() { return this; } setWarning() { return this; } onClick(action) { this.action = action; return this; } }
         export class FileView { static closes = 0; onClose() { FileView.closes += 1; return Promise.resolve(); } }
         export class Notice {}
         export class Menu {}

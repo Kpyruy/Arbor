@@ -4,6 +4,7 @@ import type { BranchBlockId } from "../../types";
 import type { EditingSession, ViewReadPort } from "../state/viewTypes";
 
 export interface BranchViewportPort {
+  isActiveZoom?(): boolean;
   read: ViewReadPort;
   getElements(): { root: HTMLElement; stage: HTMLElement | null; viewport: HTMLElement | null; columns: HTMLElement | null; previewContent: HTMLElement | null };
   getSession(): EditingSession | null;
@@ -22,6 +23,7 @@ export class BranchViewportController {
   private focusFrame: number | null = null;
   private layoutFrame: number | null = null;
   private horizontalScrollFrame: number | null = null;
+  private horizontalTarget: { viewport: HTMLElement; left: number } | null = null;
   private alignments = new WeakMap<HTMLElement, { target: HTMLElement; natural: number }>();
   private panState: { pointerId: number; startClientX: number; startScrollLeft: number; dragging: boolean } | null = null;
 
@@ -93,9 +95,9 @@ export class BranchViewportController {
         const scrollCard = columns.querySelector<HTMLElement>(`.arbor-card[data-block-id="${request.scrollBlockId}"]`) ?? activeCard;
         if (scrollCard) {
           this.animateSelectedCard(request.scrollBlockId);
-          this.scrollCardIntoHorizontalView(scrollCard, viewport, request.preservedSceneWidth, request.snap);
+          if (!this.port.isActiveZoom?.()) this.scrollCardIntoHorizontalView(scrollCard, viewport, request.preservedSceneWidth, request.snap);
         }
-      } else {
+      } else if (!this.port.isActiveZoom?.()) {
         this.releasePreservedSceneWidth();
       }
     });
@@ -124,7 +126,20 @@ export class BranchViewportController {
       window.cancelAnimationFrame(this.horizontalScrollFrame);
       this.horizontalScrollFrame = null;
     }
+    this.horizontalTarget = null;
     if (releasePreservedWidth) this.releasePreservedSceneWidth();
+  }
+
+  centerActiveTarget(viewport: HTMLElement, left: number): void {
+    const target = Math.max(0, Math.min(left, viewport.scrollWidth - viewport.clientWidth));
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      this.stopHorizontalScrollMotion(false);
+      viewport.scrollLeft = target;
+      this.syncViewportEdgeFades();
+      this.releasePreservedSceneWidth();
+      return;
+    }
+    this.animateViewportScrollTo(viewport, target, true);
   }
 
   syncViewportEdgeFades(): void {
@@ -176,7 +191,7 @@ export class BranchViewportController {
 
   alignColumnsToActivePath(): void {
     const { viewport, columns } = this.port.getElements();
-    if (this.port.isCompact()) {
+    if (this.port.isCompact() && !this.port.isActiveZoom?.()) {
       columns?.querySelectorAll<HTMLElement>(".arbor-card-list").forEach((list) => {
         list.setCssProps({ "--arbor-card-list-offset-y": "0px" });
         list.classList.remove("is-rebinding");
@@ -194,7 +209,8 @@ export class BranchViewportController {
     const path = getActivePath(state.metadata, state.selectedBlockId);
     const viewportRect = resolvedViewport.getBoundingClientRect();
     const rootRect = resolvedColumns.getBoundingClientRect();
-    const rootAnchor = viewportRect.top - rootRect.top + resolvedViewport.clientHeight * 0.44;
+    const activeZoom = this.port.isActiveZoom?.() ?? false;
+    const rootAnchor = viewportRect.top - rootRect.top + resolvedViewport.clientHeight * (activeZoom ? 0.5 : 0.44);
     const centers = new Map<number, number>();
     columnEls.forEach((column) => {
       const list = column.querySelector<HTMLElement>(".arbor-card-list");
@@ -204,6 +220,7 @@ export class BranchViewportController {
       const depth = Number(column.dataset.columnDepth);
       const block = path[depth];
       const target =
+        (activeZoom ? column.querySelector<HTMLElement>(".arbor-card.is-active") : null) ??
         (block ? column.querySelector<HTMLElement>(`.arbor-card[data-block-id="${block.id}"]`) : null) ??
         column.querySelector<HTMLElement>(".arbor-column-empty") ??
         fallback;
@@ -308,7 +325,9 @@ export class BranchViewportController {
     this.port.getElements().columns?.setCssProps({ "--arbor-columns-min-width": "max-content" });
   }
 
-  private animateViewportScrollTo(viewport: HTMLElement, targetLeft: number): void {
+  private animateViewportScrollTo(viewport: HTMLElement, targetLeft: number, deduplicate = false): void {
+    if (deduplicate && this.horizontalScrollFrame !== null && this.horizontalTarget?.viewport === viewport
+      && Math.abs(this.horizontalTarget.left - targetLeft) < 1) return;
     this.stopHorizontalScrollMotion(false);
     const startLeft = viewport.scrollLeft;
     const distance = targetLeft - startLeft;
@@ -321,6 +340,7 @@ export class BranchViewportController {
 
     const duration = Math.max(180, Math.min(320, 170 + Math.abs(distance) * 0.18));
     const startedAt = performance.now();
+    this.horizontalTarget = { viewport, left: targetLeft };
     const tick = (now: number) => {
       const progress = Math.min(1, (now - startedAt) / duration);
       const eased = progress < 0.5
@@ -334,6 +354,7 @@ export class BranchViewportController {
       }
 
       this.horizontalScrollFrame = null;
+      this.horizontalTarget = null;
       viewport.scrollLeft = targetLeft;
       this.syncViewportEdgeFades();
       this.releasePreservedSceneWidth();

@@ -10,6 +10,7 @@ import {
   Modal,
   Notice,
   Platform,
+  setIcon,
   parseLinktext,
   resolveSubpath,
   TFile,
@@ -66,7 +67,7 @@ import { MOBILE_TREE_OVERVIEW_EXPORT_LIMITS, resolveTreeOverviewExportSize, type
 import { ARBOR_THEME_VARIABLES, resolveArborThemeVariables } from "../theme";
 import { OutputProfilesModal, type OutputProfilesController } from "./OutputProfilesModal";
 import { toBlob } from "html-to-image";
-import { compactColumns } from "../mobile";
+import { clampZoomLevel, compactColumns, normalizeZoomBounds } from "../mobile";
 import { buildViewContext } from "./state/viewModel";
 import type {
   BranchViewContext,
@@ -96,6 +97,9 @@ import { LocalHeadingLinks, readHeadingLinker, readHeadingLinkerObserver, type H
 import { BranchViewportController } from "./branch/BranchViewportController";
 import { OverviewViewportController } from "./overview/OverviewViewportController";
 import { ZoomController } from "./interaction/ZoomController";
+import { ActiveZoomController, type ActiveZoomTarget } from "./interaction/ActiveZoomController";
+import { measureBranchCard } from "./interaction/activeZoomGeometry";
+import { projectOverviewSubtree } from "./overview/overviewFocus";
 import { TouchController } from "./interaction/TouchController";
 import { BranchRenderer, routeBranchViewportWheel } from "./branch/BranchRenderer";
 import { DragDropController } from "./branch/DragDropController";
@@ -142,6 +146,10 @@ export class ArborView extends FileView {
   private readonly overviewViewport: OverviewViewportController;
   private readonly overview: TreeOverviewController;
   private readonly zoomController: ZoomController;
+  private readonly activeZoom: ActiveZoomController;
+  private viewZoomOverride: number | null = null;
+  private overviewFocusRootId: BranchBlockId | null = null;
+  private focusControlsEl: HTMLElement | null = null;
   private readonly touchController: TouchController;
   private readonly branchRenderer: BranchRenderer;
   private readonly dragDropController: DragDropController;
@@ -218,6 +226,134 @@ export class ArborView extends FileView {
   private get outputStageEl(): HTMLElement | null { return this.shell.getElements().outputStageEl; }
   private get compactLayout(): boolean { return this.shell.isCompact(); }
 
+  private getZoomBounds(): { min: number; max: number } {
+    return normalizeZoomBounds(this.plugin.settings.minZoomLevel, this.plugin.settings.maxZoomLevel);
+  }
+
+  private resetViewingFocus(): void {
+    this.activeZoom?.reset();
+    this.viewZoomOverride = null;
+    this.overviewFocusRootId = null;
+    this.focusControlsEl?.remove();
+    this.focusControlsEl = null;
+  }
+
+  private getViewSettings(): ArborSettings {
+    return this.viewZoomOverride === null ? this.plugin.settings
+      : { ...this.plugin.settings, zoomLevel: clampZoomLevel(this.viewZoomOverride, this.getZoomBounds()) };
+  }
+
+  private getNavigationState(): Readonly<LoadedFileState> | null {
+    const state = this.state;
+    if (!state || this.presentationMode === "output" || !this.overviewFocusRootId) return state;
+    return { ...state, metadata: projectOverviewSubtree(state.metadata, this.overviewFocusRootId) };
+  }
+
+  private getActiveZoomTarget(): ActiveZoomTarget | null {
+    if (this.presentationMode === "output") return null;
+    const overview = this.presentationMode === "overview" ? this.overview.getElements() : null;
+    const viewport = overview?.viewport ?? this.columnsViewportEl;
+    const card = (overview?.surface ?? this.columnsEl)?.querySelector<HTMLElement>(
+      this.presentationMode === "overview" ? ".arbor-overview-card.is-active" : ".arbor-card.is-active");
+    return viewport && card ? { viewport, card } : null;
+  }
+
+  private centerActiveZoomTarget({ card, viewport }: ActiveZoomTarget, immediate = false): void {
+    if (this.presentationMode === "overview") {
+      this.overviewViewport.discardPendingRestore();
+    }
+    const bounds = viewport.getBoundingClientRect();
+    const target = card.getBoundingClientRect();
+    const left = viewport.scrollLeft + target.left + target.width / 2 - bounds.left - viewport.clientLeft - viewport.clientWidth / 2;
+    if (this.presentationMode === "editor" && !immediate) {
+      this.branchViewport.centerActiveTarget(viewport, left);
+      return;
+    }
+    viewport.scrollTo({
+      left,
+      top: this.presentationMode === "overview"
+        ? viewport.scrollTop + target.top + target.height / 2 - bounds.top - viewport.clientTop - viewport.clientHeight / 2 : 0,
+      behavior: immediate ? "instant" : "smooth"
+    });
+  }
+
+  private stopActiveZoom(): void {
+    const target = this.getActiveZoomTarget();
+    this.stopHorizontalScrollMotion();
+    // Cancel native smooth scrolling before changing the scale and scene margins.
+    target?.viewport.scrollTo({ left: target.viewport.scrollLeft, top: target.viewport.scrollTop, behavior: "instant" });
+    this.activeZoom.disable();
+    this.zoomController.clearOverviewZoomFrame();
+    this.zoomController.clearTouchZoomFrame();
+    this.viewZoomOverride = null;
+    const previous = this.plugin.settings.zoomLevel;
+    this.zoomController.updateZoomLevel(1);
+    if (previous === this.plugin.settings.zoomLevel) {
+      this.applyCssVars(this.contentEl);
+      this.afterZoom();
+    }
+    // Read the new layout now: retaining the old scroll at 100% loses deep cards.
+    if (this.presentationMode === "editor") this.alignColumnsToActivePath();
+    if (target) this.centerActiveZoomTarget(target, true);
+  }
+
+  private startActiveZoom(id: BranchBlockId): void {
+    if (!this.state || this.presentationMode === "output" || !getBlock(this.state.metadata, id)) return;
+    this.selectBlock(id, { reveal: true });
+    this.activeZoom.enable();
+  }
+
+  private async focusOverviewBranch(id: BranchBlockId): Promise<void> {
+    const identity = this.documentController.getLoadedFileIdentity();
+    await this.commitEditIfNeeded();
+    if (!this.isSameLoadedFile(identity) || !this.state || !getBlock(this.state.metadata, id)) return;
+    this.ingestion.cancelPending();
+    this.ingestionRouting.clearGesture();
+    this.overviewFocusRootId = id;
+    if (this.presentationMode === "output") this.presentationMode = "overview";
+    this.documentController.setSelection(id);
+    this.overviewViewport.discardPendingRestore();
+    this.overview.requestCenterOnNextRender();
+    this.syncFocusControls();
+    this.render();
+  }
+
+  private leaveOverviewFocus(): void {
+    this.overviewFocusRootId = null;
+    this.overviewViewport.discardPendingRestore();
+    this.overview.requestCenterOnNextRender();
+    this.syncFocusControls();
+    this.render();
+  }
+
+  private syncFocusControls(): void {
+    const parent = this.modeControlsEl;
+    if (!parent) return;
+    if (!this.focusControlsEl?.isConnected) this.focusControlsEl = parent.createDiv({ cls: "arbor-view-focus-controls" });
+    const root = this.focusControlsEl;
+    const active = this.activeZoom?.isEnabled() && this.presentationMode !== "output";
+    this.contentEl.toggleClass("is-active-zoom", Boolean(active));
+    const viewport = this.getActiveZoomTarget()?.viewport;
+    if (active && viewport) this.contentEl.setCssProps({ "--arbor-active-viewport-height": `${viewport.clientHeight}px`, "--arbor-active-viewport-width": `${viewport.clientWidth}px` });
+    const focused = this.overviewFocusRootId !== null && this.presentationMode !== "output";
+    const sync = (cls: string, shown: boolean, text: string, icon: string, action: () => void) => {
+      let button = root.querySelector<HTMLButtonElement>(`.${cls}`);
+      if (!shown) { button?.remove(); return; }
+      if (button) return;
+      button = root.createEl("button", { cls, attr: { type: "button", "aria-label": text } });
+      const iconEl = button.createSpan({ cls: "arbor-focus-control-icon", attr: { "aria-hidden": "true" } });
+      setIcon(iconEl, icon);
+      button.createSpan({ cls: "arbor-focus-control-label", text });
+      // Keep the draft's caret and blur-save suspension intact while exiting a view mode.
+      button.addEventListener("mousedown", event => event.preventDefault());
+      button.addEventListener("click", event => { event.stopPropagation(); action(); });
+    };
+    sync("arbor-branch-focus-exit", focused, "Stop focus", "expand", () => this.leaveOverviewFocus());
+    sync("arbor-active-zoom-exit", Boolean(active), "Stop zoom", "zoom-out", () => this.stopActiveZoom());
+    root.hidden = !active && !focused;
+    this.syncZoomIndicator();
+  }
+
   constructor(leaf: WorkspaceLeaf, private readonly plugin: ArborPlugin) {
     super(leaf);
     this.documentController = new DocumentController({
@@ -272,6 +408,7 @@ export class ArborView extends FileView {
         const session = this.editor.getSession();
         if (session?.origin === "overview") this.overview.reflowOverviewCard(session.blockId);
         else this.scheduleColumnAlignment();
+        this.activeZoom.schedule();
       },
       handleSearchShortcut: (event) => this.handleSearchShortcut(event),
       paste: (event, textarea) => this.attachments.handleEditorPaste(event, textarea),
@@ -358,8 +495,8 @@ export class ArborView extends FileView {
       reportOpenError: () => { new Notice("Could not open this link."); }
     });
     this.navigationController = new NavigationController({
-      getState: () => this.state,
-      getSettings: () => this.plugin.settings,
+      getState: () => this.getNavigationState(),
+      getSettings: () => this.getViewSettings(),
       getMode: () => this.presentationMode,
       getFilePath: () => this.file?.path ?? ""
     }, { selectBlock: (id, options) => this.selectBlock(id, options) }, {
@@ -380,9 +517,10 @@ export class ArborView extends FileView {
       tryHandleCardLink: (event, card) => this.cardLinks.handleActivation(event, card)
     }, () => this.getOverviewOrientation(), () => this.contentEl.win);
     this.branchViewport = new BranchViewportController({
+      isActiveZoom: () => this.activeZoom.isEnabled(),
       read: {
-        getState: () => this.state,
-        getSettings: () => this.plugin.settings,
+        getState: () => this.getNavigationState(),
+        getSettings: () => this.getViewSettings(),
         getMode: () => this.presentationMode,
         getFilePath: () => this.file?.path ?? ""
       },
@@ -396,11 +534,14 @@ export class ArborView extends FileView {
         const { viewport, scene, surface } = this.overview.getElements();
         return { viewport, scene, surface };
       },
-      getZoom: () => this.plugin.settings.zoomLevel
+      getZoom: () => this.getViewSettings().zoomLevel
     });
     this.zoomController = new ZoomController({
-      getZoom: () => this.plugin.settings.zoomLevel,
-      setZoom: (value) => { this.plugin.settings.zoomLevel = value; },
+      getWindow: () => this.contentEl.win,
+      getZoom: () => this.getViewSettings().zoomLevel,
+      getZoomBounds: () => this.getZoomBounds(),
+      onManualZoom: () => this.activeZoom?.disable(),
+      setZoom: (value) => { this.viewZoomOverride = null; this.plugin.settings.zoomLevel = value; },
       saveSettings: () => this.plugin.saveSettings(),
       applyZoom: () => {
         this.applyCssVars(this.contentEl);
@@ -409,8 +550,51 @@ export class ArborView extends FileView {
       hideIndicator: () => this.hideZoomIndicator(),
       afterZoom: () => this.afterZoom()
     });
+    this.activeZoom = new ActiveZoomController({
+      prepareTarget: target => {
+        this.contentEl.setCssProps({ "--arbor-active-viewport-height": `${target.viewport.clientHeight}px`, "--arbor-active-viewport-width": `${target.viewport.clientWidth}px` });
+        if (this.presentationMode === "editor") {
+          target.viewport.scrollTop = 0;
+          this.alignColumnsToActivePath();
+        }
+      },
+      getNaturalSize: target => this.presentationMode === "overview"
+        ? { width: target.card.offsetWidth, height: target.card.offsetHeight }
+        : measureBranchCard(target.card, editor => this.editor.resizeEditor(editor)),
+      getTarget: () => this.getActiveZoomTarget(),
+      getZoom: () => this.getViewSettings().zoomLevel,
+      getBounds: () => this.getZoomBounds(),
+      applyZoom: value => {
+        const branchTarget = this.presentationMode === "editor" ? this.getActiveZoomTarget() : null;
+        const before = branchTarget?.card.getBoundingClientRect();
+        if (branchTarget) {
+          this.branchViewport.stopHorizontalScrollMotion(false);
+          this.columnsEl?.setCssProps({ "--arbor-columns-min-width": `${this.columnsEl.scrollWidth}px` });
+        }
+        this.viewZoomOverride = value;
+        this.applyCssVars(this.contentEl);
+        if (this.presentationMode === "overview") this.syncOverviewZoom();
+        else {
+          const input = this.getActiveZoomTarget()?.card.querySelector<HTMLTextAreaElement>("textarea.arbor-editor");
+          if (input) this.editor.resizeEditor(input);
+          this.alignColumnsToActivePath();
+          if (branchTarget && before) {
+            const after = branchTarget.card.getBoundingClientRect();
+            // Reflow changes every column's X at once. Keep the selected screen
+            // anchor stable, then let the active camera pan to the midpoint.
+            branchTarget.viewport.scrollLeft += after.left + after.width / 2 - before.left - before.width / 2;
+          }
+        }
+      },
+      center: target => this.centerActiveZoomTarget(target),
+      onEnabledChanged: enabled => {
+        if (!enabled) this.stopHorizontalScrollMotion();
+        this.syncFocusControls();
+      }
+    });
     this.touchController = new TouchController({
-      getZoom: () => this.plugin.settings.zoomLevel,
+      getZoom: () => this.getViewSettings().zoomLevel,
+      getZoomBounds: () => this.getZoomBounds(),
       scheduleZoom: (value) => this.zoomController.scheduleTouchZoom(value),
       hasEditingSession: () => this.editor.getSession() !== null,
       usesTouchControls: () => this.usesTouchControls,
@@ -423,7 +607,7 @@ export class ArborView extends FileView {
     this.dragDropController = new DragDropController({
       read: {
         getState: () => this.state,
-        getSettings: () => this.plugin.settings,
+        getSettings: () => this.getViewSettings(),
         getMode: () => this.presentationMode,
         getFilePath: () => this.file?.path ?? ""
       },
@@ -441,7 +625,7 @@ export class ArborView extends FileView {
     this.branchRenderer = new BranchRenderer({
       read: {
         getState: () => this.state,
-        getSettings: () => this.plugin.settings,
+        getSettings: () => this.getViewSettings(),
         getMode: () => this.presentationMode,
         getFilePath: () => this.file?.path ?? ""
       },
@@ -474,12 +658,13 @@ export class ArborView extends FileView {
       setCollapsedState: (id, collapsed) => this.setCollapsedState(id, collapsed)
     });
     this.overview = new TreeOverviewController({
+      getFocusRootId: () => this.overviewFocusRootId,
       getOverviewOrientation: () => this.getOverviewOrientation(),
       captureOverviewEditorSelection: () => this.captureOverviewEditorSelection(),
       restoreOverviewEditorSelection: (saved) => this.restoreOverviewEditorSelection(saved),
       read: {
         getState: () => this.state,
-        getSettings: () => this.plugin.settings,
+        getSettings: () => this.getViewSettings(),
         getMode: () => this.presentationMode,
         getFilePath: () => this.file?.path ?? ""
       },
@@ -505,7 +690,7 @@ export class ArborView extends FileView {
     this.output = new OutputPreviewController({
       read: {
         getState: () => this.state,
-        getSettings: () => this.plugin.settings,
+        getSettings: () => this.getViewSettings(),
         getMode: () => this.presentationMode,
         getFilePath: () => this.file?.path ?? ""
       },
@@ -518,7 +703,7 @@ export class ArborView extends FileView {
     this.preview = new LinearPreviewController({
       read: {
         getState: () => this.state,
-        getSettings: () => this.plugin.settings,
+        getSettings: () => this.getViewSettings(),
         getMode: () => this.presentationMode,
         getFilePath: () => this.file?.path ?? ""
       },
@@ -545,10 +730,11 @@ export class ArborView extends FileView {
       requestRender: () => this.render()
     });
     this.shell = new ViewShell(this.contentEl, {
+      isActiveZoom: () => this.activeZoom.isEnabled(),
       getOverviewOrientation: () => this.getOverviewOrientation(),
       read: {
-        getState: () => this.state,
-        getSettings: () => this.plugin.settings,
+        getState: () => this.getNavigationState(),
+        getSettings: () => this.getViewSettings(),
         getMode: () => this.presentationMode,
         getFilePath: () => this.file?.path ?? ""
       },
@@ -601,19 +787,21 @@ export class ArborView extends FileView {
       onDirectionApplied: (direction) => { this.renderedLayoutDirection = direction; }
     });
     this.breadcrumbs = new BreadcrumbsController(
-      { getState: () => this.state, getSettings: () => this.plugin.settings, getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
+      { getState: () => this.getNavigationState(), getSettings: () => this.getViewSettings(), getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
       { selectBlock: (id, options) => this.selectBlock(id, options) },
       () => ({ frame: this.frameEl, breadcrumbs: this.breadcrumbsEl, exitLayer: this.breadcrumbExitLayerEl }),
       () => this.file?.basename ?? ""
     );
     this.menus = new ViewMenus({
+      startActiveZoom: id => this.startActiveZoom(id),
+      focusOverviewBranch: id => this.focusOverviewBranch(id),
       pasteContentIntoCard: id => this.pasteContentIntoCard(id),
       hasRetainedIncomingContent: () => this.ingestion.getRetained().length > 0,
       recoverIncomingContent: () => this.showIncomingContentRecovery(),
       getOverviewOrientation: () => this.getOverviewOrientation(),
       getOverviewOrientationOverride: () => this.getOverviewOrientationOverride(),
       setOverviewOrientationOverride: (value) => this.setOverviewOrientationOverride(value),
-      read: { getState: () => this.state, getSettings: () => this.plugin.settings, getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
+      read: { getState: () => this.state, getSettings: () => this.getViewSettings(), getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
       selection: { selectBlock: (id, options) => this.selectBlock(id, options) },
       editor: this.editor,
       commands: {
@@ -683,6 +871,7 @@ export class ArborView extends FileView {
   }
 
   private revealSelectionAfterShellResize(): void {
+    if (this.activeZoom.isEnabled()) { this.activeZoom.schedule(); return; }
     if (!this.usesTouchControls || !this.editingSession) return;
     if (this.presentationMode === "overview") {
       const card = this.overview.getElements().surface?.querySelector<HTMLElement>(".arbor-overview-card.is-active");
@@ -823,6 +1012,7 @@ export class ArborView extends FileView {
   }
 
   clear(): void {
+    this.resetViewingFocus();
     this.invalidatePendingLoads();
     this.work.reset();
     this.clearBlurCommitTimer();
@@ -846,6 +1036,7 @@ export class ArborView extends FileView {
   }
 
   async onClose(): Promise<void> {
+    this.resetViewingFocus();
     this.ingestion?.close();
     this.headingLinks?.cancelPending();
     this.clearHeadingSubscription();
@@ -958,6 +1149,7 @@ export class ArborView extends FileView {
   }
 
   private resetLoadedUiState(selectedBlockId: BranchBlockId | null): void {
+    this.resetViewingFocus();
     this.documentController.clearHistory();
     this.editor.reset();
     this.dragDropController.reset();
@@ -1264,6 +1456,7 @@ export class ArborView extends FileView {
   }
 
   openOutputPreview(): void {
+    this.activeZoom.disable();
     this.ingestion.cancelPending();
     this.ingestionRouting.clearGesture();
     this.presentationMode = "output";
@@ -1298,6 +1491,19 @@ export class ArborView extends FileView {
 
     const selectionChanged = this.state.selectedBlockId !== nextSelectedBlockId;
     this.documentController.setSelection(nextSelectedBlockId);
+    if (this.overviewFocusRootId && this.presentationMode !== "output"
+      && !getBlock(projectOverviewSubtree(this.state.metadata, this.overviewFocusRootId), nextSelectedBlockId)) {
+      this.overviewFocusRootId = null;
+      this.overview.requestCenterOnNextRender();
+      if (options?.focus) {
+        if (this.presentationMode === "overview") this.overview.requestKeyboardFocusAfterMutation();
+        else this.pendingFocusBlockId = nextSelectedBlockId;
+      }
+      this.pendingScrollBlockId = nextSelectedBlockId;
+      this.syncFocusControls();
+      this.render();
+      return;
+    }
     this.syncTouchDock();
 
     if (options?.focus) {
@@ -1321,6 +1527,7 @@ export class ArborView extends FileView {
       );
       this.search.syncSearchOverlay(this.viewContext);
       this.overview.syncOverviewSelection((selectionChanged || options?.reveal === true) && options?.reveal !== false);
+      this.activeZoom?.schedule();
       if (options?.focus) this.overview.getElements().viewport?.focus({ preventScroll: true });
       return;
     }
@@ -1675,6 +1882,9 @@ export class ArborView extends FileView {
     }
 
     this.ensureShell();
+    if (this.overviewFocusRootId && (!getBlock(this.state.metadata, this.overviewFocusRootId)
+      || !getBlock(projectOverviewSubtree(this.state.metadata, this.overviewFocusRootId), this.state.selectedBlockId))) this.overviewFocusRootId = null;
+    this.syncFocusControls();
     this.syncOutputProfileButton();
     this.syncOverviewModeButton();
     this.syncTouchDock();
@@ -1701,11 +1911,17 @@ export class ArborView extends FileView {
     if (this.presentationMode === "overview") {
       this.preview.hide();
       await this.overview.syncTreeOverview();
+      if (isCurrent()) this.activeZoom.schedule();
       return;
     }
 
     this.overview.hide();
-    const allColumns = buildColumnModels(this.state.metadata, this.state.selectedBlockId, this.plugin.settings.previewSnippetLength);
+    const allColumns = buildColumnModels(this.getNavigationState()!.metadata, this.state.selectedBlockId, this.plugin.settings.previewSnippetLength);
+    // The visual root is not a document root: drag/drop must retain real parents.
+    if (this.overviewFocusRootId && allColumns[0]) {
+      allColumns[0].parentId = getBlock(this.state.metadata, this.overviewFocusRootId)?.parentId ?? null;
+      allColumns[0].indexOffset = Math.max(0, getChildren(this.state.metadata, allColumns[0].parentId).findIndex(block => block.id === this.overviewFocusRootId));
+    }
     const columns = this.compactLayout ? compactColumns(allColumns, this.state.selectedBlockId) : allColumns;
     const preservedSceneWidth = this.armSceneWidthForPendingScroll(columns.length);
     await this.branchRenderer.syncColumns(columns, this.viewContext);
@@ -1715,6 +1931,7 @@ export class ArborView extends FileView {
     if (!isCurrent()) return;
     this.applyPendingFocusAndScroll(preservedSceneWidth);
     this.syncHoverLinkedState();
+    this.activeZoom.schedule();
   }
 
   private ensureShell(): void {
@@ -1842,7 +2059,7 @@ export class ArborView extends FileView {
     const dragOver = (event: DragEvent) => this.dragDropController.handleViewportDragOver(event);
     const wheel = (event: WheelEvent) => routeBranchViewportWheel(
       event, viewport, this.branchRenderer,
-      { getState: () => this.state, getSettings: () => this.plugin.settings, getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
+      { getState: () => this.getNavigationState(), getSettings: () => this.getViewSettings(), getMode: () => this.presentationMode, getFilePath: () => this.file?.path ?? "" },
       { previous: () => this.selectPreviousSiblingBlock(), next: () => this.selectNextSiblingBlock(), selectBlock: (id, options) => this.selectBlock(id, options), updateZoomLevel: (value) => this.zoomController.updateZoomLevel(value) },
       this.compactLayout
     );
@@ -1930,6 +2147,7 @@ export class ArborView extends FileView {
   }
 
   private resetViewFromZoomIndicator(): void {
+    if (this.activeZoom.isEnabled()) { this.stopActiveZoom(); return; }
     this.zoomController.clearOverviewZoomFrame();
     this.zoomController.updateZoomLevel(1);
     if (this.presentationMode !== "overview") {
@@ -1939,10 +2157,12 @@ export class ArborView extends FileView {
   }
 
   private centerOverviewOnSelectedBlock(): void {
+    if (this.activeZoom.isEnabled()) { this.activeZoom.schedule(); return; }
     this.overviewViewport.centerOverviewOnSelectedBlock();
   }
 
   private revealOverviewSelectedCard(selectedCard: HTMLElement): void {
+    if (this.activeZoom.isEnabled()) { this.activeZoom.schedule(); return; }
     this.overviewViewport.revealOverviewSelectedCard(selectedCard);
   }
 
@@ -2107,7 +2327,10 @@ export class ArborView extends FileView {
     this.pendingFocusBlockId = session.blockId;
     this.syncTouchDock();
     const block = getBlock(this.state.metadata, session.blockId);
-    if (session.origin === "overview" && block && this.overview.openOverviewEditorInPlace(block)) return;
+    if (session.origin === "overview" && block && this.overview.openOverviewEditorInPlace(block)) {
+      this.activeZoom.schedule();
+      return;
+    }
     if (session.origin === "overview") this.preserveOverviewViewportPosition();
     this.render();
   }
@@ -2181,17 +2404,41 @@ export class ArborView extends FileView {
     if (!drafts.length) return;
     const generation = this.loadGeneration;
     const modal = new Modal(this.app);
-    modal.contentEl.createEl("h3", { text: "Recover unsaved drafts" });
-    modal.contentEl.createEl("p", { text: "Restore opens a draft for review; it does not save or overwrite the note. Each draft is a separate editing session." });
-    for (const draft of drafts) {
-      const row = modal.contentEl.createDiv();
-      row.createEl("h4", { text: `Block ${draft.blockId} · draft ${draft.draftId}` });
+    modal.modalEl.addClass("arbor-recovery-modal");
+    modal.contentEl.createEl("h3", { text: "Unsaved drafts" });
+    const list = modal.contentEl.createDiv({ cls: "arbor-recovery-list" });
+    let firstAction: HTMLButtonElement | null = null;
+    for (const [index, draft] of drafts.entries()) {
+      const row = list.createDiv({ cls: "arbor-recovery-row" });
       const block = getBlock(this.state.metadata, draft.blockId);
-      const current = row.createEl("textarea", { attr: { readonly: "", "aria-label": "Current block content" } });
+      if (drafts.length > 1) row.createSpan({ cls: "arbor-recovery-number", text: `Draft ${index + 1}` });
+      if (!block) row.createEl("p", { cls: "arbor-recovery-summary", text: "This block was removed. You can still copy its draft." });
+      const comparison = row.createDiv({ cls: "arbor-recovery-comparison" });
+      const savedPane = comparison.createDiv({ cls: "arbor-recovery-pane" });
+      const currentId = `arbor-recovery-saved-${draft.draftId}`;
+      savedPane.createEl("label", { text: "Saved version", attr: { for: currentId } });
+      const current = savedPane.createEl("textarea", { attr: { id: currentId, readonly: "", "aria-label": "Current block content" } });
       current.value = block?.content ?? "This block no longer exists. Copy the draft to keep its text.";
-      const recovered = row.createEl("textarea", { attr: { readonly: "", "aria-label": "Recovered draft" } });
+      const draftPane = comparison.createDiv({ cls: "arbor-recovery-pane" });
+      const recoveredId = `arbor-recovery-draft-${draft.draftId}`;
+      draftPane.createEl("label", { text: "Draft", attr: { for: recoveredId } });
+      const recovered = draftPane.createEl("textarea", { attr: { id: recoveredId, readonly: "", "aria-label": "Recovered draft" } });
       recovered.value = draft.value;
-      new ButtonComponent(row).setButtonText("Restore").setDisabled(!block).onClick(() => {
+      const actions = row.createDiv({ cls: "arbor-recovery-actions" });
+      const secondary = actions.createDiv({ cls: "arbor-recovery-action-group" });
+      const primary = actions.createDiv({ cls: "arbor-recovery-action-group" });
+      new ButtonComponent(secondary).setButtonText("Later").onClick(() => modal.close());
+      const discard = new ButtonComponent(secondary).setButtonText("Discard").onClick(() => {
+        store.remove(draft.draftId);
+        row.remove();
+        if (!store.getForFile(file.path).length) modal.close();
+      });
+      discard.buttonEl.addClass("arbor-recovery-discard");
+      const copy = new ButtonComponent(primary).setButtonText("Copy").onClick(async () => {
+        try { await this.contentEl.win.navigator.clipboard.writeText(draft.value); }
+        catch (error) { this.reportActionError(error); }
+      });
+      const restore = new ButtonComponent(primary).setButtonText("Restore").setCta().setDisabled(!block).onClick(() => {
         if (this.file !== file || this.loadGeneration !== generation) {
           new Notice("The note changed. Reopen recovery to review the current content.");
           return;
@@ -2199,21 +2446,14 @@ export class ArborView extends FileView {
         if (this.editor.restoreDraft(draft.draftId, draft.blockId, this.presentationMode === "overview" ? "overview" : "card")) modal.close();
         else new Notice("Finish or cancel the current draft before restoring another.");
       });
-      new ButtonComponent(row).setButtonText("Copy").onClick(async () => {
-        try { await this.contentEl.win.navigator.clipboard.writeText(draft.value); }
-        catch (error) { this.reportActionError(error); }
-      });
-      new ButtonComponent(row).setButtonText("Discard").onClick(() => {
-        store.remove(draft.draftId);
-        row.remove();
-        if (!store.getForFile(file.path).length) modal.close();
-      });
+      firstAction ??= block ? restore.buttonEl : copy.buttonEl;
     }
-    new ButtonComponent(modal.contentEl).setButtonText("Later").onClick(() => modal.close());
     modal.open();
+    firstAction?.focus({ preventScroll: true });
   }
 
   private resetViewState(): void {
+    this.resetViewingFocus();
     this.work.reset();
     this.navigationController.clearNumericNavigation();
     this.clearBlurCommitTimer();

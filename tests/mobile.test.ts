@@ -1,13 +1,31 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { compactColumns, pinchViewport, resolvePinchZoom, shouldSaveOnEnter, useCompactLayout } from "../src/mobile";
+import { clampZoomLevel, normalizeZoomBounds, compactColumns, pinchViewport, resolvePinchZoom, shouldSaveOnEnter, useCompactLayout } from "../src/mobile";
 import { buildColumnModels, getPreferredChildBlock } from "../src/model/tree";
 import { resolveOverviewArrowTarget } from "../src/overviewNavigation";
 import { fixtureTree } from "./helpers/arborFixtures";
 import type { BranchTreeMetadata } from "../src/types";
 
 describe("mobile interaction policy", () => {
+  it("normalizes corrupt and inverted bounds inside the absolute range", () => {
+    expect(normalizeZoomBounds()).toEqual({ min: 0.25, max: 5 });
+    expect(normalizeZoomBounds(NaN, Infinity)).toEqual({ min: 0.25, max: 5 });
+    expect(normalizeZoomBounds(-2, 20)).toEqual({ min: 0.25, max: 5 });
+    expect(normalizeZoomBounds(3, 1)).toEqual({ min: 1, max: 3 });
+  });
+  it("clamps finite zoom and safely falls back for nonfinite zoom", () => {
+    expect(clampZoomLevel(10)).toBe(5);
+    expect(clampZoomLevel(0.1)).toBe(0.25);
+    expect(clampZoomLevel(10, { min: 0.5, max: 2 })).toBe(2);
+    expect(clampZoomLevel(NaN, { min: 2, max: 3 })).toBe(2);
+    expect(clampZoomLevel(Infinity)).toBe(1);
+  });
+  it("anchors to the configured final pinch scale", () => {
+    const start = { zoom: 1, left: 100, top: 200, midpoint: { x: 100, y: 100 }, distance: 100 };
+    expect(pinchViewport(start, { x: 120, y: 110 }, 400, { min: 0.5, max: 2 })).toEqual({ zoom: 2, left: 280, top: 490 });
+    expect(resolvePinchZoom(1, 100, 10, { min: 0.5, max: 2 })).toBe(0.5);
+  });
   it.each([
     ["vertical-top-down", "ArrowDown"],
     ["vertical-bottom-up", "ArrowUp"]
@@ -45,13 +63,13 @@ describe("mobile interaction policy", () => {
   it("anchors pinch zoom to the fingers, including movement and scale limits", () => {
     const start = { zoom: 1, left: 100, top: 200, midpoint: { x: 100, y: 100 }, distance: 100 };
     expect(pinchViewport(start, { x: 120, y: 110 }, 150)).toEqual({ zoom: 1.5, left: 180, top: 340 });
-    expect(pinchViewport(start, { x: 100, y: 100 }, 400).zoom).toBe(1.6);
+    expect(pinchViewport(start, { x: 100, y: 100 }, 600).zoom).toBe(5);
     expect(pinchViewport(start, { x: 100, y: 100 }, 10).zoom).toBe(0.25);
   });
 
   it("uses the same bounded pinch scale for the branch editor and Tree Overview", () => {
     expect(resolvePinchZoom(1, 100, 125)).toBe(1.25);
-    expect(resolvePinchZoom(1.4, 80, 160)).toBe(1.6);
+    expect(resolvePinchZoom(1.4, 80, 160)).toBe(2.8);
     expect(resolvePinchZoom(0.6, 100, 20)).toBe(0.25);
   });
 

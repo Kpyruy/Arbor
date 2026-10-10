@@ -73,7 +73,7 @@ export class DragDropController {
     this.updateDragState({
       draggedBlockId,
       targetParentId: column.parentId,
-      targetIndex: 0,
+      targetIndex: column.indexOffset ?? 0,
       columnKey: column.key
     });
   }
@@ -120,7 +120,7 @@ export class DragDropController {
     this.dragState = {
       draggedBlockId: blockId,
       targetParentId: column.parentId,
-      targetIndex: blockIndex,
+      targetIndex: blockIndex + (column.indexOffset ?? 0),
       columnKey
     };
     card.addClass("is-drag-source");
@@ -151,7 +151,7 @@ export class DragDropController {
     this.updateDragState({
       draggedBlockId,
       targetParentId: column.parentId,
-      targetIndex: before ? blockIndex : blockIndex + 1,
+      targetIndex: (before ? blockIndex : blockIndex + 1) + (column.indexOffset ?? 0),
       columnKey
     });
   }

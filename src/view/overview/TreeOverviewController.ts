@@ -5,11 +5,13 @@ import { extractSnippet } from "../../utils";
 import type { ArborOverviewOrientation, BranchBlock, BranchBlockId } from "../../types";
 import { applyOverviewLayout } from "./overviewDom";
 import { ViewWorkScope } from "../runtime/ViewWorkScope";
+import { projectOverviewSubtree } from "./overviewFocus";
 import { findRenderedCardLink } from "../navigation/CardLinkController";
 import { hasMeaningfulRenderedContent } from "../renderedContent";
 import type { BranchViewContext, EditingSession, EditorPort, MarkdownPort, OverviewEditorSelectionSnapshot, SelectionPort, ViewReadPort } from "../state/viewTypes";
 
 export interface TreeOverviewPort {
+  getFocusRootId?(): BranchBlockId | null;
   read: ViewReadPort;
   editor: EditorPort;
   markdown: MarkdownPort;
@@ -98,7 +100,8 @@ export class TreeOverviewController {
     const direction = settings.layoutDirection;
     const orientation = this.port.getOverviewOrientation();
 
-    const initialLayout = buildOverviewLayout(state.metadata, {
+    const focusRootId = this.port.getFocusRootId?.() ?? null;
+    const initialLayout = buildOverviewLayout(projectOverviewSubtree(state.metadata, focusRootId), {
       cardWidth: settings.cardWidth,
       direction,
       orientation
@@ -210,7 +213,7 @@ export class TreeOverviewController {
       surface.remove();
       return;
     }
-    const layout = buildOverviewLayout(currentState.metadata, {
+    const layout = buildOverviewLayout(projectOverviewSubtree(currentState.metadata, focusRootId), {
       cardWidth: currentSettings.cardWidth,
       cardHeights: measuredHeights,
       direction,
@@ -384,7 +387,7 @@ export class TreeOverviewController {
         : Number.parseFloat(card.style.getPropertyValue("--arbor-overview-card-height")) || card.offsetHeight);
     });
     changedCard.removeClass("is-measuring");
-    const layout = buildOverviewLayout(state.metadata, {
+    const layout = buildOverviewLayout(projectOverviewSubtree(state.metadata, this.port.getFocusRootId?.() ?? null), {
       cardWidth: settings.cardWidth, cardHeights: heights, direction: settings.layoutDirection, orientation
     });
     applyOverviewLayout(scene, surface, cards, layout, settings.zoomLevel, settings.layoutDirection, orientation);

@@ -42,6 +42,63 @@ function pointer(type: string, pointerId: number, x: number, y: number, target?:
 }
 
 describe("TouchController", () => {
+  it("owns branch reveal frames in the viewport window and rejects stale reused IDs", () => {
+    vi.stubGlobal("Element", class {});
+    const frames: FrameRequestCallback[] = [];
+    const owner = {
+      requestAnimationFrame: (callback: FrameRequestCallback) => { frames.push(callback); return 1; },
+      cancelAnimationFrame: vi.fn()
+    };
+    const globalOwner = { requestAnimationFrame: vi.fn(), cancelAnimationFrame: vi.fn() };
+    vi.stubGlobal("window", globalOwner);
+    const viewport = new GestureViewport();
+    Object.defineProperty(viewport, "ownerDocument", { value: { defaultView: owner } });
+    let reveals = 0;
+    const controller = new TouchController({
+      getZoom: () => 1, scheduleZoom: () => {}, hasEditingSession: () => false,
+      usesTouchControls: () => true, getOverviewSceneOffset: () => ({ left: 0, top: 0 }),
+      revealCompactSelection: () => { reveals++; }
+    });
+    const gesture = () => {
+      viewport.dispatchEvent(pointer("pointerdown", 1, 20, 20));
+      viewport.dispatchEvent(pointer("pointerdown", 2, 120, 20));
+      viewport.dispatchEvent(pointer("pointermove", 2, 170, 20));
+      viewport.dispatchEvent(pointer("pointerup", 2, 170, 20));
+    };
+    const dispose = controller.bindBranchTouch(viewport as unknown as HTMLElement);
+    gesture();
+    dispose();
+    expect(owner.cancelAnimationFrame).toHaveBeenCalledWith(1);
+    const disposeAgain = controller.bindBranchTouch(viewport as unknown as HTMLElement);
+    gesture();
+    frames[0](0);
+    expect(reveals).toBe(0);
+    frames[1](0);
+    expect(reveals).toBe(1);
+    expect(globalOwner.requestAnimationFrame).not.toHaveBeenCalled();
+    disposeAgain();
+  });
+  it.each(["branch", "overview"] as const)("honors configured %s pinch bounds and overview anchor geometry", (mode) => {
+    vi.stubGlobal("Element", class {});
+    const viewport = new GestureViewport();
+    let zoom = 1;
+    const controller = new TouchController({
+      getZoom: () => zoom, getZoomBounds: () => ({ min: 0.5, max: 2 }),
+      scheduleZoom: (value) => { zoom = value; }, hasEditingSession: () => false,
+      usesTouchControls: () => true, getOverviewSceneOffset: () => ({ left: 0, top: 0 }),
+      revealCompactSelection: vi.fn()
+    });
+    const dispose = mode === "branch" ? controller.bindBranchTouch(viewport as unknown as HTMLElement) : controller.bindOverviewTouch(viewport as unknown as HTMLElement);
+    viewport.dispatchEvent(pointer("pointerdown", 1, 20, 20));
+    viewport.dispatchEvent(pointer("pointerdown", 2, 120, 20));
+    viewport.dispatchEvent(pointer("pointermove", 2, 420, 20));
+    expect(zoom).toBe(2);
+    if (mode === "overview") {
+      expect(viewport.scrollLeft).toBe(110);
+      expect(viewport.scrollTop).toBe(400);
+    }
+    dispose();
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();

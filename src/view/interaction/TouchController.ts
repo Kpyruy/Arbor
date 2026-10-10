@@ -1,7 +1,8 @@
-import { pinchViewport, resolvePinchZoom, type TouchPoint } from "../../mobile";
+import { pinchViewport, resolvePinchZoom, type TouchPoint, type ZoomBounds } from "../../mobile";
 
 export interface TouchPort {
   getZoom(): number;
+  getZoomBounds?(): ZoomBounds;
   scheduleZoom(value: number): void;
   hasEditingSession(): boolean;
   usesTouchControls(): boolean;
@@ -32,7 +33,7 @@ export class TouchController {
   private readonly branchTouchPoints = new Map<number, TouchPoint>();
   private branchTouchStart: { zoom: number; distance: number } | null = null;
   private branchTouchPinching = false;
-  private branchRevealFrame: number | null = null;
+  private branchRevealFrame: { owner: Window; id: number } | null = null;
   private readonly disposers: (() => void)[] = [];
   private readonly boundViewports = new Set<HTMLElement>();
 
@@ -76,7 +77,7 @@ export class TouchController {
       event.preventDefault();
       const offset = this.port.getOverviewSceneOffset();
       if (this.touchPoints.size > 1) {
-        const next = pinchViewport(this.touchStart, midpoint, distance);
+        const next = pinchViewport(this.touchStart, midpoint, distance, this.port.getZoomBounds?.());
         this.port.scheduleZoom(next.zoom);
         viewport.scrollLeft = next.left + offset.left;
         viewport.scrollTop = next.top + offset.top;
@@ -120,7 +121,7 @@ export class TouchController {
         return;
       }
       this.branchTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      const nextZoom = resolvePinchZoom(this.branchTouchStart.zoom, this.branchTouchStart.distance, distance());
+      const nextZoom = resolvePinchZoom(this.branchTouchStart.zoom, this.branchTouchStart.distance, distance(), this.port.getZoomBounds?.());
       this.suppressTouchClickUntil = Date.now() + 500;
       this.branchTouchPinching = true;
       viewport.setPointerCapture(event.pointerId);
@@ -140,15 +141,15 @@ export class TouchController {
         if (this.branchTouchPinching) {
           this.branchTouchPinching = false;
           this.clearBranchRevealFrame();
-          let frame: number | null = null;
-          frame = window.requestAnimationFrame(() => {
-            if (this.branchRevealFrame !== frame) {
+          const request = { owner: viewport.ownerDocument?.defaultView ?? window, id: 0 };
+          this.branchRevealFrame = request;
+          request.id = request.owner.requestAnimationFrame(() => {
+            if (this.branchRevealFrame !== request) {
               return;
             }
             this.branchRevealFrame = null;
             this.port.revealCompactSelection();
           });
-          this.branchRevealFrame = frame;
         }
       }
       rebase();
@@ -292,7 +293,7 @@ export class TouchController {
 
   private clearBranchRevealFrame(): void {
     if (this.branchRevealFrame !== null) {
-      window.cancelAnimationFrame(this.branchRevealFrame);
+      this.branchRevealFrame.owner.cancelAnimationFrame(this.branchRevealFrame.id);
       this.branchRevealFrame = null;
     }
   }
