@@ -83,6 +83,73 @@ describe("external content dropped into a new block", () => {
     expect(options.isConnected).toBe(false);
   });
 
+  it.each(["editor", "overview"] as const)("keeps targets during a null-relatedTarget transition inside %s", async mode => {
+    const test = await ingestionHarness(mode);
+    vi.spyOn(test.root, "getBoundingClientRect").mockReturnValue(new test.win.DOMRect(0, 0, 800, 600));
+    const options = await showOptions(test);
+    test.card().dispatchEvent(new test.win.MouseEvent("dragleave", {
+      bubbles: true, relatedTarget: null, clientX: 350, clientY: 250
+    }));
+    expect(options.isConnected, "an internal native drag transition must not remove new-block targets").toBe(true);
+    test.root.dispatchEvent(new test.win.MouseEvent("dragleave", {
+      bubbles: true, relatedTarget: null, clientX: 850, clientY: 250
+    }));
+    expect(options.isConnected, "a real exit must still clear feedback").toBe(false);
+    expect(test.writes).toEqual([]);
+  });
+
+  it.each(["editor", "overview"] as const)("keeps the external drag accepted across the viewport gap in %s", async mode => {
+    const test = await ingestionHarness(mode);
+    const options = await showOptions(test);
+    const viewport = test.root.querySelector(mode === "overview" ? ".arbor-overview-viewport" : ".arbor-columns-viewport")!;
+    const over = test.event("dragover");
+    viewport.dispatchEvent(over);
+    expect(over.defaultPrevented, "the corridor must keep the platform's drag session eligible").toBe(true);
+    expect(options.isConnected).toBe(true);
+    const backgroundDrop = test.event("drop");
+    viewport.dispatchEvent(backgroundDrop);
+    await test.settle();
+    expect(test.writes, "a background drop must not guess an insertion destination").toEqual([]);
+    expect(backgroundDrop.defaultPrevented, "an accepted drag corridor must not navigate/open the dropped URL by default").toBe(true);
+  });
+
+  it.each(["editor", "overview"] as const)("does not mistake an external preview overlay for leaving %s at an inside coordinate", async mode => {
+    const test = await ingestionHarness(mode);
+    vi.spyOn(test.root, "getBoundingClientRect").mockReturnValue(new test.win.DOMRect(0, 0, 800, 600));
+    const options = await showOptions(test);
+    test.card().dispatchEvent(new test.win.MouseEvent("dragleave", {
+      bubbles: true, relatedTarget: test.win.document.body, clientX: 350, clientY: 250
+    }));
+    expect(options.isConnected, "native preview outside the root DOM is not a physical viewport exit").toBe(true);
+    test.root.dispatchEvent(new test.win.MouseEvent("dragleave", {
+      bubbles: true, relatedTarget: test.win.document.body, clientX: 850, clientY: 250
+    }));
+    expect(options.isConnected).toBe(false);
+  });
+
+  it.each(["editor", "overview"] as const)("routes a coordinate-hit child drop when native %s events retain the viewport target", async mode => {
+    const test = await ingestionHarness(mode);
+    const options = await showOptions(test);
+    const child = options.querySelector<HTMLElement>("[data-new-block-kind='child']")!;
+    vi.spyOn(child, "getBoundingClientRect").mockReturnValue(new test.win.DOMRect(508, 154, 232, 46));
+    const viewport = test.root.querySelector(mode === "overview" ? ".arbor-overview-viewport" : ".arbor-columns-viewport")!;
+    const atChild = (type: string) => {
+      const event = test.event(type);
+      Object.defineProperties(event, { clientX: { value: 620 }, clientY: { value: 178 } });
+      return event;
+    };
+    viewport.dispatchEvent(atChild("dragover"));
+    expect(child.classList.contains("is-content-drop-target")).toBe(true);
+    viewport.dispatchEvent(atChild("drop"));
+    await test.settle();
+    const blocks = test.view.documentController.getState()!.metadata.blocks;
+    expect(blocks).toHaveLength(5);
+    expect(blocks.find(block => block.content === "quote")?.parentId).toBe("first");
+    expect(test.content()).toBe("First");
+    expect(test.writes).toHaveLength(1);
+    expect(options.isConnected).toBe(false);
+  });
+
   it("leaves textarea selection movement native after dragging out of the view and back", async () => {
     const test = await ingestionHarness();
     test.view.editor.beginEditingBlock("first");

@@ -52,7 +52,9 @@ export class ContentIngestionRouting {
     const end = () => this.clearGesture();
     const leave = (event: DragEvent) => {
       const related = elementFromTarget(event.relatedTarget);
-      if (!related || !root.contains(related)) this.clearOptions();
+      // Native tablet drags may omit relatedTarget between descendants.
+      // A missing target alone is not evidence that the gesture left the view.
+      if ((!related || !root.contains(related)) && !this.containsPoint(root, event)) this.clearOptions();
     };
     const outsideDrop = (event: DragEvent) => { if (!root.contains(elementFromTarget(event.target))) this.clearGesture(); };
     const reposition = () => this.positionOptions();
@@ -136,32 +138,48 @@ export class ContentIngestionRouting {
       || this.port.getMode() === "output" || !this.supports(transfer, this.port.getNativeDraggable(), true)) {
       this.clearOptions(); return;
     }
-    const zone = this.zoneAt(event.target);
+    const zone = this.zoneAt(event.target, event);
     const card = this.cardAt(event.target);
     if (!card && !zone) {
       this.highlight(null);
-      if (!this.options?.contains(elementFromTarget(event.target))
-        && !elementFromTarget(event.target)?.closest(".arbor-columns-viewport, .arbor-overview-viewport")) this.clearOptions();
+      const target = elementFromTarget(event.target);
+      if (this.options && this.anchor?.isConnected && (this.options.contains(target)
+        || target?.closest(".arbor-columns-viewport, .arbor-overview-viewport"))) {
+        // Keep the native drag alive through the gap without inventing an
+        // insertion target for a background drop.
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        transfer.dropEffect = "copy";
+      } else this.clearOptions();
       return;
     }
     event.preventDefault();
     event.stopImmediatePropagation();
     transfer.dropEffect = "copy";
-    if (card) this.showOptions(card);
+    if (card && !zone) this.showOptions(card);
     this.highlight(zone ?? card);
   }
 
   private drop(event: DragEvent): void {
     const transfer = event.dataTransfer;
-    const zone = this.zoneAt(event.target);
+    const zone = this.zoneAt(event.target, event);
     const card = zone ? this.anchor : this.cardAt(event.target);
     const newBlock = zone?.dataset.newBlockKind as IngestionTarget["newBlock"];
     const native = this.port.getNativeDraggable();
-    const eligible = transfer && !this.port.isOwnDrag(event) && !this.isSelectionDrag()
-      && this.port.getMode() !== "output" && card?.isConnected && this.supports(transfer, native)
+    const supported = transfer && !this.port.isOwnDrag(event) && !this.isSelectionDrag()
+      && this.port.getMode() !== "output" && this.supports(transfer, native);
+    const element = elementFromTarget(event.target);
+    const corridorDrop = this.options && !card && (this.options.contains(element)
+      || element?.closest(".arbor-columns-viewport, .arbor-overview-viewport"));
+    const eligible = supported && card?.isConnected
       && !(this.hasFiles(transfer) && !newBlock && this.editorAt(event.target));
     this.clearGesture();
-    if (!eligible || !card || !transfer) return;
+    if (!eligible || !card || !transfer) {
+      // We accepted hover in this corridor: cancel URL/file browser defaults,
+      // but never append to the last hovered card or create a guessed block.
+      if (supported && corridorDrop) { event.preventDefault(); event.stopImmediatePropagation(); }
+      return;
+    }
     this.receive(event, card.dataset.blockId!, transfer, native, newBlock);
   }
 
@@ -194,10 +212,23 @@ export class ContentIngestionRouting {
     this.anchor = null;
   }
 
-  private zoneAt(target: EventTarget | null): HTMLElement | null {
+  private containsPoint(element: HTMLElement, point: Pick<MouseEvent, "clientX" | "clientY">): boolean {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && Number.isFinite(point.clientX) && Number.isFinite(point.clientY)
+      && point.clientX >= rect.left && point.clientX < rect.right
+      && point.clientY >= rect.top && point.clientY < rect.bottom;
+  }
+
+  private zoneAt(target: EventTarget | null, point?: Pick<MouseEvent, "clientX" | "clientY">): HTMLElement | null {
+    if (!this.options?.isConnected || !this.anchor?.isConnected) return null;
     const zone = elementFromTarget(target)?.closest<HTMLElement>("[data-new-block-kind]");
-    return zone && this.options?.contains(zone) && this.anchor?.isConnected
-      && (zone.dataset.newBlockKind === "child" || zone.dataset.newBlockKind === "sibling") ? zone : null;
+    if (zone && this.options.contains(zone)
+      && (zone.dataset.newBlockKind === "child" || zone.dataset.newBlockKind === "sibling")) return zone;
+    // iPad native drags can retain the viewport/card as the event target even
+    // when the drag point is over a newly mounted sibling/child zone.
+    if (!point) return null;
+    return Array.from(this.options.querySelectorAll<HTMLElement>("[data-new-block-kind]"))
+      .find(candidate => this.containsPoint(candidate, point)) ?? null;
   }
 
   private showOptions(card: HTMLElement): void {
