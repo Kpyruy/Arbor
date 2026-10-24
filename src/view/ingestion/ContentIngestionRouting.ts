@@ -6,6 +6,8 @@ import type { ContentIngestionController } from "./ContentIngestionController";
 import type { IngestionTarget, NativeDragReader, TransferSnapshot } from "./ingestionTypes";
 import { ARBOR_CARD_DRAG_MIME } from "../branch/DragDropController";
 import { isImageAttachment } from "../editor/EditorAttachments";
+import { intersectVisibleRects } from "../chrome/mobileViewportGeometry";
+import { fitDropOptions } from "./dropOptionsGeometry";
 
 export interface ContentIngestionRoutingPort {
   getRoot(): HTMLElement;
@@ -65,9 +67,10 @@ export class ContentIngestionRouting {
     root.addEventListener("dragend", end, true);
     root.addEventListener("dragleave", leave, true);
     root.addEventListener("scroll", reposition, true);
+    root.addEventListener("arbor:viewport-resize", reposition);
     root.ownerDocument.addEventListener("drop", outsideDrop);
     root.ownerDocument.addEventListener("dragend", end);
-    root.win.addEventListener("resize", end);
+    root.win.addEventListener("resize", reposition);
     root.win.addEventListener("blur", end);
     this.dispose = () => {
       root.removeEventListener("dragover", over, true);
@@ -77,9 +80,10 @@ export class ContentIngestionRouting {
       root.removeEventListener("dragend", end, true);
       root.removeEventListener("dragleave", leave, true);
       root.removeEventListener("scroll", reposition, true);
+      root.removeEventListener("arbor:viewport-resize", reposition);
       root.ownerDocument.removeEventListener("drop", outsideDrop);
       root.ownerDocument.removeEventListener("dragend", end);
-      root.win.removeEventListener("resize", end);
+      root.win.removeEventListener("resize", reposition);
       root.win.removeEventListener("blur", end);
     };
   }
@@ -220,7 +224,7 @@ export class ContentIngestionRouting {
   }
 
   private zoneAt(target: EventTarget | null, point?: Pick<MouseEvent, "clientX" | "clientY">): HTMLElement | null {
-    if (!this.options?.isConnected || !this.anchor?.isConnected) return null;
+    if (!this.options?.isConnected || this.options.hidden || !this.anchor?.isConnected) return null;
     const zone = elementFromTarget(target)?.closest<HTMLElement>("[data-new-block-kind]");
     if (zone && this.options.contains(zone)
       && (zone.dataset.newBlockKind === "child" || zone.dataset.newBlockKind === "sibling")) return zone;
@@ -265,16 +269,29 @@ export class ContentIngestionRouting {
     const root = this.port.getRoot();
     const viewport = this.anchor.closest<HTMLElement>(".arbor-columns-viewport, .arbor-overview-viewport");
     if (!viewport) { this.clearOptions(); return; }
-    const bounds = viewport.getBoundingClientRect();
+    const pane = viewport.getBoundingClientRect();
     const card = this.anchor.getBoundingClientRect();
     const origin = root.getBoundingClientRect();
-    const width = Math.min(232, Math.max(0, bounds.width - 16));
-    const height = this.options.offsetHeight || 112;
     const inset = 8;
-    const minX = Math.max(bounds.left, origin.left) + inset;
-    const maxX = Math.max(minX, Math.min(bounds.right, origin.right) - width - inset);
-    const minY = Math.max(bounds.top, origin.top) + inset;
-    const maxY = Math.max(minY, Math.min(bounds.bottom, origin.bottom) - height - inset);
+    const visible = intersectVisibleRects([pane, origin]);
+    if (!visible) { this.options.hidden = true; return; }
+    const dock = root.querySelector<HTMLElement>(".arbor-touch-dock")?.getBoundingClientRect();
+    if (dock && dock.width > 0 && dock.top > visible.top && dock.top < visible.bottom) visible.bottom = dock.top;
+    const bounds = { left: visible.left + inset, right: visible.right - inset, top: visible.top + inset, bottom: visible.bottom - inset };
+    const width = Math.min(232, Math.max(0, bounds.right - bounds.left));
+    this.options.hidden = false;
+    this.options.dataset.layout = "stack";
+    this.options.setCssProps({ "--arbor-drop-options-width": `${width}px` });
+    const stackSize = { width, height: this.options.offsetHeight || 112 };
+    this.options.dataset.layout = "row";
+    const rowWidth = Math.min(464, Math.max(0, bounds.right - bounds.left));
+    this.options.setCssProps({ "--arbor-drop-options-width": `${rowWidth}px` });
+    const rowSize = { width: rowWidth, height: this.options.offsetHeight || 64 };
+    const height = stackSize.height;
+    const minX = bounds.left;
+    const maxX = bounds.right - width;
+    const minY = bounds.top;
+    const maxY = bounds.bottom - height;
     const horizontal = this.port.getOrientation() === "horizontal";
     let x = horizontal && this.port.getDirection() === "rtl" ? card.left - width - inset : horizontal ? card.right + inset : card.left;
     let y = horizontal ? card.top : this.port.getOrientation() === "vertical-bottom-up" ? card.top - height - inset : card.bottom + inset;
@@ -289,10 +306,14 @@ export class ContentIngestionRouting {
       if (below >= minY && below <= maxY) y = below;
       else if (above >= minY && above <= maxY) y = above;
     }
+    const fitted = fitDropOptions({ bounds, preferred: { x, y }, stackSize, rowSize });
+    this.options.hidden = !fitted;
+    if (!fitted) { this.highlight(null); return; }
+    this.options.dataset.layout = fitted.layout;
     this.options.setCssProps({
-      "--arbor-drop-options-x": `${Math.min(maxX, Math.max(minX, x)) - origin.left + root.scrollLeft - root.clientLeft}px`,
-      "--arbor-drop-options-y": `${Math.min(maxY, Math.max(minY, y)) - origin.top + root.scrollTop - root.clientTop}px`,
-      "--arbor-drop-options-width": `${width}px`
+      "--arbor-drop-options-x": `${fitted.x - origin.left + root.scrollLeft - root.clientLeft}px`,
+      "--arbor-drop-options-y": `${fitted.y - origin.top + root.scrollTop - root.clientTop}px`,
+      "--arbor-drop-options-width": `${fitted.layout === "stack" ? width : rowWidth}px`
     });
   }
 

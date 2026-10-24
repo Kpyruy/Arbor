@@ -5,12 +5,13 @@ export interface ZoomPort {
   getZoom(): number;
   getZoomBounds?(): ZoomBounds;
   getWindow?(): Window;
+  canApplyTouchZoom?(): boolean;
   setZoom(value: number): void;
   saveSettings(): Promise<void>;
   applyZoom(): void;
   flashIndicator(): void;
   hideIndicator(): void;
-  afterZoom(): void;
+  afterZoom(source?: "manual" | "touch"): void;
 }
 
 interface OwnedRequest { owner: Window; id: number }
@@ -21,14 +22,23 @@ export class ZoomController {
   private overviewZoomFrame: OwnedRequest | null = null;
   private pendingOverviewZoom: number | null = null;
   private touchZoomFrame: OwnedRequest | null = null;
-  private pendingTouchZoom: number | null = null;
+  private pendingTouchZoom: { zoom: number; commitViewport?: () => void } | null = null;
 
   constructor(private readonly port: ZoomPort) {}
 
-  updateZoomLevel(nextZoomLevel: number): void {
+  updateZoomLevel(nextZoomLevel: number, options?: { source?: "manual" | "touch"; commitViewport?: () => void }): void {
+    const source = options?.source ?? "manual";
+    if (source === "manual") {
+      this.clearTouchZoomFrame();
+      this.clearOverviewZoomFrame();
+    }
     this.port.onManualZoom?.();
     const clamped = clampZoomLevel(Number(nextZoomLevel.toFixed(3)), this.port.getZoomBounds?.());
     if (Math.abs(clamped - this.port.getZoom()) < 0.001) {
+      if (options?.commitViewport) {
+        this.port.afterZoom(source);
+        options.commitViewport();
+      }
       return;
     }
 
@@ -36,11 +46,14 @@ export class ZoomController {
     this.port.applyZoom();
     this.scheduleZoomPersist();
     this.flashZoomIndicator();
-    this.port.afterZoom();
+    this.port.afterZoom(source);
+    options?.commitViewport?.();
   }
 
-  scheduleTouchZoom(nextZoom: number): void {
-    this.pendingTouchZoom = nextZoom;
+  scheduleTouchZoom(nextZoom: number, commitViewport?: () => void): void {
+    this.clearOverviewZoomFrame();
+    this.port.onManualZoom?.();
+    this.pendingTouchZoom = { zoom: nextZoom, commitViewport };
     if (this.touchZoomFrame !== null) {
       return;
     }
@@ -49,16 +62,20 @@ export class ZoomController {
     request.id = request.owner.requestAnimationFrame(() => {
       if (this.touchZoomFrame !== request) return;
       this.touchZoomFrame = null;
-      const zoom = this.pendingTouchZoom;
-      this.pendingTouchZoom = null;
-      if (zoom === null) {
-        return;
-      }
-      this.updateZoomLevel(zoom);
+      this.flushTouchZoom();
     });
   }
 
+  flushTouchZoom(): void {
+    const pending = this.pendingTouchZoom;
+    this.clearTouchZoomFrame();
+    if (pending && this.port.canApplyTouchZoom?.() !== false) {
+      this.updateZoomLevel(pending.zoom, { source: "touch", commitViewport: pending.commitViewport });
+    }
+  }
+
   queueOverviewWheel(deltaY: number): void {
+    this.clearTouchZoomFrame();
     const factor = deltaY < 0 ? 1.06 : 1 / 1.06;
     this.pendingOverviewZoom = (this.pendingOverviewZoom ?? this.port.getZoom()) * factor;
     if (this.overviewZoomFrame !== null) {

@@ -18,6 +18,23 @@ const cases = (["editor", "overview"] as const).flatMap(mode =>
   (["sibling", "child"] as const).map(kind => ({ mode, kind })));
 
 describe("external content dropped into a new block", () => {
+  it("fits two compact targets into a keyboard-compressed pane and keeps the drag during resize", async () => {
+    const test = await ingestionHarness();
+    const rect = (x: number, y: number, width: number, height: number) => new test.win.DOMRect(x, y, width, height);
+    vi.spyOn(test.root, "getBoundingClientRect").mockReturnValue(rect(0, 0, 800, 300));
+    const viewport = test.root.querySelector<HTMLElement>(".arbor-columns-viewport")!;
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue(rect(0, 80, 800, 80));
+    vi.spyOn(test.card(), "getBoundingClientRect").mockReturnValue(rect(100, 80, 300, 100));
+    const options = await showOptions(test);
+    expect(options.dataset.layout).toBe("row");
+    expect(Number.parseFloat(options.style.getPropertyValue("--arbor-drop-options-y")) + 64).toBeLessThanOrEqual(160);
+    test.win.dispatchEvent(new test.win.Event("resize"));
+    expect(options.isConnected).toBe(true);
+    options.querySelector<HTMLElement>("[data-new-block-kind='child']")!.dispatchEvent(test.event("drop"));
+    await test.settle();
+    expect(test.writes).toHaveLength(1);
+  });
+
   it.each(cases)("creates one populated $kind in $mode without changing existing content", async ({ mode, kind }) => {
     const test = await ingestionHarness(mode);
     const before = structuredClone(test.view.documentController.getState()!);
@@ -79,7 +96,7 @@ describe("external content dropped into a new block", () => {
     expect(options.isConnected, "dock padding/gap remains a reachable gesture corridor").toBe(true);
     test.root.querySelector(".arbor-columns-viewport")!.dispatchEvent(test.event("dragover"));
     expect(options.isConnected).toBe(true);
-    test.root.dispatchEvent(new test.win.MouseEvent("dragleave", { bubbles: true, relatedTarget: test.win.document.body }));
+    test.root.dispatchEvent(new test.win.MouseEvent("dragleave", { bubbles: true, clientX: -1, clientY: -1, relatedTarget: test.win.document.body }));
     expect(options.isConnected).toBe(false);
   });
 

@@ -42,7 +42,58 @@ function pointer(type: string, pointerId: number, x: number, y: number, target?:
 }
 
 describe("TouchController", () => {
-  it("owns branch reveal frames in the viewport window and rejects stale reused IDs", () => {
+  it.each(["branch", "overview"] as const)("abandons %s pinch when an editor takes ownership", mode => {
+    vi.stubGlobal("Element", class {});
+    const viewport = new GestureViewport();
+    let editing = false;
+    let zoom = 1;
+    const controller = new TouchController({
+      getZoom: () => zoom, scheduleZoom: value => { zoom = value; },
+      hasEditingSession: () => editing, usesTouchControls: () => true,
+      getOverviewSceneOffset: () => ({ left: 0, top: 0 }), revealCompactSelection() {}
+    });
+    const dispose = mode === "branch" ? controller.bindBranchTouch(viewport as unknown as HTMLElement) : controller.bindOverviewTouch(viewport as unknown as HTMLElement);
+    viewport.dispatchEvent(pointer("pointerdown", 1, 20, 20));
+    viewport.dispatchEvent(pointer("pointerdown", 2, 120, 20));
+    editing = true;
+    viewport.dispatchEvent(pointer("pointermove", 2, 170, 20));
+    expect(zoom).toBe(1);
+    expect(viewport.classes.has("is-touch-pinching")).toBe(false);
+    dispose();
+  });
+
+  it("continues branch pinch after native one-finger scrolling cancelled pointer tracking", () => {
+    vi.stubGlobal("Element", class {});
+    const viewport = new GestureViewport();
+    let zoom = 1;
+    const controller = new TouchController({
+      getZoom: () => zoom, scheduleZoom: (value, commit) => { zoom = value; commit?.(); },
+      hasEditingSession: () => false, usesTouchControls: () => true,
+      getOverviewSceneOffset: () => ({ left: 0, top: 0 }), revealCompactSelection() {}
+    });
+    const dispose = controller.bindBranchTouch(viewport as unknown as HTMLElement);
+    const touch = (type: string, points: { identifier: number; clientX: number; clientY: number }[]) => {
+      const event = new Event(type, { cancelable: true });
+      Object.defineProperty(event, "touches", { value: points });
+      viewport.dispatchEvent(event);
+      return event;
+    };
+    const a = { identifier: 1, clientX: 20, clientY: 20 };
+    const b = { identifier: 2, clientX: 120, clientY: 20 };
+    viewport.dispatchEvent(pointer("pointerdown", 1, 20, 20));
+    expect(touch("touchstart", [a]).defaultPrevented).toBe(false);
+    viewport.dispatchEvent(pointer("pointercancel", 1, 20, 20));
+    touch("touchstart", [a, b]);
+    touch("touchmove", [a, { ...b, clientX: 170 }]);
+    expect(zoom).toBe(1.5);
+    touch("touchend", [a]);
+    expect(touch("touchmove", [{ ...a, clientY: 40 }]).defaultPrevented).toBe(false);
+    dispose();
+    touch("touchmove", [a, { ...b, clientX: 220 }]);
+    expect(zoom).toBe(1.5);
+  });
+
+  it("does not recenter the selected card after releasing a pinch", () => {
     vi.stubGlobal("Element", class {});
     const frames: FrameRequestCallback[] = [];
     const owner = {
@@ -68,13 +119,10 @@ describe("TouchController", () => {
     const dispose = controller.bindBranchTouch(viewport as unknown as HTMLElement);
     gesture();
     dispose();
-    expect(owner.cancelAnimationFrame).toHaveBeenCalledWith(1);
     const disposeAgain = controller.bindBranchTouch(viewport as unknown as HTMLElement);
     gesture();
-    frames[0](0);
+    frames.forEach(callback => callback(0));
     expect(reveals).toBe(0);
-    frames[1](0);
-    expect(reveals).toBe(1);
     expect(globalOwner.requestAnimationFrame).not.toHaveBeenCalled();
     disposeAgain();
   });
@@ -84,7 +132,7 @@ describe("TouchController", () => {
     let zoom = 1;
     const controller = new TouchController({
       getZoom: () => zoom, getZoomBounds: () => ({ min: 0.5, max: 2 }),
-      scheduleZoom: (value) => { zoom = value; }, hasEditingSession: () => false,
+      scheduleZoom: (value, commit) => { zoom = value; commit?.(); }, hasEditingSession: () => false,
       usesTouchControls: () => true, getOverviewSceneOffset: () => ({ left: 0, top: 0 }),
       revealCompactSelection: vi.fn()
     });
@@ -115,9 +163,10 @@ describe("TouchController", () => {
       cancelAnimationFrame: vi.fn()
     });
     const viewport = new GestureViewport();
-    const scheduleZoom = vi.fn();
+    let zoom = 1;
+    const scheduleZoom = vi.fn((value: number, commit?: () => void) => { zoom = value; commit?.(); });
     const controller = new TouchController({
-      getZoom: () => 1,
+      getZoom: () => zoom,
       scheduleZoom,
       hasEditingSession: () => false,
       usesTouchControls: () => true,
@@ -135,7 +184,7 @@ describe("TouchController", () => {
     viewport.dispatchEvent(click);
 
     expect(scheduleZoom).toHaveBeenCalledTimes(1);
-    expect(scheduleZoom).toHaveBeenCalledWith(1.5);
+    expect(scheduleZoom).toHaveBeenCalledWith(1.5, expect.any(Function));
     expect(click.defaultPrevented).toBe(true);
     expect(viewport.captured).toEqual(new Set());
     expect(viewport.classes.has("is-touch-pinching")).toBe(false);
@@ -192,9 +241,10 @@ describe("TouchController", () => {
   it("zooms and pans the overview through a pinch followed by one-finger movement", () => {
     vi.stubGlobal("Element", class {});
     const viewport = new GestureViewport();
-    const scheduleZoom = vi.fn();
+    let zoom = 1;
+    const scheduleZoom = vi.fn((value: number, commit?: () => void) => { zoom = value; commit?.(); });
     const controller = new TouchController({
-      getZoom: () => 1,
+      getZoom: () => zoom,
       scheduleZoom,
       hasEditingSession: () => false,
       usesTouchControls: () => true,
@@ -209,7 +259,7 @@ describe("TouchController", () => {
     viewport.dispatchEvent(pointer("pointerup", 2, 170, 20));
     viewport.dispatchEvent(pointer("pointermove", 1, 40, 20));
 
-    expect(scheduleZoom).toHaveBeenCalledWith(1.5);
+    expect(scheduleZoom).toHaveBeenCalledWith(1.5, expect.any(Function));
     expect(viewport.scrollLeft).toBe(130);
     expect(viewport.scrollTop).toBe(290);
     dispose();
@@ -297,9 +347,8 @@ describe("TouchController", () => {
     viewport.dispatchEvent(pointer("pointermove", 2, 170, 20));
     viewport.dispatchEvent(pointer("pointercancel", 2, 170, 20));
     dispose();
-    frames[0](0);
+    frames.forEach(callback => callback(0));
 
-    expect(cancelAnimationFrame).toHaveBeenCalledWith(1);
     expect(revealCompactSelection).not.toHaveBeenCalled();
   });
 

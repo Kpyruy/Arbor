@@ -211,6 +211,11 @@ export async function ingestionHarness(mode: "editor" | "overview" = "editor", o
     else await view.overview.syncTreeOverview();
   };
   await render();
+  // happy-dom has no layout: give geometry-sensitive routing a real pane box.
+  root.getBoundingClientRect = () => new win.DOMRect(0, 0, 800, 600);
+  root.querySelectorAll<HTMLElement>(".arbor-columns-viewport, .arbor-overview-viewport").forEach(viewport => {
+    viewport.getBoundingClientRect = () => new win.DOMRect(0, 80, 800, 440);
+  });
   const card = (id = "first") => root.querySelector<HTMLElement>(`.${mode === "editor" ? "arbor-card" : "arbor-overview-card"}[data-block-id="${id}"]`)!;
   const transfer = (plain = "quote", type = "text/plain") => {
     const data = new Map([[type, plain]]);

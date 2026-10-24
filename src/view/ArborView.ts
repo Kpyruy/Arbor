@@ -517,6 +517,7 @@ export class ArborView extends FileView {
       tryHandleCardLink: (event, card) => this.cardLinks.handleActivation(event, card)
     }, () => this.getOverviewOrientation(), () => this.contentEl.win);
     this.branchViewport = new BranchViewportController({
+      usesTouchControls: () => this.usesTouchControls,
       isActiveZoom: () => this.activeZoom.isEnabled(),
       read: {
         getState: () => this.getNavigationState(),
@@ -537,6 +538,7 @@ export class ArborView extends FileView {
       getZoom: () => this.getViewSettings().zoomLevel
     });
     this.zoomController = new ZoomController({
+      canApplyTouchZoom: () => this.editor.getSession() === null,
       getWindow: () => this.contentEl.win,
       getZoom: () => this.getViewSettings().zoomLevel,
       getZoomBounds: () => this.getZoomBounds(),
@@ -548,7 +550,7 @@ export class ArborView extends FileView {
       },
       flashIndicator: () => this.flashZoomIndicator(),
       hideIndicator: () => this.hideZoomIndicator(),
-      afterZoom: () => this.afterZoom()
+      afterZoom: source => this.afterZoom(source)
     });
     this.activeZoom = new ActiveZoomController({
       prepareTarget: target => {
@@ -595,7 +597,15 @@ export class ArborView extends FileView {
     this.touchController = new TouchController({
       getZoom: () => this.getViewSettings().zoomLevel,
       getZoomBounds: () => this.getZoomBounds(),
-      scheduleZoom: (value) => this.zoomController.scheduleTouchZoom(value),
+      scheduleZoom: (value, commit) => this.zoomController.scheduleTouchZoom(value, commit),
+      flushZoom: () => this.zoomController.flushTouchZoom(),
+      cancelZoom: () => this.zoomController.clearTouchZoomFrame(),
+      beginBranchPinch: (viewport, midpoint) => {
+        this.activeZoom.disable();
+        this.branchViewport.beginBranchPinch(viewport, midpoint);
+      },
+      commitBranchPinch: (viewport, midpoint) => this.branchViewport.commitBranchPinch(viewport, midpoint),
+      endBranchPinch: () => this.branchViewport.endBranchPinch(),
       hasEditingSession: () => this.editor.getSession() !== null,
       usesTouchControls: () => this.usesTouchControls,
       getOverviewSceneOffset: () => ({
@@ -847,15 +857,6 @@ export class ArborView extends FileView {
         runAsyncAction(this.commitEditIfNeeded(), error => this.reportActionError(error));
       }
     });
-    const observer = new ResizeObserver(() => this.handleMobileResize());
-    observer.observe(this.contentEl);
-    this.register(() => observer.disconnect());
-    const visualViewport = doc.defaultView?.visualViewport;
-    if (visualViewport) {
-      const onResize = () => this.handleMobileResize();
-      visualViewport.addEventListener("resize", onResize);
-      this.register(() => visualViewport.removeEventListener("resize", onResize));
-    }
   }
 
   private get usesTouchControls(): boolean {
@@ -871,6 +872,7 @@ export class ArborView extends FileView {
   }
 
   private revealSelectionAfterShellResize(): void {
+    if (this.presentationMode === "editor") this.branchViewport.refreshTouchColumns();
     if (this.activeZoom.isEnabled()) { this.activeZoom.schedule(); return; }
     if (!this.usesTouchControls || !this.editingSession) return;
     if (this.presentationMode === "overview") {
@@ -2535,9 +2537,13 @@ export class ArborView extends FileView {
     await callback();
   }
 
-  private afterZoom(): void {
+  private afterZoom(source: "manual" | "touch" = "manual"): void {
     if (this.presentationMode === "overview") {
       this.syncOverviewZoom();
+      return;
+    }
+    if (source === "touch") {
+      this.syncViewportEdgeFades();
       return;
     }
     if (this.compactLayout) {

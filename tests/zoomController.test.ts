@@ -22,10 +22,10 @@ describe("ZoomController", () => {
       applyZoom: vi.fn(), flashIndicator: vi.fn(), hideIndicator: () => { hides++; }, afterZoom: vi.fn()
     });
     controller.queueOverviewWheel(-1);
-    controller.scheduleTouchZoom(1.5);
-    expect(frames).toHaveLength(2);
     frames[0](0);
     expect(zoom).toBe(1.06);
+    controller.scheduleTouchZoom(1.5);
+    expect(frames).toHaveLength(2);
     expect(timers).toHaveLength(2);
     owner = { ...firstOwner, cancelAnimationFrame: vi.fn(), clearTimeout: vi.fn() };
     controller.reset();

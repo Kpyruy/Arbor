@@ -2,9 +2,13 @@ import { getActivePath } from "../../model/tree";
 import { clampCardCenter, reserveSceneWidthForColumns } from "../../cardViewport";
 import type { BranchBlockId } from "../../types";
 import type { EditingSession, ViewReadPort } from "../state/viewTypes";
+import { anchorCompensation } from "../interaction/pinchAnchor";
+import type { TouchPoint } from "../../mobile";
+import { TouchColumnViewport } from "./TouchColumnViewport";
 
 export interface BranchViewportPort {
   isActiveZoom?(): boolean;
+  usesTouchControls?(): boolean;
   read: ViewReadPort;
   getElements(): { root: HTMLElement; stage: HTMLElement | null; viewport: HTMLElement | null; columns: HTMLElement | null; previewContent: HTMLElement | null };
   getSession(): EditingSession | null;
@@ -26,10 +30,50 @@ export class BranchViewportController {
   private horizontalTarget: { viewport: HTMLElement; left: number } | null = null;
   private alignments = new WeakMap<HTMLElement, { target: HTMLElement; natural: number }>();
   private panState: { pointerId: number; startClientX: number; startScrollLeft: number; dragging: boolean } | null = null;
+  private pinch: { viewport: HTMLElement; vertical: HTMLElement; card: HTMLElement; before: DOMRect; fraction: TouchPoint; midpoint: TouchPoint } | null = null;
+  private readonly touchColumns = new TouchColumnViewport();
 
   constructor(private readonly port: BranchViewportPort) {}
 
+  beginBranchPinch(viewport: HTMLElement, midpoint: TouchPoint): void {
+    this.stopHorizontalScrollMotion(false);
+    if (this.layoutFrame !== null) window.cancelAnimationFrame(this.layoutFrame);
+    if (this.focusFrame !== null) window.cancelAnimationFrame(this.focusFrame);
+    this.layoutFrame = this.focusFrame = null;
+    const bounds = viewport.getBoundingClientRect();
+    const hit = viewport.ownerDocument.elementFromPoint?.(bounds.left + midpoint.x, bounds.top + midpoint.y);
+    const card = hit?.closest<HTMLElement>(".arbor-card") ?? viewport.querySelector<HTMLElement>(".arbor-card.is-active");
+    if (!card || !viewport.contains(card)) { this.pinch = null; return; }
+    const vertical = this.port.usesTouchControls?.() && !this.port.isCompact()
+      ? card.closest<HTMLElement>(".arbor-card-list") ?? viewport : viewport;
+    this.touchColumns.pause(true);
+    const before = card.getBoundingClientRect();
+    this.pinch = { viewport, vertical, card, before, midpoint, fraction: {
+      x: Math.max(0, Math.min(1, (bounds.left + midpoint.x - before.left) / Math.max(1, before.width))),
+      y: Math.max(0, Math.min(1, (bounds.top + midpoint.y - before.top) / Math.max(1, before.height)))
+    } };
+  }
+
+  commitBranchPinch(viewport: HTMLElement, midpoint: TouchPoint): void {
+    const anchor = this.pinch;
+    if (!anchor || anchor.viewport !== viewport || !anchor.card.isConnected) return;
+    const after = anchor.card.getBoundingClientRect();
+    const delta = anchorCompensation(anchor.before, after, anchor.fraction, {
+      x: midpoint.x - anchor.midpoint.x, y: midpoint.y - anchor.midpoint.y
+    });
+    viewport.scrollLeft += delta.left;
+    anchor.vertical.scrollTop += delta.top;
+    anchor.before = anchor.card.getBoundingClientRect();
+    anchor.midpoint = midpoint;
+    this.syncViewportEdgeFades();
+  }
+
+  endBranchPinch(): void { this.pinch = null; this.touchColumns.pause(false); }
+
+  refreshTouchColumns(): void { this.touchColumns.refresh(); }
+
   revealCompactSelection(): void {
+    if (this.pinch) return;
     if (!this.port.isCompact()) return;
     const { viewport, columns } = this.port.getElements();
     const card = columns?.querySelector<HTMLElement>(".arbor-card.is-active");
@@ -41,6 +85,7 @@ export class BranchViewportController {
   }
 
   scheduleColumnAlignment(): void {
+    if (this.pinch) return;
     if (this.layoutFrame !== null) {
       window.cancelAnimationFrame(this.layoutFrame);
     }
@@ -155,6 +200,10 @@ export class BranchViewportController {
       this.revealCompactSelection();
       return;
     }
+    if (this.port.usesTouchControls?.()) {
+      const list = card.closest<HTMLElement>(".arbor-card-list");
+      if (list) this.touchColumns.align(list, card, snap, true);
+    }
     const { columns } = this.port.getElements();
     const viewportRect = viewport.getBoundingClientRect();
     const cardRect = card.getBoundingClientRect();
@@ -190,6 +239,7 @@ export class BranchViewportController {
   }
 
   alignColumnsToActivePath(): void {
+    if (this.pinch) return;
     const { viewport, columns } = this.port.getElements();
     if (this.port.isCompact() && !this.port.isActiveZoom?.()) {
       columns?.querySelectorAll<HTMLElement>(".arbor-card-list").forEach((list) => {
@@ -225,26 +275,31 @@ export class BranchViewportController {
         column.querySelector<HTMLElement>(".arbor-column-empty") ??
         fallback;
       if (!target) return;
-      const natural = this.getElementOffsetTopWithin(target, resolvedColumns) + target.offsetHeight / 2;
-      const preferred = depth === 0 ? rootAnchor : (centers.get(depth - 1) ?? natural);
-      const anchor = target.classList.contains("is-active")
-        ? clampCardCenter(preferred, target.offsetHeight, viewportRect.top - rootRect.top, resolvedViewport.clientHeight)
-        : preferred;
-      const shift = anchor - natural;
-      const previous = this.alignments.get(list);
-      const stableAncestor = previous?.target === target && !target.classList.contains("is-active")
-        && Math.abs(previous.natural - natural) > 0.25 && !list.classList.contains("is-rebinding");
-      if (stableAncestor) list.classList.add("is-alignment-stable");
-      list.setCssProps({ "--arbor-card-list-offset-y": Math.abs(shift) < 0.25 ? "0px" : `${shift}px` });
-      if (stableAncestor) {
-        list.getBoundingClientRect();
-        list.classList.remove("is-alignment-stable");
+      if (this.port.usesTouchControls?.() && !this.port.isCompact()) {
+        this.touchColumns.align(list, target, activeZoom);
+      } else {
+        const natural = this.getElementOffsetTopWithin(target, resolvedColumns) + target.offsetHeight / 2;
+        const preferred = depth === 0 ? rootAnchor : (centers.get(depth - 1) ?? natural);
+        const anchor = target.classList.contains("is-active")
+          ? clampCardCenter(preferred, target.offsetHeight, viewportRect.top - rootRect.top, resolvedViewport.clientHeight)
+          : preferred;
+        const shift = anchor - natural;
+        const previous = this.alignments.get(list);
+        const stableAncestor = previous?.target === target && !target.classList.contains("is-active")
+          && Math.abs(previous.natural - natural) > 0.25 && !list.classList.contains("is-rebinding");
+        if (stableAncestor) list.classList.add("is-alignment-stable");
+        list.setCssProps({ "--arbor-card-list-offset-y": Math.abs(shift) < 0.25 ? "0px" : `${shift}px` });
+        if (stableAncestor) {
+          list.getBoundingClientRect();
+          list.classList.remove("is-alignment-stable");
+        }
+        this.alignments.set(list, { target, natural });
+        centers.set(depth, natural + shift);
       }
-      this.alignments.set(list, { target, natural });
+      // Publishing a rebound column is shared by native and transform alignment.
       if (list.classList.contains("is-rebinding")) {
         window.requestAnimationFrame(() => list.classList.remove("is-rebinding"));
       }
-      centers.set(depth, natural + shift);
     });
   }
 
@@ -293,6 +348,8 @@ export class BranchViewportController {
   }
 
   reset(): void {
+    this.pinch = null;
+    this.touchColumns.reset();
     this.alignments = new WeakMap();
     if (this.focusFrame !== null) window.cancelAnimationFrame(this.focusFrame);
     if (this.layoutFrame !== null) window.cancelAnimationFrame(this.layoutFrame);

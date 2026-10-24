@@ -16,6 +16,8 @@ import type { EditingSession, LoadingOverlayState, ViewReadPort } from "../state
 import { useCompactLayout } from "../../mobile";
 import { ViewWorkScope } from "../runtime/ViewWorkScope";
 import { OutputProfileLabel } from "./OutputProfileLabel";
+import { MobileViewportController } from "./MobileViewportController";
+import { mobileViewportHeight } from "./mobileViewportGeometry";
 
 export interface ShellElements {
   readonly root: HTMLElement;
@@ -86,6 +88,8 @@ export class ViewShell {
   private disposeBranchViewport: (() => void) | null = null;
   private outputProfileLabel: OutputProfileLabel | null = null;
   private compactLayout = false;
+  private mobileViewport: MobileViewportController | null = null;
+  private mobileWidth = 0;
   private readonly work = new ViewWorkScope();
 
   constructor(private readonly contentEl: HTMLElement, private readonly port: ShellPort) {
@@ -119,6 +123,7 @@ export class ViewShell {
     this.outputProfileLabel = null;
     this.contentEl.empty();
     this.contentEl.addClass("arbor-view");
+    this.mobileViewport ??= new MobileViewportController(this.contentEl, () => this.handleMobileResize());
     this.applyViewClasses(this.contentEl);
 
     const frameEl = this.contentEl.createDiv({ cls: "arbor-frame" });
@@ -240,7 +245,7 @@ export class ViewShell {
     });
     this.touchDockEl = dock;
     this.contentEl.toggleClass("is-touch-editing", Boolean(this.port.getSession()));
-    this.work.frame(window, () => this.handleMobileResize());
+    this.mobileViewport?.schedule();
     dock.empty();
     const button = (
       label: string,
@@ -380,16 +385,13 @@ export class ViewShell {
       this.port.onCompactChange(compact);
     }
     if (!this.usesTouchControls()) return;
+    const height = `${mobileViewportHeight(this.contentEl)}px`;
+    if (this.contentEl.style.getPropertyValue("--arbor-mobile-height") === height && this.mobileWidth === this.contentEl.clientWidth) return;
+    this.mobileWidth = this.contentEl.clientWidth;
+    this.contentEl.setCssProps({ "--arbor-mobile-height": height });
     this.port.resizeEditors();
-    const viewport = this.contentEl.ownerDocument.defaultView?.visualViewport;
-    const rect = this.contentEl.getBoundingClientRect();
-    let bottom = Math.min(rect.bottom - 8, (viewport?.height ?? window.innerHeight) + (viewport?.offsetTop ?? 0));
-    if (Platform.isMobile) this.contentEl.ownerDocument.querySelectorAll<HTMLElement>(".mobile-navbar, .mobile-toolbar").forEach((bar) => {
-      const bounds = bar.getBoundingClientRect();
-      if (bounds.height > 0 && bounds.width > 0 && bounds.top > rect.top && bounds.top < bottom && bounds.right > rect.left && bounds.left < rect.right && getComputedStyle(bar).visibility !== "hidden") bottom = bounds.top - 8;
-    });
-    this.contentEl.setCssProps({ "--arbor-mobile-height": `${Math.max(120, bottom - rect.top - 8)}px` });
     this.port.onResizeDuringEdit();
+    this.contentEl.dispatchEvent(new (this.contentEl.win as Window & { Event: typeof Event }).Event("arbor:viewport-resize"));
   }
 
   showMode(mode: ArborPresentationMode): void {
@@ -398,6 +400,8 @@ export class ViewShell {
   }
 
   teardownShell(): void {
+    this.mobileViewport?.dispose();
+    this.mobileViewport = null;
     this.outputProfileLabel?.dispose();
     this.outputProfileLabel = null;
     this.work.reset();

@@ -2882,6 +2882,34 @@
 .arbor-view.has-touch-controls .arbor-editor { font-size: 16px; min-height: 80px; touch-action: pan-y; }
 .arbor-view.is-compact .arbor-card.is-editing .arbor-editor { max-height: none; }
 .arbor-view.is-compact .arbor-columns-viewport.is-touch-pinching { overscroll-behavior: contain; }
+.arbor-view.has-touch-controls:not(.is-compact) .arbor-columns {
+  height: 100%;
+  min-height: 0;
+  padding-block: 0;
+}
+.arbor-view.has-touch-controls:not(.is-compact) .arbor-column { height: 100%; min-height: 0; }
+.arbor-view.has-touch-controls:not(.is-compact) .arbor-card-list {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  padding: var(--arbor-touch-list-top, 0px) 4px var(--arbor-touch-list-bottom, 0px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: none;
+  transform: none;
+}
+.arbor-view.has-touch-controls:not(.is-compact) .arbor-card-list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.arbor-view.has-touch-controls:not(.is-compact) .arbor-card { flex-shrink: 0; }
+.arbor-view.has-touch-controls:not(.is-compact) .arbor-card.is-active .arbor-card-content { overscroll-behavior-y: auto; }
+.arbor-view.has-touch-controls .arbor-columns-viewport.is-touch-pinching .arbor-card-list {
+  transition: none;
+}
 .arbor-overview-viewport { touch-action: none; }
 .arbor-view.is-touch-editing .arbor-overview-viewport { touch-action: pan-y; }
 .arbor-view.has-touch-controls .arbor-overview-card.is-editing { max-height: none; }
@@ -3105,6 +3133,11 @@
 .arbor-content-drop-detail { font-size: 11px; color: var(--text-muted); }
 .arbor-content-drop-icon, .arbor-content-drop-plus { display: flex; flex-shrink: 0; color: var(--interactive-accent); }
 .arbor-content-drop-options svg { width: 16px; height: 16px; }
+.arbor-content-drop-options[hidden] { display: none; }
+.arbor-content-drop-options[data-layout="row"] { flex-direction: row; }
+.arbor-content-drop-options[data-layout="row"] .arbor-content-drop-zone { flex: 1; min-width: 0; min-height: 44px; }
+.arbor-content-drop-options[data-layout="row"] .arbor-content-drop-detail,
+.arbor-content-drop-options[data-layout="row"] .arbor-content-drop-plus { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .arbor-content-drop-zone { transition: none; }

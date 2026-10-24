@@ -3,7 +3,12 @@ import { pinchViewport, resolvePinchZoom, type TouchPoint, type ZoomBounds } fro
 export interface TouchPort {
   getZoom(): number;
   getZoomBounds?(): ZoomBounds;
-  scheduleZoom(value: number): void;
+  scheduleZoom(value: number, commitViewport?: () => void): void;
+  flushZoom?(): void;
+  cancelZoom?(): void;
+  beginBranchPinch?(viewport: HTMLElement, midpoint: TouchPoint): void;
+  commitBranchPinch?(viewport: HTMLElement, midpoint: TouchPoint): void;
+  endBranchPinch?(): void;
   hasEditingSession(): boolean;
   usesTouchControls(): boolean;
   getOverviewSceneOffset(): { left: number; top: number };
@@ -25,6 +30,12 @@ function closestAnchor(target: EventTarget | null): Element | null {
   return element?.closest("a") ?? null;
 }
 
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  const node = target as Node | null;
+  const element = node?.nodeType === 3 ? node.parentElement : target as Element | null;
+  return Boolean(element?.closest?.("textarea, input, button, a, [contenteditable='true']"));
+}
+
 export class TouchController {
   private readonly touchPoints = new Map<number, TouchPoint>();
   private touchStart: { zoom: number; left: number; top: number; midpoint: TouchPoint; distance: number } | null = null;
@@ -33,7 +44,6 @@ export class TouchController {
   private readonly branchTouchPoints = new Map<number, TouchPoint>();
   private branchTouchStart: { zoom: number; distance: number } | null = null;
   private branchTouchPinching = false;
-  private branchRevealFrame: { owner: Window; id: number } | null = null;
   private readonly disposers: (() => void)[] = [];
   private readonly boundViewports = new Set<HTMLElement>();
 
@@ -57,13 +67,15 @@ export class TouchController {
       } : null;
     };
     const down = (event: PointerEvent) => {
-      if (event.pointerType !== "touch" || this.port.hasEditingSession() || (event.target as HTMLElement)?.closest("textarea, input, button, a, [contenteditable='true']")) return;
+      if (event.pointerType !== "touch" || this.port.hasEditingSession() || isInteractiveTarget(event.target)) return;
+      this.port.flushZoom?.();
       if (!this.touchPoints.size) this.touchMoved = false;
       this.touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
       rebase();
       if (this.touchPoints.size > 1) this.touchMoved = true;
     };
     const move = (event: PointerEvent) => {
+      if (this.port.hasEditingSession()) { this.clearOverviewTouch(viewport); return; }
       if (!this.touchPoints.has(event.pointerId) || !this.touchStart) return;
       this.touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
       const { midpoint, distance } = geometry();
@@ -78,9 +90,14 @@ export class TouchController {
       const offset = this.port.getOverviewSceneOffset();
       if (this.touchPoints.size > 1) {
         const next = pinchViewport(this.touchStart, midpoint, distance, this.port.getZoomBounds?.());
-        this.port.scheduleZoom(next.zoom);
-        viewport.scrollLeft = next.left + offset.left;
-        viewport.scrollTop = next.top + offset.top;
+        const start = this.touchStart;
+        this.port.scheduleZoom(next.zoom, () => {
+          if (this.touchStart !== start) return;
+          const ratio = this.port.getZoom() / start.zoom;
+          const appliedOffset = this.port.getOverviewSceneOffset();
+          viewport.scrollLeft = (start.left + start.midpoint.x) * ratio - midpoint.x + appliedOffset.left;
+          viewport.scrollTop = (start.top + start.midpoint.y) * ratio - midpoint.y + appliedOffset.top;
+        });
       } else {
         viewport.scrollLeft = this.touchStart.left + offset.left - dx;
         viewport.scrollTop = this.touchStart.top + offset.top - dy;
@@ -88,6 +105,9 @@ export class TouchController {
     };
     const end = (event: PointerEvent) => {
       if (event.type === "lostpointercapture" && event.target !== viewport) return;
+      if (!this.touchPoints.has(event.pointerId)) return;
+      if (event.type === "pointerup") this.port.flushZoom?.();
+      else this.port.cancelZoom?.();
       if (!this.touchPoints.delete(event.pointerId)) return;
       if (this.touchMoved) this.suppressTouchClickUntil = Date.now() + 500;
       if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
@@ -98,6 +118,12 @@ export class TouchController {
   }
 
   bindBranchTouch(viewport: HTMLElement): () => void {
+    let nativeInput = false;
+    const midpoint = () => {
+      const [a, b] = Array.from(this.branchTouchPoints.values());
+      const bounds = viewport.getBoundingClientRect();
+      return { x: (a.x + b.x) / 2 - bounds.left, y: (a.y + b.y) / 2 - bounds.top };
+    };
     const distance = () => {
       const [a, b] = Array.from(this.branchTouchPoints.values());
       return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
@@ -106,33 +132,51 @@ export class TouchController {
       this.branchTouchStart = this.branchTouchPoints.size > 1
         ? { zoom: this.port.getZoom(), distance: distance() }
         : null;
+      if (this.branchTouchStart) {
+        this.branchTouchPinching = true;
+        viewport.addClass("is-touch-pinching");
+        this.port.beginBranchPinch?.(viewport, midpoint());
+      }
     };
-    const isInteractiveTarget = (target: EventTarget | null) =>
-      target instanceof Element && Boolean(target.closest("textarea, input, button, a, [contenteditable='true']"));
     const down = (event: PointerEvent) => {
+      if (nativeInput) return;
       if (event.pointerType !== "touch" || !this.port.usesTouchControls() || this.port.hasEditingSession() || isInteractiveTarget(event.target)) {
         return;
       }
+      this.port.flushZoom?.();
       this.branchTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
       rebase();
     };
     const move = (event: PointerEvent) => {
+      if (this.port.hasEditingSession()) { this.clearBranchTouch(viewport); nativeInput = false; return; }
+      if (nativeInput) return;
       if (!this.branchTouchPoints.has(event.pointerId) || !this.branchTouchStart || this.branchTouchPoints.size < 2) {
         return;
       }
       this.branchTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      viewport.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      zoomAtMidpoint();
+    };
+    const zoomAtMidpoint = () => {
+      if (!this.branchTouchStart || this.branchTouchPoints.size < 2) return;
       const nextZoom = resolvePinchZoom(this.branchTouchStart.zoom, this.branchTouchStart.distance, distance(), this.port.getZoomBounds?.());
       this.suppressTouchClickUntil = Date.now() + 500;
-      this.branchTouchPinching = true;
-      viewport.setPointerCapture(event.pointerId);
-      viewport.addClass("is-touch-pinching");
-      event.preventDefault();
-      this.port.scheduleZoom(nextZoom);
+      const start = this.branchTouchStart;
+      const center = midpoint();
+      this.port.scheduleZoom(nextZoom, () => {
+        if (this.branchTouchStart === start) this.port.commitBranchPinch?.(viewport, center);
+      });
     };
     const end = (event: PointerEvent) => {
-      if (!this.branchTouchPoints.delete(event.pointerId)) {
+      if (nativeInput) return;
+      if (event.type === "lostpointercapture" && event.target !== viewport) return;
+      if (!this.branchTouchPoints.has(event.pointerId)) {
         return;
       }
+      if (event.type === "pointerup") this.port.flushZoom?.();
+      else this.port.cancelZoom?.();
+      this.branchTouchPoints.delete(event.pointerId);
       if (viewport.hasPointerCapture(event.pointerId)) {
         viewport.releasePointerCapture(event.pointerId);
       }
@@ -140,21 +184,66 @@ export class TouchController {
         viewport.removeClass("is-touch-pinching");
         if (this.branchTouchPinching) {
           this.branchTouchPinching = false;
-          this.clearBranchRevealFrame();
-          const request = { owner: viewport.ownerDocument?.defaultView ?? window, id: 0 };
-          this.branchRevealFrame = request;
-          request.id = request.owner.requestAnimationFrame(() => {
-            if (this.branchRevealFrame !== request) {
-              return;
-            }
-            this.branchRevealFrame = null;
-            this.port.revealCompactSelection();
-          });
+          this.port.endBranchPinch?.();
         }
       }
       rebase();
     };
-    return this.bind(viewport, down, move, end, () => this.clearBranchTouch(viewport));
+    // Native scrolling cancels PointerEvents. TouchEvents retain the complete
+    // finger set, so adding a second finger after scrolling can still pinch.
+    const readTouches = (event: TouchEvent) => {
+      this.branchTouchPoints.clear();
+      for (const touch of Array.from(event.touches)) {
+        if (!touch.target || viewport.contains(touch.target as Node)) {
+          this.branchTouchPoints.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
+        }
+      }
+    };
+    const nativeStart = (event: TouchEvent) => {
+      if (!this.port.usesTouchControls() || this.port.hasEditingSession() || isInteractiveTarget(event.target)) return;
+      this.port.flushZoom?.();
+      nativeInput = true;
+      readTouches(event);
+      rebase();
+      if (this.branchTouchPoints.size > 1) {
+        this.suppressTouchClickUntil = Date.now() + 500;
+        if (event.cancelable) event.preventDefault();
+      }
+    };
+    const nativeMove = (event: TouchEvent) => {
+      if (this.port.hasEditingSession()) { this.clearBranchTouch(viewport); nativeInput = false; return; }
+      if (!nativeInput) return;
+      readTouches(event);
+      if (this.branchTouchPoints.size < 2) return;
+      if (event.cancelable) event.preventDefault();
+      zoomAtMidpoint();
+    };
+    const nativeEnd = (event: TouchEvent) => {
+      if (!nativeInput) return;
+      if (event.type === "touchcancel") this.port.cancelZoom?.();
+      else this.port.flushZoom?.();
+      readTouches(event);
+      if (this.branchTouchPoints.size < 2) {
+        if (this.branchTouchPinching) this.suppressTouchClickUntil = Date.now() + 500;
+        this.branchTouchPinching = false;
+        viewport.removeClass("is-touch-pinching");
+        this.port.endBranchPinch?.();
+      }
+      nativeInput = this.branchTouchPoints.size > 0;
+      rebase();
+    };
+    viewport.addEventListener("touchstart", nativeStart, { passive: false });
+    viewport.addEventListener("touchmove", nativeMove, { passive: false });
+    viewport.addEventListener("touchend", nativeEnd);
+    viewport.addEventListener("touchcancel", nativeEnd);
+    return this.bind(viewport, down, move, end, () => {
+      viewport.removeEventListener("touchstart", nativeStart);
+      viewport.removeEventListener("touchmove", nativeMove);
+      viewport.removeEventListener("touchend", nativeEnd);
+      viewport.removeEventListener("touchcancel", nativeEnd);
+      nativeInput = false;
+      this.clearBranchTouch(viewport);
+    });
   }
 
   isBranchPinching(): boolean {
@@ -171,7 +260,6 @@ export class TouchController {
     this.branchTouchPoints.clear();
     this.branchTouchStart = null;
     this.branchTouchPinching = false;
-    this.clearBranchRevealFrame();
     this.boundViewports.clear();
   }
 
@@ -269,6 +357,7 @@ export class TouchController {
   }
 
   private clearOverviewTouch(viewport: HTMLElement): void {
+    this.port.cancelZoom?.();
     this.releaseCaptures(viewport, this.touchPoints);
     this.touchPoints.clear();
     this.touchStart = null;
@@ -277,11 +366,12 @@ export class TouchController {
   }
 
   private clearBranchTouch(viewport: HTMLElement): void {
+    this.port.cancelZoom?.();
+    this.port.endBranchPinch?.();
     this.releaseCaptures(viewport, this.branchTouchPoints);
     this.branchTouchPoints.clear();
     this.branchTouchStart = null;
     this.branchTouchPinching = false;
-    this.clearBranchRevealFrame();
     viewport.removeClass("is-touch-pinching");
   }
 
@@ -291,10 +381,4 @@ export class TouchController {
     }
   }
 
-  private clearBranchRevealFrame(): void {
-    if (this.branchRevealFrame !== null) {
-      this.branchRevealFrame.owner.cancelAnimationFrame(this.branchRevealFrame.id);
-      this.branchRevealFrame = null;
-    }
-  }
 }

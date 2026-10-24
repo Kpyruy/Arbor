@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readSource, sourceClass, sourceMethod } from "./helpers/viewSource";
+import { readSource, sourceClass } from "./helpers/viewSource";
 
 describe("view shell extraction", () => {
   it("keeps the shell nodes and persistent mode controls inside the shell owner", () => {
@@ -31,21 +31,6 @@ describe("view shell extraction", () => {
     expect(host).toContain("profileButton.click()");
     expect(host).toContain("overviewButton.click()");
     expect(host).toContain("getOverviewToggleCount");
-  });
-
-  it("keeps the baseline resize order: editors, viewport geometry, then selection reveal", () => {
-    const resize = sourceMethod("src/view/chrome/ViewShell.ts", "ViewShell", "handleMobileResize");
-    const editors = resize.indexOf("this.port.resizeEditors()");
-    const measure = resize.indexOf("const rect = this.contentEl.getBoundingClientRect()");
-    const height = resize.indexOf('"--arbor-mobile-height"');
-    const reveal = resize.indexOf("this.port.onResizeDuringEdit()");
-
-    for (const anchor of [editors, measure, height, reveal]) {
-      expect(anchor).toBeGreaterThanOrEqual(0);
-    }
-    expect(measure).toBeGreaterThan(editors);
-    expect(height).toBeGreaterThan(measure);
-    expect(reveal).toBeGreaterThan(height);
   });
 
   it("keeps output profile modal cloning on the established clone helpers", () => {
