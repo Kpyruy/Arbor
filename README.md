@@ -362,7 +362,10 @@ Beautiful blocks in the `> [!note]` style are still normal Markdown callouts. In
 - No account is required.
 - No telemetry is collected.
 - No ads are shown.
-- Arbor does not make network requests for its core functionality.
+- Core note editing and branch navigation work locally without network requests.
+- PNG/PDF exports are generated locally. The export renderer may fetch images, fonts and stylesheets referenced by the rendered view; external resource URLs can therefore contact their hosts. These requests are for rendering, not telemetry, and Arbor does not send note text to an Arbor service.
+- Remote images and embeds in notes use Obsidian's normal rendering behavior. The built-in demo includes an image hosted at `dummyimage.com`, which may be requested when displayed or exported.
+- Base64 decoding supports legacy Arbor metadata and image conversion during export; it is not used to execute encoded code.
 - Arbor stores plugin settings with Obsidian's plugin data system.
 - Arbor stores branch structure inside the note itself as a readable Obsidian comment footer.
 - If you paste an image into a block, Arbor writes that image into your vault as a normal attachment.

@@ -10,6 +10,20 @@ export interface ArborReleaseNote {
 
 export const ARBOR_RELEASE_NOTES: readonly ArborReleaseNote[] = [
   {
+    version: "0.3.2",
+    title: "Smoother reading, steadier touch",
+    changes: [
+      "Choose Limited height or Fit content in Arbor settings to read long active cards your way.",
+      "With Fit content, Active zoom fits the card width instead of shrinking multi-page text into the screen.",
+      "Smoother pinch zoom, independent tablet column scrolling and keyboard-aware controls improve touch navigation.",
+      "More reliable drop targets and visible descendant cards keep Branch Editor navigation predictable."
+    ],
+    action: {
+      label: "Open Arbor settings",
+      id: "open-settings"
+    }
+  },
+  {
     version: "0.3.1",
     title: "Capture, connect, focus",
     changes: [
