@@ -15,6 +15,7 @@ function harness() {
   let zoom = 1;
   let height = 100;
   let naturalSize: { width: number; height: number } | null = null;
+  let fitMode: "card" | "width" = "card";
   const frames: FrameRequestCallback[] = [];
   const centered: HTMLElement[] = [];
   const modes: boolean[] = [];
@@ -27,12 +28,14 @@ function harness() {
     getZoom: () => zoom,
     getBounds: () => ({ min: 0.25, max: 5 }),
     getNaturalSize: () => naturalSize,
+    getFitMode: () => fitMode,
     applyZoom: value => { zoom = value; },
     center: target => { centered.push(target.card); },
     onEnabledChanged: enabled => { modes.push(enabled); }
   });
   return { controller, frames, first, second, centered, modes, zoom: () => zoom,
     setHeight: (value: number) => { height = value; },
+    setFitMode: (value: "card" | "width") => { fitMode = value; },
     setAnimatedGeometry: () => {
       naturalSize = { width: 300, height: 120 };
       Object.defineProperty(viewport, "clientWidth", { value: 1243 });
@@ -44,6 +47,14 @@ function harness() {
 }
 
 describe("Active zoom", () => {
+  it("keeps content-height reading zoom independent of a multi-page card's height", () => {
+    const h = harness(); h.setFitMode("width"); h.setHeight(12000);
+    h.controller.enable(); h.flush();
+    expect(h.zoom()).toBeCloseTo(2.04, 3);
+    h.setHeight(24000); h.controller.schedule(); h.flush();
+    expect(h.zoom()).toBeCloseTo(2.04, 3);
+    h.controller.reset();
+  });
   it("fits the entire card closely with a 24px margin", () => {
     const h = harness(); h.controller.enable(); h.flush();
     expect(h.zoom()).toBeCloseTo(2.04, 3);

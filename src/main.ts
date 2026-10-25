@@ -12,7 +12,7 @@ import { buildAvailableMarkdownPath } from "./markdownPaths";
 import { buildAvailableTreeOverviewExportPath, TreeOverviewExportFormat } from "./treeOverviewExport";
 import { createEmptyTree } from "./model/tree";
 import { inspectManagedBranchDocumentText, resolveArborOpenTarget, resolveLoadingViewTarget, shouldRouteMarkdownOpenToLoadingView } from "./opening";
-import { ArborSettingTab, DEFAULT_SETTINGS } from "./settings";
+import { ArborSettingTab, DEFAULT_SETTINGS, normalizeActiveCardHeightMode } from "./settings";
 import { buildBranchDocument } from "./storage/document";
 import { normalizeMetadata } from "./storage/serializer";
 import { getReleaseNote, shouldShowReleaseNotice } from "./releaseNotice";
@@ -139,6 +139,7 @@ export default class ArborPlugin extends Plugin {
     this.settings.maxZoomLevel = bounds.max;
     this.settings.zoomLevel = clampZoomLevel(settings.zoomLevel, bounds);
     this.settings.overviewOrientation = normalizeOverviewOrientation(settings.overviewOrientation) ?? "horizontal";
+    this.settings.activeCardHeightMode = normalizeActiveCardHeightMode(settings.activeCardHeightMode);
     this.settings.layoutDirection = resolveInitialLayoutDirection({
       hasStoredPluginData: !this.isFreshPluginInstall,
       savedDirection: this.getStoredLayoutDirection(raw),
@@ -206,8 +207,12 @@ export default class ArborPlugin extends Plugin {
       .filter((view): view is ArborView => view instanceof ArborView);
   }
 
-  refreshAllBranchViews(options?: { layoutDirectionChanged?: boolean }): void {
+  refreshAllBranchViews(options?: { layoutDirectionChanged?: boolean; activeCardHeightChanged?: boolean }): void {
     this.getBranchViews().forEach((view) => {
+      if (options?.activeCardHeightChanged) {
+        view.refreshCardHeightMode();
+        return;
+      }
       if (options?.layoutDirectionChanged) {
         void view.refreshLayoutDirection().catch(error => console.error("[Arbor] Could not refresh layout", error));
         return;

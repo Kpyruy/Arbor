@@ -35,6 +35,10 @@ export class BranchViewportController {
 
   constructor(private readonly port: BranchViewportPort) {}
 
+  private usesNativeColumnScroll(): boolean {
+    return !this.port.isCompact() && (this.port.usesTouchControls?.() === true || this.port.read.getSettings().activeCardHeightMode === "content");
+  }
+
   beginBranchPinch(viewport: HTMLElement, midpoint: TouchPoint): void {
     this.stopHorizontalScrollMotion(false);
     if (this.layoutFrame !== null) window.cancelAnimationFrame(this.layoutFrame);
@@ -44,7 +48,7 @@ export class BranchViewportController {
     const hit = viewport.ownerDocument.elementFromPoint?.(bounds.left + midpoint.x, bounds.top + midpoint.y);
     const card = hit?.closest<HTMLElement>(".arbor-card") ?? viewport.querySelector<HTMLElement>(".arbor-card.is-active");
     if (!card || !viewport.contains(card)) { this.pinch = null; return; }
-    const vertical = this.port.usesTouchControls?.() && !this.port.isCompact()
+    const vertical = this.usesNativeColumnScroll()
       ? card.closest<HTMLElement>(".arbor-card-list") ?? viewport : viewport;
     this.touchColumns.pause(true);
     const before = card.getBoundingClientRect();
@@ -200,7 +204,7 @@ export class BranchViewportController {
       this.revealCompactSelection();
       return;
     }
-    if (this.port.usesTouchControls?.()) {
+    if (this.usesNativeColumnScroll()) {
       const list = card.closest<HTMLElement>(".arbor-card-list");
       if (list) this.touchColumns.align(list, card, snap, true);
     }
@@ -275,7 +279,7 @@ export class BranchViewportController {
         column.querySelector<HTMLElement>(".arbor-column-empty") ??
         fallback;
       if (!target) return;
-      if (this.port.usesTouchControls?.() && !this.port.isCompact()) {
+      if (this.usesNativeColumnScroll()) {
         this.touchColumns.align(list, target, activeZoom);
       } else {
         const natural = this.getElementOffsetTopWithin(target, resolvedColumns) + target.offsetHeight / 2;

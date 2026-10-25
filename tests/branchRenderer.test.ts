@@ -50,6 +50,18 @@ function wheelEvent(overrides: Partial<WheelEvent> = {}): WheelEvent {
 }
 
 describe("routeBranchViewportWheel", () => {
+  it("leaves plain wheel scrolling to the column in fit-content mode", () => {
+    const settings = { ...fixtureSettings(), activeCardHeightMode: "content" as const };
+    const state = fixtureLoaded(), preventDefault = vi.fn(), event = wheelEvent({ preventDefault });
+    const actions = { selectBlock: vi.fn(), next: vi.fn(), previous: vi.fn(), updateZoomLevel: vi.fn() };
+    const viewport = { clientWidth: 300, scrollWidth: 900, scrollBy: vi.fn() } as unknown as HTMLElement;
+    const renderer = { getColumnAtPointerX: () => buildColumnModels(state.metadata, state.selectedBlockId, 220)[1] };
+    routeBranchViewportWheel(event, viewport, renderer, { getState: () => state, getSettings: () => settings, getMode: () => "editor", getFilePath: () => "fixture.md" }, actions, false);
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(actions.next).not.toHaveBeenCalled();
+    expect(actions.selectBlock).not.toHaveBeenCalled();
+    expect(state.selectedBlockId).toBe("first");
+  });
   it("selects the child column target before routing later wheel events to siblings", () => {
     const state = fixtureLoaded();
     const columns = buildColumnModels(state.metadata, state.selectedBlockId, 220);

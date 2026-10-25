@@ -6,6 +6,7 @@ export interface ActiveZoomPort {
   getZoom(): number;
   getBounds(): { min: number; max: number };
   getNaturalSize?(target: ActiveZoomTarget, zoom: number): { width: number; height: number } | null;
+  getFitMode?(): "card" | "width";
   applyZoom(value: number): void;
   center(target: ActiveZoomTarget): void;
   onEnabledChanged(enabled: boolean): void;
@@ -73,7 +74,7 @@ export class ActiveZoomController {
       if (size.width <= 0 || size.height <= 0) return;
       const fit = Math.max(min, Math.min(max,
         (current.viewport.clientWidth - 48) / size.width,
-        (current.viewport.clientHeight - 48) / size.height));
+        this.port.getFitMode?.() === "width" ? Infinity : (current.viewport.clientHeight - 48) / size.height));
       const next = Math.round(fit * 1000) / 1000;
       if (Math.abs(next - zoom) >= 0.003) {
         this.port.applyZoom(next);

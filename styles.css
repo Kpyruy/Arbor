@@ -2010,6 +2010,12 @@
   overflow-y: auto;
 }
 
+.arbor-view.is-content-height .arbor-card.is-active > .arbor-card-content {
+  max-height: none;
+  overflow: visible;
+  overscroll-behavior: auto;
+}
+
 .arbor-card.is-active:is(.is-output-excluded-direct, .is-output-excluded-inherited) > .arbor-card-content {
   padding-inline-end: calc(24px + 8px * var(--bw-zoom));
 }
@@ -2878,17 +2884,16 @@
 .arbor-view.is-compact .arbor-card-content img { max-width: 100%; height: auto; }
 .arbor-view.is-compact .arbor-card-content pre,
 .arbor-view.is-compact .arbor-card-content table { max-width: 100%; overflow-x: auto; }
-.arbor-view.is-compact .arbor-card.is-active .arbor-card-content { max-height: none; overflow: visible; }
 .arbor-view.has-touch-controls .arbor-editor { font-size: 16px; min-height: 80px; touch-action: pan-y; }
 .arbor-view.is-compact .arbor-card.is-editing .arbor-editor { max-height: none; }
 .arbor-view.is-compact .arbor-columns-viewport.is-touch-pinching { overscroll-behavior: contain; }
-.arbor-view.has-touch-controls:not(.is-compact) .arbor-columns {
+.arbor-view:is(.has-touch-controls, .is-content-height):not(.is-compact) .arbor-columns {
   height: 100%;
   min-height: 0;
   padding-block: 0;
 }
-.arbor-view.has-touch-controls:not(.is-compact) .arbor-column { height: 100%; min-height: 0; }
-.arbor-view.has-touch-controls:not(.is-compact) .arbor-card-list {
+.arbor-view:is(.has-touch-controls, .is-content-height):not(.is-compact) .arbor-column { height: 100%; min-height: 0; }
+.arbor-view:is(.has-touch-controls, .is-content-height):not(.is-compact) .arbor-card-list {
   box-sizing: border-box;
   height: 100%;
   min-height: 0;
@@ -2900,12 +2905,12 @@
   scrollbar-width: none;
   transform: none;
 }
-.arbor-view.has-touch-controls:not(.is-compact) .arbor-card-list::-webkit-scrollbar {
+.arbor-view:is(.has-touch-controls, .is-content-height):not(.is-compact) .arbor-card-list::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
 }
-.arbor-view.has-touch-controls:not(.is-compact) .arbor-card { flex-shrink: 0; }
+.arbor-view:is(.has-touch-controls, .is-content-height):not(.is-compact) .arbor-card { flex-shrink: 0; }
 .arbor-view.has-touch-controls:not(.is-compact) .arbor-card.is-active .arbor-card-content { overscroll-behavior-y: auto; }
 .arbor-view.has-touch-controls .arbor-columns-viewport.is-touch-pinching .arbor-card-list {
   transition: none;

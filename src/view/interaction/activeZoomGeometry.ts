@@ -6,15 +6,20 @@ export function measureBranchCard(card: HTMLElement, resizeEditor: (editor: HTML
   if (!column) return { width: card.offsetWidth, height: card.offsetHeight };
   const zoom = column.style.getPropertyValue("--bw-zoom");
   const contentZoom = column.style.getPropertyValue("--bw-content-zoom");
+  // Compact width belongs to the percentage-sized scene, not its column.
+  const columns = column.closest<HTMLElement>(".arbor-columns");
+  const sceneZoom = columns?.style.getPropertyValue("--bw-zoom") ?? "";
   const editor = card.querySelector<HTMLTextAreaElement>("textarea.arbor-editor");
   const editorHeight = editor?.style.getPropertyValue("--arbor-editor-height") ?? "";
   const scroller = editor ?? card.querySelector<HTMLElement>(".arbor-card-content");
   const scroll = { left: scroller?.scrollLeft ?? 0, top: scroller?.scrollTop ?? 0 };
   try {
+    columns?.setCssProps({ "--bw-zoom": "1" });
     column.setCssProps({ "--bw-zoom": "1", "--bw-content-zoom": "1" });
     if (editor) resizeEditor(editor);
     return { width: card.offsetWidth, height: card.offsetHeight };
   } finally {
+    columns?.setCssProps({ "--bw-zoom": sceneZoom });
     column.setCssProps({ "--bw-zoom": zoom, "--bw-content-zoom": contentZoom });
     editor?.setCssProps({ "--arbor-editor-height": editorHeight });
     if (scroller) { scroller.scrollLeft = scroll.left; scroller.scrollTop = scroll.top; }

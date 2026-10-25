@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { BranchViewportController } from "../src/view/branch/BranchViewportController";
+import { fixtureSettings } from "./helpers/arborFixtures";
 
 describe("branch card anchor through reflow", () => {
   it("compensates card reflow and moving midpoint without a release recenter", () => {
@@ -14,7 +15,8 @@ describe("branch card anchor through reflow", () => {
     } as unknown as HTMLElement;
     vi.stubGlobal("window", { cancelAnimationFrame() {} });
     const camera = new BranchViewportController({
-      read: {} as never, getElements: () => ({ root: viewport, viewport, columns: null, stage: null, previewContent: null }),
+      read: { getSettings: fixtureSettings, getState: () => null, getMode: () => "editor", getFilePath: () => "fixture.md" },
+      getElements: () => ({ root: viewport, viewport, columns: null, stage: null, previewContent: null }),
       getSession: () => null, isCompact: () => false, consumeAutofocus() {}
     });
     camera.beginBranchPinch(viewport, { x: 200, y: 150 });

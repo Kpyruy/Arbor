@@ -14,6 +14,12 @@ const OVERVIEW_ORIENTATION_OPTIONS = {
   "vertical-top-down": "Vertical — root at top"
 };
 
+const ACTIVE_CARD_HEIGHT_OPTIONS = { bounded: "Limited height", content: "Fit content" };
+
+export function normalizeActiveCardHeightMode(value: unknown): ArborSettings["activeCardHeightMode"] {
+  return value === "content" ? "content" : "bounded";
+}
+
 type ArborSettingControl =
   | { type: "dropdown"; key: keyof ArborSettings; options: Record<string, string>; defaultValue?: string }
   | { type: "slider"; key: keyof ArborSettings; min: number; max: number; step: number; defaultValue?: number; displayFormat?: (value: number) => string }
@@ -35,6 +41,7 @@ export const DEFAULT_SETTINGS: ArborSettings = {
   splitDirection: "vertical",
   cardWidth: 300,
   cardMinHeight: 120,
+  activeCardHeightMode: "bounded",
   horizontalSpacing: 20,
   verticalSpacing: 12,
   zoomLevel: 1,
@@ -111,6 +118,11 @@ export class ArborSettingTab extends PluginSettingTab {
       },
       this.sliderDefinition("Card width", "Card width in pixels.", "cardWidth", 220, 520, 10),
       this.sliderDefinition("Card minimum height", "Minimum card height in pixels.", "cardMinHeight", 80, 300, 10),
+      {
+        name: "Active card height",
+        desc: "Branch editor: fit content scrolls the whole card in its column. Limited height scrolls long text inside the card. Inactive previews stay compact.",
+        control: { type: "dropdown", key: "activeCardHeightMode", options: ACTIVE_CARD_HEIGHT_OPTIONS, defaultValue: DEFAULT_SETTINGS.activeCardHeightMode }
+      },
       this.sliderDefinition("Horizontal spacing", "Space between columns in pixels.", "horizontalSpacing", 8, 48, 2),
       this.sliderDefinition("Vertical spacing", "Space between cards in pixels.", "verticalSpacing", 4, 32, 2),
       this.sliderDefinition("Minimum zoom", "Lowest scene zoom, between 25% and the maximum zoom.", "minZoomLevel", 25, this.plugin.settings.maxZoomLevel * 100, 5, "%"),
@@ -176,12 +188,16 @@ export class ArborSettingTab extends PluginSettingTab {
     }
     settings[key] = key === "overviewOrientation"
       ? normalizeOverviewOrientation(value) ?? "horizontal"
+      : key === "activeCardHeightMode"
+        ? normalizeActiveCardHeightMode(value)
       : key === "breadcrumbLabelPreferredPrefix" && typeof value === "string"
         ? value.trim()
         : value;
     await this.plugin.saveSettings();
 
-    if (key === "overviewOrientation") {
+    if (key === "activeCardHeightMode") {
+      this.plugin.refreshAllBranchViews({ activeCardHeightChanged: true });
+    } else if (key === "overviewOrientation") {
       this.plugin.refreshOverviewOrientations();
     } else if (key === "layoutDirection") {
       this.plugin.refreshAllBranchViews({ layoutDirectionChanged: true });
@@ -253,6 +269,14 @@ export class ArborSettingTab extends PluginSettingTab {
 
     this.addNumericSetting(containerEl, "Card width", "Card width in pixels.", "cardWidth", 220, 520, 10);
     this.addNumericSetting(containerEl, "Card minimum height", "Minimum card height in pixels.", "cardMinHeight", 80, 300, 10);
+    new Setting(containerEl)
+      .setName("Active card height")
+      .setDesc("Branch editor: fit content scrolls the whole card in its column. Limited height scrolls long text inside the card. Inactive previews stay compact.")
+      .addDropdown(dropdown => {
+        Object.entries(ACTIVE_CARD_HEIGHT_OPTIONS).forEach(([value, label]) => { dropdown.addOption(value, label); });
+        dropdown.setValue(this.plugin.settings.activeCardHeightMode)
+          .onChange(value => { void this.setControlValue("activeCardHeightMode", value); });
+      });
     this.addNumericSetting(containerEl, "Horizontal spacing", "Space between columns in pixels.", "horizontalSpacing", 8, 48, 2);
     this.addNumericSetting(containerEl, "Vertical spacing", "Space between cards in pixels.", "verticalSpacing", 4, 32, 2);
     this.addNumericSetting(containerEl, "Minimum zoom", "Lowest scene zoom, between 25% and the maximum zoom.", "minZoomLevel", 25, this.plugin.settings.maxZoomLevel * 100, 5, "%");

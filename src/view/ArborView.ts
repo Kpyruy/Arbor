@@ -563,6 +563,7 @@ export class ArborView extends FileView {
       getNaturalSize: target => this.presentationMode === "overview"
         ? { width: target.card.offsetWidth, height: target.card.offsetHeight }
         : measureBranchCard(target.card, editor => this.editor.resizeEditor(editor)),
+      getFitMode: () => this.presentationMode === "editor" && this.getViewSettings().activeCardHeightMode === "content" ? "width" : "card",
       getTarget: () => this.getActiveZoomTarget(),
       getZoom: () => this.getViewSettings().zoomLevel,
       getBounds: () => this.getZoomBounds(),
@@ -1094,6 +1095,13 @@ export class ArborView extends FileView {
     }
 
     await this.onLoadFile(file);
+  }
+
+  refreshCardHeightMode(): void {
+    this.branchViewport.reset();
+    this.pendingFocusBlockId = null;
+    this.pendingScrollBlockId = this.state?.selectedBlockId ?? null;
+    this.render();
   }
 
   async refreshView(): Promise<void> {

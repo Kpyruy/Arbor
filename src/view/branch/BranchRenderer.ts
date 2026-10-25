@@ -71,6 +71,8 @@ export function routeBranchViewportWheel(
     return;
   }
 
+  if (settings.activeCardHeightMode === "content") return;
+
   const hoveredColumn = renderer.getColumnAtPointerX(event.clientX);
   const wheelNavigation = resolveColumnWheelNavigation(
     event.deltaX,

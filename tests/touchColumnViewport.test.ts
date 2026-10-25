@@ -8,11 +8,13 @@ function column(count = 3) {
   const writes: ScrollToOptions[] = [];
   const events = new EventTarget();
   const children = Array.from({ length: count }, (_, index) => ({
-    offsetHeight: 100, isConnected: true,
-    getBoundingClientRect: (): { top: number } => ({ top: 100 + topPadding + children.slice(0, index).reduce((sum, card) => sum + card.offsetHeight + 20, 0) - list.scrollTop })
+    offsetHeight: 100, isConnected: true, screenShift: 0,
+    get offsetParent(): unknown { return list; },
+    get offsetTop(): number { return topPadding + children.slice(0, index).reduce((sum, card) => sum + card.offsetHeight + 20, 0); },
+    getBoundingClientRect: (): { top: number } => ({ top: 100 + topPadding + children.slice(0, index).reduce((sum, card) => sum + card.offsetHeight + 20, 0) - list.scrollTop + children[index].screenShift })
   }));
   const list = {
-    isConnected: true, scrollTop: 0,
+    isConnected: true, scrollTop: 0, offsetTop: 0, offsetParent: null,
     get clientHeight() { return height; },
     get scrollHeight() { return topPadding + children.reduce((sum, card) => sum + card.offsetHeight, 0) + (count - 1) * 20 + bottomPadding; },
     firstElementChild: children[0], lastElementChild: children[count - 1],
@@ -34,6 +36,12 @@ function column(count = 3) {
 }
 
 describe("native tablet column alignment", () => {
+  it("aligns layout position rather than the temporary scale/translation of a selection animation", () => {
+    const f = column(); f.align(1);
+    f.children[1].screenShift = 180;
+    f.align(1, true);
+    expect(f.list.scrollTop).toBe(120);
+  });
   it("centers a middle sibling through native scroll with reachable first and last edges", () => {
     const f = column();
     f.align(1);

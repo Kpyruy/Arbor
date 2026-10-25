@@ -86,10 +86,18 @@ export class TouchColumnViewport {
   }
 
   private targetTop({ list, target }: ColumnPosition): number {
-    const top = list.scrollTop + target.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    // Selection transforms can shift a tall card by hundreds of screen pixels.
+    // Native scrolling uses layout coordinates, never the temporary animation.
+    const top = this.layoutTop(target) - this.layoutTop(list);
     const desired = target.offsetHeight > list.clientHeight - 48
       ? top - 24 : top + target.offsetHeight / 2 - list.clientHeight * 0.44;
     return Math.max(0, Math.min(desired, list.scrollHeight - list.clientHeight));
+  }
+
+  private layoutTop(element: HTMLElement): number {
+    let top = 0;
+    for (let node: HTMLElement | null = element; node; node = node.offsetParent as HTMLElement | null) top += node.offsetTop;
+    return top;
   }
 
   private prune(): void {

@@ -177,6 +177,7 @@ export interface ArborOverviewLayout {
 
 export type SplitPaneDirection = "vertical" | "horizontal";
 export type BreadcrumbLabelFallbackMode = "firstLine" | "snippet" | "none";
+export type ArborActiveCardHeightMode = "bounded" | "content";
 
 export interface ArborSettings {
   layoutDirection: ArborLayoutDirection;
@@ -187,6 +188,7 @@ export interface ArborSettings {
   splitDirection: SplitPaneDirection;
   cardWidth: number;
   cardMinHeight: number;
+  activeCardHeightMode: ArborActiveCardHeightMode;
   horizontalSpacing: number;
   verticalSpacing: number;
   zoomLevel: number;

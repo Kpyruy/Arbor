@@ -366,6 +366,7 @@ export class ViewShell {
     this.compactLayout = useCompactLayout(root.clientWidth);
     root.toggleClass("is-compact", this.compactLayout);
     root.toggleClass("has-touch-controls", this.usesTouchControls());
+    root.toggleClass("is-content-height", this.port.read.getSettings().activeCardHeightMode === "content");
     root.classList.add("is-context-dim-mode");
     const direction = this.port.read.getSettings().layoutDirection;
     root.classList.toggle("is-rtl", direction === "rtl");

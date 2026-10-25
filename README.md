@@ -190,7 +190,9 @@ Notes:
 
 Set **Minimum zoom** and **Maximum zoom** in Arbor settings; both stay within **25–500%**. Wheel, pinch, menu controls and automatic fitting use the same limits.
 
-Right-click a card and choose **Active zoom** to fit the selected card closely at the center of its pane. It follows your selection and adapts when editing or resizing the pane. Long content stays scrollable inside the card. Manual zoom stops automatic fitting at your chosen scale. Click **Stop zoom** or the zoom indicator to stop fitting and reset to **100%** (within your configured zoom limits). The mode and automatic scale are local to that view, not saved as a note setting.
+Right-click a card and choose **Active zoom** to fit the selected card closely at the center of its pane. It follows your selection and adapts when editing or resizing the pane. In the Branch editor, **Active card height** chooses how long content is read: **Limited height** (default) scrolls text inside the card; **Fit content** expands the active card and scrolls it in its column. Inactive previews remain compact. With **Fit content**, Active zoom fits the width and reveals the beginning instead of shrinking multi-page text to fit its full height. Editing still uses its own editor scrolling. Tree Overview keeps its existing whole-card fit.
+
+Manual zoom stops automatic fitting at your chosen scale. Click **Stop zoom** or the zoom indicator to stop fitting and reset to **100%** (within your configured zoom limits). The active mode and automatic scale are local to that view, not saved as a note setting.
 
 | Shortcut | Effect |
 | --- | --- |
@@ -198,7 +200,7 @@ Right-click a card and choose **Active zoom** to fit the selected card closely a
 | `Ctrl/Cmd + Z` | Undo the last Arbor structural/content change |
 | `Ctrl/Cmd + Shift + Z` | Redo the last undone Arbor change |
 | `Ctrl/Cmd + Mouse wheel` | Zoom the scene if zoom is enabled in settings |
-| Mouse wheel over a branch column | Move through sibling blocks, or enter the visible parent/child column under the pointer |
+| Mouse wheel over a branch column | Move through sibling blocks in Limited height; scroll the column naturally in Fit content |
 | Click zoom indicator | Stop active zoom and reset to `100%` |
 
 ### Tree overview
@@ -297,6 +299,7 @@ For **Card color…**, **Branch color…**, or **Copy block link**, open a card'
 | Split direction | `Vertical split` | Where Arbor opens relative to the current note; desktop only |
 | Card width | `300 px` | Base card width in the branching scene |
 | Card minimum height | `120 px` | Minimum card height before content expands it |
+| Active card height | `Limited height` | Branch editor: scroll long text inside a limited card, or choose Fit content to expand the active card and scroll the whole column |
 | Horizontal spacing | `20 px` | Gap between columns |
 | Vertical spacing | `12 px` | Gap between sibling cards |
 | Default zoom | `100%` | Initial scene scale when Arbor opens |
